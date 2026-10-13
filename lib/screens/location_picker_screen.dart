@@ -2,14 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
-import 'package:latlong2/latlong.dart';
 
 import '../location_service.dart';
 import '../theme.dart';
 
-/// A cab-app-style location picker: a map with a pin fixed at the center of
+/// A cab-app-style Google Maps location picker: a pin fixed at the center of
 /// the screen — the user pans the map underneath it, or searches for a place
 /// by name, and the address below updates to match wherever the pin lands.
 /// Defaults to the device's current GPS position. Returns the resolved
@@ -32,7 +31,7 @@ class _SearchResult {
 const _fallbackCenter = LatLng(23.0225, 72.5714);
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
-  final _mapController = MapController();
+  GoogleMapController? _mapController;
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
   LatLng _center = _fallbackCenter;
@@ -41,7 +40,6 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   bool _resolvingLabel = true;
   bool _searching = false;
   List<_SearchResult> _searchResults = [];
-  Timer? _moveDebounce;
   Timer? _searchDebounce;
 
   @override
@@ -53,7 +51,6 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   @override
   void dispose() {
-    _moveDebounce?.cancel();
     _searchDebounce?.cancel();
     _searchController.dispose();
     _searchFocus.dispose();
@@ -80,18 +77,19 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     });
   }
 
-  void _onPositionChanged(MapCamera camera, bool hasGesture) {
-    _center = camera.center;
-    if (!hasGesture) return;
-    _moveDebounce?.cancel();
-    _moveDebounce = Timer(const Duration(milliseconds: 500), () => _resolveLabel(_center));
+  void _onCameraMove(CameraPosition position) {
+    _center = position.target;
+  }
+
+  void _onCameraIdle() {
+    _resolveLabel(_center);
   }
 
   Future<void> _recenterOnCurrentLocation() async {
     final position = await fetchCurrentPosition();
-    if (position == null || !mounted) return;
+    if (position == null || !mounted || _mapController == null) return;
     final target = LatLng(position.latitude, position.longitude);
-    _mapController.move(target, _mapController.camera.zoom);
+    await _mapController!.animateCamera(CameraUpdate.newLatLng(target));
     _center = target;
     await _resolveLabel(target);
   }
@@ -148,7 +146,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       _searchResults = [];
       _searchController.text = result.displayName;
     });
-    _mapController.move(result.point, 16);
+    if (_mapController != null) {
+      await _mapController!.animateCamera(CameraUpdate.newLatLngZoom(result.point, 16));
+    }
     _center = result.point;
     await _resolveLabel(result.point);
   }
@@ -162,25 +162,15 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
           if (_loadingStartPosition)
             const Center(child: CircularProgressIndicator(color: teal))
           else
-            FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: _center,
-                initialZoom: 16,
-                onPositionChanged: _onPositionChanged,
-                onTap: (_, __) => _searchFocus.unfocus(),
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'com.example.trip_split_gujarat',
-                ),
-                const RichAttributionWidget(
-                  attributions: [
-                    TextSourceAttribution('OpenStreetMap contributors'),
-                  ],
-                ),
-              ],
+            GoogleMap(
+              initialCameraPosition: CameraPosition(target: _center, zoom: 16),
+              onMapCreated: (controller) => _mapController = controller,
+              onCameraMove: _onCameraMove,
+              onCameraIdle: _onCameraIdle,
+              onTap: (_) => _searchFocus.unfocus(),
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: false,
+              mapToolbarEnabled: false,
             ),
           if (!_loadingStartPosition)
             const IgnorePointer(
