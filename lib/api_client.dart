@@ -100,6 +100,23 @@ class ApiClient {
     }
   }
 
+  Future<dynamic> _put(String path, Map<String, Object?> body) async {
+    try {
+      final response = await http
+          .put(
+            Uri.parse('$_baseUrl$path'),
+            headers: _headers,
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 12));
+      return _unwrap(response);
+    } on ApiException {
+      rethrow;
+    } catch (_) {
+      throw ApiException('Could not reach the server. Check your connection.');
+    }
+  }
+
   Future<dynamic> _delete(String path) async {
     try {
       final response = await http
@@ -178,15 +195,36 @@ class ApiClient {
     required int tripId,
     required String description,
     required double amount,
-    required int paidBy,
     String? category,
+    required String date,
+    String? location,
   }) async {
     final result = await _post('/trips/$tripId/expenses', {
       'description': description,
       'amount': amount,
-      'paid_by': paidBy,
       'category': category,
+      'date': date,
+      'location': location,
       'split_type': 'equal',
+    });
+    return TripExpense.fromJson(result as Map<String, dynamic>);
+  }
+
+  Future<TripExpense> updateExpense({
+    required int tripId,
+    required int expenseId,
+    required String description,
+    required double amount,
+    String? category,
+    required String date,
+    String? location,
+  }) async {
+    final result = await _put('/trips/$tripId/expenses/$expenseId', {
+      'description': description,
+      'amount': amount,
+      'category': category,
+      'date': date,
+      'location': location,
     });
     return TripExpense.fromJson(result as Map<String, dynamic>);
   }

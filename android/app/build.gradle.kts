@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.trip_split_gujarat"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

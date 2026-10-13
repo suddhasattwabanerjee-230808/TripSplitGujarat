@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../location_service.dart';
 import '../models.dart';
 import '../theme.dart';
 
@@ -63,10 +64,103 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => ExpenseSheet(tripId: widget.tripId, members: _trip!.members),
+      builder: (context) => ExpenseSheet(tripId: widget.tripId),
     );
     if (created == true) {
       await _loadAll();
+    }
+  }
+
+  Future<void> _editExpense(TripExpense expense) async {
+    final updated = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ExpenseSheet(tripId: widget.tripId, existing: expense),
+    );
+    if (updated == true) {
+      await _loadAll();
+    }
+  }
+
+  Future<void> _deleteExpense(TripExpense expense) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete this expense?'),
+        content: Text('“${expense.description}” — ${money(expense.amount)} will be removed for everyone on the trip.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Color(0xFFD1805C))),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ApiClient.instance.deleteExpense(widget.tripId, expense.id);
+      await _loadAll();
+    } on ApiException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  Future<void> _showExpenseActions(TripExpense expense) async {
+    final isOwn = expense.paidBy == ApiClient.instance.currentUser?.id;
+    if (!isOwn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You can only edit or delete expenses you added.')),
+      );
+      return;
+    }
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: const BoxDecoration(
+          color: paper,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  width: 38,
+                  height: 4,
+                  decoration: BoxDecoration(color: const Color(0xFFD9DED8), borderRadius: BorderRadius.circular(4)),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_rounded, color: ink),
+                title: const Text('Edit expense', style: TextStyle(fontWeight: FontWeight.w700, color: ink)),
+                onTap: () => Navigator.pop(context, 'edit'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: Color(0xFFD1805C)),
+                title: const Text(
+                  'Delete expense',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFFD1805C)),
+                ),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (action == 'edit') {
+      await _editExpense(expense);
+    } else if (action == 'delete') {
+      await _deleteExpense(expense);
     }
   }
 
@@ -137,14 +231,16 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                     child: _sectionHeading('Recent expenses', trailing: '${_expenses.length} entries'),
                   ),
                 ),
+                if (_expenses.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+                    sliver: SliverToBoxAdapter(child: _categoryStrip()),
+                  ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 12, 22, 120),
-                  sliver: _expenses.isEmpty
-                      ? SliverToBoxAdapter(child: _emptyExpenses())
-                      : SliverList.builder(
-                          itemCount: _expenses.length,
-                          itemBuilder: (context, index) => _expenseTile(_expenses[index]),
-                        ),
+                  padding: const EdgeInsets.fromLTRB(22, 14, 22, 120),
+                  sliver: SliverToBoxAdapter(
+                    child: _expenses.isEmpty ? _emptyExpenses() : _groupedExpenseList(),
+                  ),
                 ),
               ] else ...[
                 SliverPadding(
@@ -158,13 +254,10 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                   ),
                 ),
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 12, 22, 120),
-                  sliver: _expenses.isEmpty
-                      ? SliverToBoxAdapter(child: _emptyExpenses())
-                      : SliverList.builder(
-                          itemCount: _expenses.length,
-                          itemBuilder: (context, index) => _expenseTile(_expenses[index]),
-                        ),
+                  padding: const EdgeInsets.fromLTRB(22, 14, 22, 120),
+                  sliver: SliverToBoxAdapter(
+                    child: _expenses.isEmpty ? _emptyExpenses() : _groupedExpenseList(),
+                  ),
                 ),
               ],
             ],
@@ -412,61 +505,210 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     );
   }
 
-  Widget _expenseTile(TripExpense expense) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 9),
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(19)),
-      child: Row(
-        children: [
-          Container(
-            width: 43,
-            height: 43,
-            decoration: BoxDecoration(color: const Color(0xFFF1F3EE), borderRadius: BorderRadius.circular(15)),
-            child: Icon(expense.icon, color: teal, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
+  Map<String, List<TripExpense>> _expensesByCategory() {
+    final groups = <String, List<TripExpense>>{};
+    for (final expense in _expenses) {
+      final key = expense.category ?? 'Other';
+      groups.putIfAbsent(key, () => []).add(expense);
+    }
+    final ordered = <String, List<TripExpense>>{};
+    for (final category in categoryOrder) {
+      if (groups.containsKey(category)) ordered[category] = groups[category]!;
+    }
+    for (final entry in groups.entries) {
+      if (!ordered.containsKey(entry.key)) ordered[entry.key] = entry.value;
+    }
+    return ordered;
+  }
+
+  Widget _categoryStrip() {
+    final groups = _expensesByCategory();
+    return SizedBox(
+      height: 72,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: groups.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 9),
+        itemBuilder: (context, index) {
+          final category = groups.keys.elementAt(index);
+          final items = groups[category]!;
+          final subtotal = items.fold<double>(0, (sum, e) => sum + e.amount);
+          final color = colorForCategory(category);
+          return Container(
+            width: 118,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: .12),
+              borderRadius: BorderRadius.circular(17),
+              border: Border.all(color: color.withValues(alpha: .25)),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  expense.description,
-                  style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w700),
+                Row(
+                  children: [
+                    Icon(iconForCategory(category), size: 15, color: color),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        category,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
+                const Spacer(),
                 Text(
-                  '${expense.category ?? 'Other'} · paid by ${expense.paidByName}',
-                  style: const TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w500),
+                  money(subtotal),
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: ink),
+                ),
+                Text(
+                  '${items.length} ${items.length == 1 ? 'entry' : 'entries'}',
+                  style: const TextStyle(fontSize: 9, color: muted, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _groupedExpenseList() {
+    final groups = _expensesByCategory();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final entry in groups.entries) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 18, 2, 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: colorForCategory(entry.key).withValues(alpha: .15),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Icon(iconForCategory(entry.key), size: 14, color: colorForCategory(entry.key)),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  entry.key,
+                  style: const TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w800),
+                ),
+                const Spacer(),
+                Text(
+                  money(entry.value.fold<double>(0, (sum, e) => sum + e.amount)),
+                  style: const TextStyle(fontSize: 12, color: muted, fontWeight: FontWeight.w700),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 6),
-          Text(
-            money(expense.amount),
-            style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800),
-          ),
+          for (final expense in entry.value) _expenseTile(expense),
         ],
+      ],
+    );
+  }
+
+  Widget _expenseTile(TripExpense expense) {
+    final isOwn = expense.paidBy == ApiClient.instance.currentUser?.id;
+    return InkWell(
+      borderRadius: BorderRadius.circular(19),
+      onLongPress: () => _showExpenseActions(expense),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(19)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 43,
+              height: 43,
+              decoration: BoxDecoration(color: const Color(0xFFF1F3EE), borderRadius: BorderRadius.circular(15)),
+              child: Icon(expense.icon, color: teal, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          expense.description,
+                          style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      if (isOwn)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 6),
+                          child: Icon(Icons.more_vert_rounded, size: 16, color: muted),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'paid by ${expense.paidByName} · ${formatDateTime(expense.dateTime)}',
+                    style: const TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w500),
+                  ),
+                  if (expense.location != null && expense.location!.isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_rounded, size: 11, color: teal),
+                        const SizedBox(width: 2),
+                        Expanded(
+                          child: Text(
+                            expense.location!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: teal, fontSize: 10, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              money(expense.amount),
+              style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 class ExpenseSheet extends StatefulWidget {
-  const ExpenseSheet({super.key, required this.tripId, required this.members});
+  const ExpenseSheet({super.key, required this.tripId, this.existing});
   final int tripId;
-  final List<TripMember> members;
+  final TripExpense? existing;
+
+  bool get isEditing => existing != null;
 
   @override
   State<ExpenseSheet> createState() => _ExpenseSheetState();
 }
 
 class _ExpenseSheetState extends State<ExpenseSheet> {
-  final _title = TextEditingController();
-  final _amount = TextEditingController();
-  late int _payer = widget.members.first.id;
-  String _category = 'Food';
+  late final _title = TextEditingController(text: widget.existing?.description ?? '');
+  late final _amount = TextEditingController(
+    text: widget.existing != null ? widget.existing!.amount.toStringAsFixed(0) : '',
+  );
+  late String _category = widget.existing?.category ?? 'Food';
+  late DateTime _dateTime = widget.existing?.dateTime ?? DateTime.now();
+  String? _location;
+  bool _locatingNow = false;
   bool _busy = false;
   String? _error;
   final categories = const {
@@ -478,10 +720,46 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
   };
 
   @override
+  void initState() {
+    super.initState();
+    _location = widget.existing?.location;
+    _refreshLocation();
+  }
+
+  Future<void> _refreshLocation() async {
+    setState(() => _locatingNow = true);
+    final label = await fetchLocationLabel();
+    if (!mounted) return;
+    setState(() {
+      _locatingNow = false;
+      if (label != null) _location = label;
+    });
+  }
+
+  @override
   void dispose() {
     _title.dispose();
     _amount.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDateTime() async {
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _dateTime,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_dateTime),
+    );
+    if (time == null) return;
+    setState(() {
+      _dateTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    });
   }
 
   @override
@@ -505,9 +783,9 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                 ),
               ),
               const SizedBox(height: 22),
-              const Text(
-                'Add an expense',
-                style: TextStyle(color: ink, fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.5),
+              Text(
+                widget.isEditing ? 'Edit expense' : 'Add an expense',
+                style: const TextStyle(color: ink, fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.5),
               ),
               const SizedBox(height: 5),
               const Text(
@@ -556,45 +834,64 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                     .toList(),
               ),
               const SizedBox(height: 18),
-              fieldLabel('PAID BY'),
+              fieldLabel('WHEN'),
               const SizedBox(height: 9),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: List.generate(widget.members.length, (index) {
-                  final member = widget.members[index];
-                  final selected = _payer == member.id;
-                  return InkWell(
-                    onTap: () => setState(() => _payer = member.id),
-                    borderRadius: BorderRadius.circular(15),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
-                      decoration: BoxDecoration(
-                        color: selected ? const Color(0xFFDDF1EB) : Colors.white,
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: selected ? teal : Colors.transparent),
+              InkWell(
+                onTap: _pickDateTime,
+                borderRadius: BorderRadius.circular(15),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.schedule_rounded, size: 17, color: muted),
+                      const SizedBox(width: 9),
+                      Text(
+                        formatDateTime(_dateTime),
+                        style: const TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w700),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircleAvatar(
-                            radius: 12,
-                            backgroundColor: colorForMember(index).withValues(alpha: .4),
-                            child: Text(
-                              member.name.isEmpty ? '?' : member.name[0].toUpperCase(),
-                              style: const TextStyle(fontSize: 10, color: ink, fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            member.name,
-                            style: const TextStyle(fontSize: 11, color: ink, fontWeight: FontWeight.w700),
-                          ),
-                        ],
+                      const Spacer(),
+                      const Icon(Icons.chevron_right_rounded, color: muted, size: 18),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              fieldLabel('LOCATION'),
+              const SizedBox(height: 9),
+              InkWell(
+                onTap: _locatingNow ? null : _refreshLocation,
+                borderRadius: BorderRadius.circular(15),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 14),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.location_on_rounded, size: 17, color: teal),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          _locatingNow
+                              ? 'Finding your location…'
+                              : (_location ?? 'Location unavailable — tap to retry'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w700),
+                        ),
                       ),
-                    ),
-                  );
-                }),
+                      if (_locatingNow)
+                        const SizedBox(
+                          width: 15,
+                          height: 15,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: teal),
+                        )
+                      else
+                        const Icon(Icons.refresh_rounded, color: muted, size: 18),
+                    ],
+                  ),
+                ),
               ),
               const SizedBox(height: 18),
               if (_error != null)
@@ -618,7 +915,10 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Text('Save expense', style: TextStyle(fontWeight: FontWeight.w700)),
+                      : Text(
+                          widget.isEditing ? 'Save changes' : 'Save expense',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
                 ),
               ),
             ],
@@ -640,13 +940,26 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
       _error = null;
     });
     try {
-      await ApiClient.instance.createExpense(
-        tripId: widget.tripId,
-        description: title,
-        amount: amount,
-        paidBy: _payer,
-        category: _category,
-      );
+      if (widget.isEditing) {
+        await ApiClient.instance.updateExpense(
+          tripId: widget.tripId,
+          expenseId: widget.existing!.id,
+          description: title,
+          amount: amount,
+          category: _category,
+          date: _dateTime.toIso8601String(),
+          location: _location,
+        );
+      } else {
+        await ApiClient.instance.createExpense(
+          tripId: widget.tripId,
+          description: title,
+          amount: amount,
+          category: _category,
+          date: _dateTime.toIso8601String(),
+          location: _location,
+        );
+      }
       if (mounted) Navigator.pop(context, true);
     } on ApiException catch (e) {
       setState(() => _error = e.message);

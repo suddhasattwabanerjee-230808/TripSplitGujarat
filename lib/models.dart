@@ -72,6 +72,7 @@ class TripExpense {
     required this.paidByName,
     required this.category,
     required this.date,
+    required this.location,
     required this.shares,
   });
   final int id;
@@ -81,7 +82,10 @@ class TripExpense {
   final String paidByName;
   final String? category;
   final String date;
+  final String? location;
   final List<ExpenseShare> shares;
+
+  DateTime get dateTime => DateTime.tryParse(date) ?? DateTime.now();
 
   IconData get icon => switch (category) {
     'Food' => Icons.restaurant_rounded,
@@ -99,6 +103,7 @@ class TripExpense {
     paidByName: json['paid_by_name'] as String,
     category: json['category'] as String?,
     date: json['date'] as String,
+    location: json['location'] as String?,
     shares: (json['shares'] as List<dynamic>)
         .map((item) => ExpenseShare.fromJson(item as Map<String, dynamic>))
         .toList(),

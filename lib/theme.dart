@@ -19,8 +19,51 @@ const memberPalette = [
 
 Color colorForMember(int index) => memberPalette[index % memberPalette.length];
 
+const categoryOrder = ['Food', 'Stay', 'Transport', 'Activities', 'Other'];
+
+const _categoryIcons = {
+  'Food': Icons.restaurant_rounded,
+  'Stay': Icons.hotel_rounded,
+  'Transport': Icons.directions_car_rounded,
+  'Activities': Icons.local_activity_rounded,
+  'Other': Icons.more_horiz_rounded,
+};
+
+const _categoryColors = {
+  'Food': Color(0xFFD1805C),
+  'Stay': Color(0xFF7FA8D1),
+  'Transport': teal,
+  'Activities': Color(0xFFB49BC8),
+  'Other': muted,
+};
+
+IconData iconForCategory(String? category) =>
+    _categoryIcons[category] ?? Icons.more_horiz_rounded;
+
+Color colorForCategory(String? category) => _categoryColors[category] ?? muted;
+
 String money(double value) =>
     '₹${value.toStringAsFixed(0).replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',')}';
+
+const _months = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+String formatDateTime(DateTime dt) {
+  final now = DateTime.now();
+  final isToday = dt.year == now.year && dt.month == now.month && dt.day == now.day;
+  final yesterday = now.subtract(const Duration(days: 1));
+  final isYesterday =
+      dt.year == yesterday.year && dt.month == yesterday.month && dt.day == yesterday.day;
+  final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+  final minute = dt.minute.toString().padLeft(2, '0');
+  final period = dt.hour >= 12 ? 'PM' : 'AM';
+  final time = '$hour12:$minute $period';
+  if (isToday) return 'Today, $time';
+  if (isYesterday) return 'Yesterday, $time';
+  return '${dt.day} ${_months[dt.month - 1]}, $time';
+}
 
 InputDecoration appInputDecoration(String hint, IconData icon) =>
     InputDecoration(
