@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.1.0] - 2026-10-14
+
+### Changed
+- Location picker now uses the native Google Maps widget (`google_maps_flutter`)
+  instead of OpenStreetMap tiles, for a true Google Maps look and feel —
+  same interaction (pin-centered pan-to-select, free-text search). Search
+  still runs through Nominatim, independent of the Maps key.
+
+### Infrastructure
+- Release workflow now writes the Google Maps API key (from a
+  `GOOGLE_MAPS_API_KEY` repository secret) into `local.properties` before
+  building, so release APKs actually have a working map.
+- Debug signing is pinned to a committed `app/debug.keystore` instead of each
+  machine's own `~/.android/debug.keystore`, so local and CI builds share one
+  signing identity — the SHA-1 the Maps API key is restricted to.
+
 ## [1.0.0] - 2026-10-14
 
 First tagged release. Previous history (demo stage) is summarized here
