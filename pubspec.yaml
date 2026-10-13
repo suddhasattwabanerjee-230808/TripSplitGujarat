@@ -11,11 +11,14 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.5.6
   http: ^1.2.0
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  shared_preferences_platform_interface: ^2.4.1
 
 flutter:
   uses-material-design: true
