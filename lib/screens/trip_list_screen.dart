@@ -163,8 +163,8 @@ class _TripListScreenState extends State<TripListScreen> {
                   ),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(22, 26, 22, 0),
+              const SliverPadding(
+                padding: EdgeInsets.fromLTRB(22, 26, 22, 0),
                 sliver: SliverToBoxAdapter(
                   child: Text(
                     'Your trips',
@@ -190,8 +190,8 @@ class _TripListScreenState extends State<TripListScreen> {
                   child: Center(child: CircularProgressIndicator(color: teal)),
                 )
               else if (_trips!.isEmpty)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+                const SliverPadding(
+                  padding: EdgeInsets.fromLTRB(22, 14, 22, 0),
                   sliver: SliverToBoxAdapter(
                     child: Text(
                       'No trips yet — start one or join with an invite code.',

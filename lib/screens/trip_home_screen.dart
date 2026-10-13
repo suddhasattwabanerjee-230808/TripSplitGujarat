@@ -193,11 +193,11 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     );
   }
 
-  Widget _emptyExpenses() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 30),
+  Widget _emptyExpenses() => const Padding(
+    padding: EdgeInsets.symmetric(vertical: 30),
     child: Text(
       'No expenses yet. Add the first one below.',
-      style: const TextStyle(color: muted, fontSize: 13),
+      style: TextStyle(color: muted, fontSize: 13),
     ),
   );
 
