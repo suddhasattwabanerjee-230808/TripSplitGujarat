@@ -4,14 +4,33 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.2.0] - 2026-10-14
+
+### Changed
+- Location search now calls Google's Places API (New) directly over REST
+  (`places:autocomplete` + place details), with the `X-Android-Package`/
+  `X-Android-Cert` headers that let an Android-app-restricted key work from
+  plain HTTP. Replaces an earlier attempt via the `flutter_google_places_sdk`
+  plugin, which only supports the legacy Places API — not enabled (and no
+  longer offered) on newer Google Cloud projects.
+- Selected search results now show as "Place name, City" (e.g. "Hotel Aditya
+  Mansingh, Veraval"), built from the place's own name and address
+  components, matching Ola/Uber-style pickers.
+
+### Fixed
+- Picking a search result or tapping "recenter" could show the correct
+  place/name label for a moment, then have it silently overwritten by a
+  plain reverse-geocoded city name — the programmatic camera move those
+  actions trigger was firing the same `onCameraIdle` handler used for manual
+  map dragging, which re-resolved the label from scratch. Now suppressed for
+  camera moves the app itself initiates.
+
 ## [1.1.0] - 2026-10-14
 
 ### Changed
 - Location picker now uses the native Google Maps widget (`google_maps_flutter`)
   instead of OpenStreetMap tiles, for a true Google Maps look and feel —
-  same interaction (pin-centered pan-to-select). Search now runs through
-  Google Places Autocomplete (`flutter_google_places_sdk`) instead of
-  Nominatim, using the same Maps API key.
+  same interaction (pin-centered pan-to-select).
 
 ### Infrastructure
 - Release workflow now writes the Google Maps API key (from a

@@ -1,11 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart' as places;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
-import '../env.dart';
 import '../location_service.dart';
+import '../places_service.dart';
 import '../theme.dart';
 
 /// A cab-app-style Google Maps location picker: a pin fixed at the center of
@@ -26,7 +25,6 @@ class LocationPickerScreen extends StatefulWidget {
 const _fallbackCenter = LatLng(23.0225, 72.5714);
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
-  final _places = places.FlutterGooglePlacesSdk(googleMapsApiKey);
   GoogleMapController? _mapController;
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
@@ -35,8 +33,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   bool _loadingStartPosition = true;
   bool _resolvingLabel = true;
   bool _searching = false;
-  bool _needsNewSearchSession = true;
-  List<places.AutocompletePrediction> _searchResults = [];
+  // Set right before an animateCamera() triggered by code (search pick,
+  // recenter) rather than a user drag, so the onCameraIdle it fires doesn't
+  // clobber the more specific label we already set with a plain reverse-geocode.
+  bool _ignoreNextCameraIdle = false;
+  List<PlaceSuggestion> _searchResults = [];
   Timer? _searchDebounce;
 
   @override
@@ -79,6 +80,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   }
 
   void _onCameraIdle() {
+    if (_ignoreNextCameraIdle) {
+      _ignoreNextCameraIdle = false;
+      return;
+    }
     _resolveLabel(_center);
   }
 
@@ -86,6 +91,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     final position = await fetchCurrentPosition();
     if (position == null || !mounted || _mapController == null) return;
     final target = LatLng(position.latitude, position.longitude);
+    _ignoreNextCameraIdle = true;
     await _mapController!.animateCamera(CameraUpdate.newLatLng(target));
     _center = target;
     await _resolveLabel(target);
@@ -103,50 +109,36 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   Future<void> _runSearch(String query) async {
     setState(() => _searching = true);
-    try {
-      final response = await _places.findAutocompletePredictions(
-        query,
-        origin: places.LatLng(lat: _center.latitude, lng: _center.longitude),
-        newSessionToken: _needsNewSearchSession ? true : null,
-      );
-      _needsNewSearchSession = false;
-      if (!mounted) return;
-      setState(() {
-        _searching = false;
-        _searchResults = response.predictions;
-      });
-    } catch (_) {
-      if (mounted) setState(() => _searching = false);
-    }
+    final results = await autocompletePlaces(
+      query,
+      originLat: _center.latitude,
+      originLng: _center.longitude,
+    );
+    if (!mounted) return;
+    setState(() {
+      _searching = false;
+      _searchResults = results;
+    });
   }
 
-  Future<void> _selectSearchResult(places.AutocompletePrediction prediction) async {
+  Future<void> _selectSearchResult(PlaceSuggestion suggestion) async {
     _searchFocus.unfocus();
     setState(() {
       _searchResults = [];
-      _searchController.text = prediction.fullText;
+      _searchController.text = suggestion.mainText;
     });
-    try {
-      final response = await _places.fetchPlace(
-        prediction.placeId,
-        fields: const [places.PlaceField.Location, places.PlaceField.Address, places.PlaceField.Name],
-      );
-      _needsNewSearchSession = true;
-      final place = response.place;
-      final latLng = place?.latLng;
-      if (latLng == null || !mounted) return;
-      final target = LatLng(latLng.lat, latLng.lng);
-      if (_mapController != null) {
-        await _mapController!.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
-      }
-      _center = target;
-      setState(() {
-        _resolvingLabel = false;
-        _label = place?.address ?? place?.name ?? _label;
-      });
-    } catch (_) {
-      _needsNewSearchSession = true;
+    final place = await fetchPlaceLocation(suggestion.placeId);
+    if (place == null || !mounted) return;
+    final target = LatLng(place.latitude, place.longitude);
+    if (_mapController != null) {
+      _ignoreNextCameraIdle = true;
+      await _mapController!.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
     }
+    _center = target;
+    setState(() {
+      _resolvingLabel = false;
+      _label = place.label;
+    });
   }
 
   @override
@@ -261,7 +253,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             dense: true,
                             leading: const Icon(Icons.place_outlined, color: teal, size: 20),
                             title: Text(
-                              result.primaryText,
+                              result.mainText,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w700),
