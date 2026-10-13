@@ -22,7 +22,7 @@ jobs:
         run: echo "googleMaps.apiKey=${{ secrets.GOOGLE_MAPS_API_KEY }}" >> android/local.properties
 
       - run: flutter pub get
-      - run: flutter build apk --release
+      - run: flutter build apk --release --dart-define=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
 
       - name: Extract changelog section for this tag
         id: notes
