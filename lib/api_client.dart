@@ -12,11 +12,11 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
-/// Base URL for the TripSplit backend. This is the home router's public IP
-/// with port 8001 forwarded to the server — works from any network (home
-/// WiFi, mobile data), not just devices on the household's own network.
-/// Plain HTTP for now: no TLS cert is set up on the server yet.
-const _baseUrl = 'http://113.21.66.161:8001';
+/// Base URL for the TripSplit backend. Served through Tailscale Funnel,
+/// which exposes the server's local port 8001 at a public HTTPS address —
+/// works from any network (home WiFi, mobile data), not just devices on the
+/// server's own tailnet.
+const _baseUrl = 'https://nav-server.tail85596c.ts.net';
 
 class ApiClient {
   ApiClient._();
