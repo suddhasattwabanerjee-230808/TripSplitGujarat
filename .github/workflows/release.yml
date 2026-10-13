@@ -18,6 +18,9 @@ jobs:
         with:
           channel: 'stable'
 
+      - name: Write Google Maps API key for the build
+        run: echo "googleMaps.apiKey=${{ secrets.GOOGLE_MAPS_API_KEY }}" >> android/local.properties
+
       - run: flutter pub get
       - run: flutter build apk --release
 

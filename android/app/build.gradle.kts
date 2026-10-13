@@ -41,6 +41,19 @@ android {
         manifestPlaceholders["googleMapsApiKey"] = googleMapsApiKey
     }
 
+    signingConfigs {
+        getByName("debug") {
+            // Pinned to the keystore committed at app/debug.keystore instead of
+            // Gradle's implicit per-machine ~/.android/debug.keystore, so every
+            // build — local or CI — signs with the same key. That keeps the
+            // SHA-1 stable, which is what the Google Maps API key is restricted to.
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
