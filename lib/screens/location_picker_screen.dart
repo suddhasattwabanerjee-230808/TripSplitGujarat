@@ -1,18 +1,19 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_google_places_sdk/flutter_google_places_sdk.dart' as places;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:http/http.dart' as http;
 
+import '../env.dart';
 import '../location_service.dart';
 import '../theme.dart';
 
 /// A cab-app-style Google Maps location picker: a pin fixed at the center of
 /// the screen — the user pans the map underneath it, or searches for a place
-/// by name, and the address below updates to match wherever the pin lands.
-/// Defaults to the device's current GPS position. Returns the resolved
-/// "area, city" label, or null if the user backs out without confirming.
+/// by name (Google Places Autocomplete, same as Ola/Uber), and the address
+/// below updates to match wherever the pin lands. Defaults to the device's
+/// current GPS position. Returns the resolved address label, or null if the
+/// user backs out without confirming.
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key, this.initialLabel});
   final String? initialLabel;
@@ -21,16 +22,11 @@ class LocationPickerScreen extends StatefulWidget {
   State<LocationPickerScreen> createState() => _LocationPickerScreenState();
 }
 
-class _SearchResult {
-  const _SearchResult({required this.displayName, required this.point});
-  final String displayName;
-  final LatLng point;
-}
-
 // Fallback center (Ahmedabad) used only if GPS is unavailable.
 const _fallbackCenter = LatLng(23.0225, 72.5714);
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
+  final _places = places.FlutterGooglePlacesSdk(googleMapsApiKey);
   GoogleMapController? _mapController;
   final _searchController = TextEditingController();
   final _searchFocus = FocusNode();
@@ -39,7 +35,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   bool _loadingStartPosition = true;
   bool _resolvingLabel = true;
   bool _searching = false;
-  List<_SearchResult> _searchResults = [];
+  bool _needsNewSearchSession = true;
+  List<places.AutocompletePrediction> _searchResults = [];
   Timer? _searchDebounce;
 
   @override
@@ -107,50 +104,49 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   Future<void> _runSearch(String query) async {
     setState(() => _searching = true);
     try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': query,
-        'format': 'jsonv2',
-        'limit': '6',
-      });
-      final response = await http
-          .get(uri, headers: {'User-Agent': 'TripSplitGujarat/1.0 (trip expense splitting app)'})
-          .timeout(const Duration(seconds: 10));
+      final response = await _places.findAutocompletePredictions(
+        query,
+        origin: places.LatLng(lat: _center.latitude, lng: _center.longitude),
+        newSessionToken: _needsNewSearchSession ? true : null,
+      );
+      _needsNewSearchSession = false;
       if (!mounted) return;
-      if (response.statusCode != 200) {
-        setState(() => _searching = false);
-        return;
-      }
-      final results = (jsonDecode(response.body) as List<dynamic>)
-          .map(
-            (item) => _SearchResult(
-              displayName: item['display_name'] as String,
-              point: LatLng(
-                double.parse(item['lat'] as String),
-                double.parse(item['lon'] as String),
-              ),
-            ),
-          )
-          .toList();
       setState(() {
         _searching = false;
-        _searchResults = results;
+        _searchResults = response.predictions;
       });
     } catch (_) {
       if (mounted) setState(() => _searching = false);
     }
   }
 
-  Future<void> _selectSearchResult(_SearchResult result) async {
+  Future<void> _selectSearchResult(places.AutocompletePrediction prediction) async {
     _searchFocus.unfocus();
     setState(() {
       _searchResults = [];
-      _searchController.text = result.displayName;
+      _searchController.text = prediction.fullText;
     });
-    if (_mapController != null) {
-      await _mapController!.animateCamera(CameraUpdate.newLatLngZoom(result.point, 16));
+    try {
+      final response = await _places.fetchPlace(
+        prediction.placeId,
+        fields: const [places.PlaceField.Location, places.PlaceField.Address, places.PlaceField.Name],
+      );
+      _needsNewSearchSession = true;
+      final place = response.place;
+      final latLng = place?.latLng;
+      if (latLng == null || !mounted) return;
+      final target = LatLng(latLng.lat, latLng.lng);
+      if (_mapController != null) {
+        await _mapController!.animateCamera(CameraUpdate.newLatLngZoom(target, 16));
+      }
+      _center = target;
+      setState(() {
+        _resolvingLabel = false;
+        _label = place?.address ?? place?.name ?? _label;
+      });
+    } catch (_) {
+      _needsNewSearchSession = true;
     }
-    _center = result.point;
-    await _resolveLabel(result.point);
   }
 
   @override
@@ -265,10 +261,16 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             dense: true,
                             leading: const Icon(Icons.place_outlined, color: teal, size: 20),
                             title: Text(
-                              result.displayName,
-                              maxLines: 2,
+                              result.primaryText,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12.5, color: ink, fontWeight: FontWeight.w600),
+                              style: const TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w700),
+                            ),
+                            subtitle: Text(
+                              result.secondaryText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11, color: muted, fontWeight: FontWeight.w500),
                             ),
                             onTap: () => _selectSearchResult(result),
                           );

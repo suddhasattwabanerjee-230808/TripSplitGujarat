@@ -9,8 +9,9 @@ number after `+` in `pubspec.yaml` increments on every release.
 ### Changed
 - Location picker now uses the native Google Maps widget (`google_maps_flutter`)
   instead of OpenStreetMap tiles, for a true Google Maps look and feel —
-  same interaction (pin-centered pan-to-select, free-text search). Search
-  still runs through Nominatim, independent of the Maps key.
+  same interaction (pin-centered pan-to-select). Search now runs through
+  Google Places Autocomplete (`flutter_google_places_sdk`) instead of
+  Nominatim, using the same Maps API key.
 
 ### Infrastructure
 - Release workflow now writes the Google Maps API key (from a
