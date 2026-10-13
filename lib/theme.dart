@@ -42,6 +42,17 @@ IconData iconForCategory(String? category) =>
 
 Color colorForCategory(String? category) => _categoryColors[category] ?? muted;
 
+/// Expense locations are stored as "area, city" (or just "city" if that's
+/// all reverse-geocoding returned) — the city is always the last segment.
+String? cityFromLocation(String? location) {
+  if (location == null || location.trim().isEmpty) return null;
+  final parts = location.split(',');
+  final city = parts.last.trim();
+  return city.isEmpty ? null : city;
+}
+
+Color colorForCity(String city) => memberPalette[city.hashCode.abs() % memberPalette.length];
+
 String money(double value) =>
     '₹${value.toStringAsFixed(0).replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',')}';
 

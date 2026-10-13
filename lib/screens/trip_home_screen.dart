@@ -109,6 +109,113 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     }
   }
 
+  bool _requireOwnership(TripExpense expense) {
+    if (expense.paidBy == ApiClient.instance.currentUser?.id) return true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('You can only edit expenses you added.')),
+    );
+    return false;
+  }
+
+  Future<void> _quickEditDateTime(TripExpense expense) async {
+    if (!_requireOwnership(expense)) return;
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: expense.dateTime,
+      firstDate: now.subtract(const Duration(days: 365)),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(expense.dateTime),
+    );
+    if (time == null || !mounted) return;
+    final newDateTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+    try {
+      await ApiClient.instance.updateExpense(
+        tripId: widget.tripId,
+        expenseId: expense.id,
+        description: expense.description,
+        amount: expense.amount,
+        category: expense.category,
+        date: newDateTime.toIso8601String(),
+        location: expense.location,
+      );
+      await _loadAll();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  Future<void> _quickEditLocation(TripExpense expense) async {
+    if (!_requireOwnership(expense)) return;
+    final controller = TextEditingController(text: expense.location ?? '');
+    var locating = false;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Update location'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: controller,
+                  decoration: appInputDecoration('e.g. Navrangpura, Ahmedabad', Icons.location_on_rounded),
+                ),
+                const SizedBox(height: 10),
+                TextButton.icon(
+                  onPressed: locating
+                      ? null
+                      : () async {
+                          setDialogState(() => locating = true);
+                          final label = await fetchLocationLabel();
+                          setDialogState(() => locating = false);
+                          if (label != null) controller.text = label;
+                        },
+                  icon: locating
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location_rounded, size: 16),
+                  label: const Text('Use current GPS location'),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => Navigator.pop(context, controller.text.trim()),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (result == null || !mounted) return;
+    try {
+      await ApiClient.instance.updateExpense(
+        tripId: widget.tripId,
+        expenseId: expense.id,
+        description: expense.description,
+        amount: expense.amount,
+        category: expense.category,
+        date: expense.date,
+        location: result.isEmpty ? null : result,
+      );
+      await _loadAll();
+    } on ApiException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
   Future<void> _showExpenseActions(TripExpense expense) async {
     final isOwn = expense.paidBy == ApiClient.instance.currentUser?.id;
     if (!isOwn) {
@@ -235,6 +342,11 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
                     sliver: SliverToBoxAdapter(child: _categoryStrip()),
+                  ),
+                if (_expensesByCity().isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(22, 16, 22, 0),
+                    sliver: SliverToBoxAdapter(child: _cityStrip()),
                   ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(22, 14, 22, 120),
@@ -521,10 +633,20 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     return ordered;
   }
 
+  Map<String, List<TripExpense>> _expensesByCity() {
+    final groups = <String, List<TripExpense>>{};
+    for (final expense in _expenses) {
+      final city = cityFromLocation(expense.location);
+      if (city == null) continue;
+      groups.putIfAbsent(city, () => []).add(expense);
+    }
+    return groups;
+  }
+
   Widget _categoryStrip() {
     final groups = _expensesByCategory();
     return SizedBox(
-      height: 72,
+      height: 86,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: groups.length,
@@ -544,6 +666,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
@@ -559,7 +682,6 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                     ),
                   ],
                 ),
-                const Spacer(),
                 Text(
                   money(subtotal),
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: ink),
@@ -573,6 +695,69 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _cityStrip() {
+    final groups = _expensesByCity();
+    if (groups.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        fieldLabel('BY CITY'),
+        const SizedBox(height: 9),
+        SizedBox(
+          height: 86,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: groups.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 9),
+            itemBuilder: (context, index) {
+              final city = groups.keys.elementAt(index);
+              final items = groups[city]!;
+              final subtotal = items.fold<double>(0, (sum, e) => sum + e.amount);
+              final color = colorForCity(city);
+              return Container(
+                width: 118,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(17),
+                  border: Border.all(color: color.withValues(alpha: .25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.location_city_rounded, size: 15, color: color),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            city,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: color),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      money(subtotal),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: ink),
+                    ),
+                    Text(
+                      '${items.length} ${items.length == 1 ? 'entry' : 'entries'}',
+                      style: const TextStyle(fontSize: 9, color: muted, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -653,25 +838,39 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'paid by ${expense.paidByName} · ${formatDateTime(expense.dateTime)}',
-                    style: const TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w500),
+                  Row(
+                    children: [
+                      Text(
+                        'paid by ${expense.paidByName} · ',
+                        style: const TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w500),
+                      ),
+                      GestureDetector(
+                        onTap: () => _quickEditDateTime(expense),
+                        child: Text(
+                          formatDateTime(expense.dateTime),
+                          style: const TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
                   ),
                   if (expense.location != null && expense.location!.isNotEmpty) ...[
                     const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Icon(Icons.location_on_rounded, size: 11, color: teal),
-                        const SizedBox(width: 2),
-                        Expanded(
-                          child: Text(
-                            expense.location!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: teal, fontSize: 10, fontWeight: FontWeight.w600),
+                    GestureDetector(
+                      onTap: () => _quickEditLocation(expense),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.location_on_rounded, size: 11, color: teal),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: Text(
+                              expense.location!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: teal, fontSize: 10, fontWeight: FontWeight.w600),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
                 ],
