@@ -1,11 +1,10 @@
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
-/// Fetches the device's current GPS position and reverse-geocodes it down
-/// to a short "area, city" label. Returns null if location is unavailable,
-/// permission was refused, or anything along the way fails — callers should
-/// treat that as "no location for this expense" rather than an error.
-Future<String?> fetchLocationLabel() async {
+/// Fetches the device's current GPS position. Returns null if location
+/// services are off, permission is refused, or the fix times out — callers
+/// should treat that as "no location available" rather than an error.
+Future<Position?> fetchCurrentPosition() async {
   try {
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return null;
@@ -19,17 +18,22 @@ Future<String?> fetchLocationLabel() async {
       return null;
     }
 
-    final position = await Geolocator.getCurrentPosition(
+    return await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.medium,
         timeLimit: Duration(seconds: 12),
       ),
     );
+  } catch (_) {
+    return null;
+  }
+}
 
-    final placemarks = await Geocoding().placemarkFromCoordinates(
-      position.latitude,
-      position.longitude,
-    );
+/// Reverse-geocodes coordinates down to a short "area, city" label. Returns
+/// null if nothing resolvable was found.
+Future<String?> labelForCoordinates(double latitude, double longitude) async {
+  try {
+    final placemarks = await Geocoding().placemarkFromCoordinates(latitude, longitude);
     if (placemarks.isEmpty) return null;
 
     final place = placemarks.first;
@@ -41,6 +45,13 @@ Future<String?> fetchLocationLabel() async {
   } catch (_) {
     return null;
   }
+}
+
+/// Fetches the device's current position and reverse-geocodes it in one go.
+Future<String?> fetchLocationLabel() async {
+  final position = await fetchCurrentPosition();
+  if (position == null) return null;
+  return labelForCoordinates(position.latitude, position.longitude);
 }
 
 String? _firstNonEmpty(List<String?> values) {

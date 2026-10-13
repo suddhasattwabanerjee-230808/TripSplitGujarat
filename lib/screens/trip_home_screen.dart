@@ -4,6 +4,7 @@ import '../api_client.dart';
 import '../location_service.dart';
 import '../models.dart';
 import '../theme.dart';
+import 'location_picker_screen.dart';
 
 class TripHomeScreen extends StatefulWidget {
   const TripHomeScreen({super.key, required this.tripId, required this.tripName});
@@ -151,53 +152,8 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
 
   Future<void> _quickEditLocation(TripExpense expense) async {
     if (!_requireOwnership(expense)) return;
-    final controller = TextEditingController(text: expense.location ?? '');
-    var locating = false;
-    final result = await showDialog<String>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('Update location'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: controller,
-                  decoration: appInputDecoration('e.g. Navrangpura, Ahmedabad', Icons.location_on_rounded),
-                ),
-                const SizedBox(height: 10),
-                TextButton.icon(
-                  onPressed: locating
-                      ? null
-                      : () async {
-                          setDialogState(() => locating = true);
-                          final label = await fetchLocationLabel();
-                          setDialogState(() => locating = false);
-                          if (label != null) controller.text = label;
-                        },
-                  icon: locating
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.my_location_rounded, size: 16),
-                  label: const Text('Use current GPS location'),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-              TextButton(
-                onPressed: () => Navigator.pop(context, controller.text.trim()),
-                child: const Text('Save'),
-              ),
-            ],
-          );
-        },
-      ),
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => LocationPickerScreen(initialLabel: expense.location)),
     );
     if (result == null || !mounted) return;
     try {
@@ -208,7 +164,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         amount: expense.amount,
         category: expense.category,
         date: expense.date,
-        location: result.isEmpty ? null : result,
+        location: result,
       );
       await _loadAll();
     } on ApiException catch (e) {
@@ -935,6 +891,13 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     });
   }
 
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => LocationPickerScreen(initialLabel: _location)),
+    );
+    if (result != null && mounted) setState(() => _location = result);
+  }
+
   @override
   void dispose() {
     _title.dispose();
@@ -1060,7 +1023,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
               fieldLabel('LOCATION'),
               const SizedBox(height: 9),
               InkWell(
-                onTap: _locatingNow ? null : _refreshLocation,
+                onTap: _openLocationPicker,
                 borderRadius: BorderRadius.circular(15),
                 child: Container(
                   width: double.infinity,
@@ -1074,7 +1037,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                         child: Text(
                           _locatingNow
                               ? 'Finding your location…'
-                              : (_location ?? 'Location unavailable — tap to retry'),
+                              : (_location ?? 'Tap to choose on map'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w700),
@@ -1087,7 +1050,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2, color: teal),
                         )
                       else
-                        const Icon(Icons.refresh_rounded, color: muted, size: 18),
+                        const Icon(Icons.chevron_right_rounded, color: muted, size: 18),
                     ],
                   ),
                 ),
