@@ -1,17 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
 import '../location_service.dart';
 import '../theme.dart';
 
 /// A cab-app-style location picker: a map with a pin fixed at the center of
-/// the screen — the user pans the map underneath it, and the address below
-/// updates to match whatever the pin is currently over. Defaults to the
-/// device's current GPS position. Returns the resolved "area, city" label,
-/// or null if the user backs out without confirming.
+/// the screen — the user pans the map underneath it, or searches for a place
+/// by name, and the address below updates to match wherever the pin lands.
+/// Defaults to the device's current GPS position. Returns the resolved
+/// "area, city" label, or null if the user backs out without confirming.
 class LocationPickerScreen extends StatefulWidget {
   const LocationPickerScreen({super.key, this.initialLabel});
   final String? initialLabel;
@@ -20,16 +22,27 @@ class LocationPickerScreen extends StatefulWidget {
   State<LocationPickerScreen> createState() => _LocationPickerScreenState();
 }
 
+class _SearchResult {
+  const _SearchResult({required this.displayName, required this.point});
+  final String displayName;
+  final LatLng point;
+}
+
 // Fallback center (Ahmedabad) used only if GPS is unavailable.
 const _fallbackCenter = LatLng(23.0225, 72.5714);
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
   final _mapController = MapController();
+  final _searchController = TextEditingController();
+  final _searchFocus = FocusNode();
   LatLng _center = _fallbackCenter;
   String? _label;
   bool _loadingStartPosition = true;
   bool _resolvingLabel = true;
-  Timer? _debounce;
+  bool _searching = false;
+  List<_SearchResult> _searchResults = [];
+  Timer? _moveDebounce;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -40,7 +53,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   @override
   void dispose() {
-    _debounce?.cancel();
+    _moveDebounce?.cancel();
+    _searchDebounce?.cancel();
+    _searchController.dispose();
+    _searchFocus.dispose();
     super.dispose();
   }
 
@@ -67,8 +83,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   void _onPositionChanged(MapCamera camera, bool hasGesture) {
     _center = camera.center;
     if (!hasGesture) return;
-    _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () => _resolveLabel(_center));
+    _moveDebounce?.cancel();
+    _moveDebounce = Timer(const Duration(milliseconds: 500), () => _resolveLabel(_center));
   }
 
   Future<void> _recenterOnCurrentLocation() async {
@@ -78,6 +94,63 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _mapController.move(target, _mapController.camera.zoom);
     _center = target;
     await _resolveLabel(target);
+  }
+
+  void _onSearchChanged(String query) {
+    _searchDebounce?.cancel();
+    final trimmed = query.trim();
+    if (trimmed.length < 3) {
+      setState(() => _searchResults = []);
+      return;
+    }
+    _searchDebounce = Timer(const Duration(milliseconds: 450), () => _runSearch(trimmed));
+  }
+
+  Future<void> _runSearch(String query) async {
+    setState(() => _searching = true);
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
+        'q': query,
+        'format': 'jsonv2',
+        'limit': '6',
+      });
+      final response = await http
+          .get(uri, headers: {'User-Agent': 'TripSplitGujarat/1.0 (trip expense splitting app)'})
+          .timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      if (response.statusCode != 200) {
+        setState(() => _searching = false);
+        return;
+      }
+      final results = (jsonDecode(response.body) as List<dynamic>)
+          .map(
+            (item) => _SearchResult(
+              displayName: item['display_name'] as String,
+              point: LatLng(
+                double.parse(item['lat'] as String),
+                double.parse(item['lon'] as String),
+              ),
+            ),
+          )
+          .toList();
+      setState(() {
+        _searching = false;
+        _searchResults = results;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  Future<void> _selectSearchResult(_SearchResult result) async {
+    _searchFocus.unfocus();
+    setState(() {
+      _searchResults = [];
+      _searchController.text = result.displayName;
+    });
+    _mapController.move(result.point, 16);
+    _center = result.point;
+    await _resolveLabel(result.point);
   }
 
   @override
@@ -95,6 +168,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 initialCenter: _center,
                 initialZoom: 16,
                 onPositionChanged: _onPositionChanged,
+                onTap: (_, __) => _searchFocus.unfocus(),
               ),
               children: [
                 TileLayer(
@@ -121,12 +195,96 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             ),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: Column(
                 children: [
-                  _roundButton(Icons.close_rounded, () => Navigator.pop(context)),
-                  const Spacer(),
-                  _roundButton(Icons.my_location_rounded, _recenterOnCurrentLocation),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _roundButton(Icons.close_rounded, () => Navigator.pop(context)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(15),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withValues(alpha: .1), blurRadius: 10, offset: const Offset(0, 3)),
+                            ],
+                          ),
+                          child: TextField(
+                            controller: _searchController,
+                            focusNode: _searchFocus,
+                            onChanged: _onSearchChanged,
+                            decoration: InputDecoration(
+                              hintText: 'Search for a place',
+                              hintStyle: const TextStyle(color: Color(0xFFAAB3B5), fontSize: 13),
+                              prefixIcon: const Icon(Icons.search_rounded, size: 19, color: muted),
+                              suffixIcon: _searching
+                                  ? const Padding(
+                                      padding: EdgeInsets.all(12),
+                                      child: SizedBox(
+                                        width: 14,
+                                        height: 14,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: teal),
+                                      ),
+                                    )
+                                  : (_searchController.text.isNotEmpty
+                                      ? IconButton(
+                                          icon: const Icon(Icons.close_rounded, size: 17, color: muted),
+                                          onPressed: () {
+                                            _searchController.clear();
+                                            setState(() => _searchResults = []);
+                                          },
+                                        )
+                                      : null),
+                              filled: true,
+                              fillColor: Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(vertical: 13),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(15),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      _roundButton(Icons.my_location_rounded, _recenterOnCurrentLocation),
+                    ],
+                  ),
+                  if (_searchResults.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      constraints: const BoxConstraints(maxHeight: 260),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withValues(alpha: .1), blurRadius: 14, offset: const Offset(0, 6)),
+                        ],
+                      ),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        itemCount: _searchResults.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F1EC)),
+                        itemBuilder: (context, index) {
+                          final result = _searchResults[index];
+                          return ListTile(
+                            dense: true,
+                            leading: const Icon(Icons.place_outlined, color: teal, size: 20),
+                            title: Text(
+                              result.displayName,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12.5, color: ink, fontWeight: FontWeight.w600),
+                            ),
+                            onTap: () => _selectSearchResult(result),
+                          );
+                        },
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -162,7 +320,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     ),
                     const SizedBox(height: 7),
                     const Text(
-                      'Drag the map so the pin sits where you want.',
+                      'Search above, or drag the map so the pin sits where you want.',
                       style: TextStyle(color: muted, fontSize: 11),
                     ),
                     const SizedBox(height: 14),
