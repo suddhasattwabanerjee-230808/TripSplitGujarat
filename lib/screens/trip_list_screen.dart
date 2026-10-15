@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../models.dart';
 import '../theme.dart';
+import '../update_service.dart';
 import 'login_screen.dart';
 import 'trip_home_screen.dart';
+import 'update_dialog.dart';
 
 class TripListScreen extends StatefulWidget {
   const TripListScreen({super.key});
@@ -66,6 +68,18 @@ class _TripListScreenState extends State<TripListScreen> {
     }
   }
 
+  Future<void> _checkForUpdate() async {
+    final info = await UpdateService.checkForUpdate();
+    if (!mounted) return;
+    if (info != null) {
+      showUpdateDialog(context, info);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("You're on the latest version.")),
+      );
+    }
+  }
+
   Future<void> _logOut() async {
     await ApiClient.instance.logOut();
     if (!mounted) return;
@@ -115,6 +129,10 @@ class _TripListScreenState extends State<TripListScreen> {
                         ],
                       ),
                       const Spacer(),
+                      IconButton(
+                        onPressed: _checkForUpdate,
+                        icon: const Icon(Icons.system_update_rounded, color: muted),
+                      ),
                       IconButton(
                         onPressed: _logOut,
                         icon: const Icon(Icons.logout_rounded, color: muted),
@@ -344,7 +362,7 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
             TextField(
               controller: _name,
               textCapitalization: TextCapitalization.words,
-              decoration: appInputDecoration('e.g. Gujarat getaway', Icons.edit_rounded),
+              decoration: appInputDecoration('e.g. Gujarat Trip', Icons.edit_rounded),
             ),
             const SizedBox(height: 18),
             fieldLabel('DESTINATION (OPTIONAL)'),

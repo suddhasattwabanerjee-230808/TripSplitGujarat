@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 const ink = Color(0xFF182A3A);
 const muted = Color(0xFF788692);
-const paper = Color(0xFFF6F5F0);
+const paper = Color(0xFFFFF9DB);
 const teal = Color(0xFF087E78);
 const lime = Color(0xFFD9F078);
 

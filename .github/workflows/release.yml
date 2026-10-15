@@ -49,3 +49,14 @@ jobs:
           name: 'TripSplit ${{ github.ref_name }}'
           body_path: release_notes.md
           files: TripSplit-${{ github.ref_name }}.apk
+
+      - name: Push OTA update to nav-server
+        run: |
+          VERSION_CODE=$(grep '^version:' pubspec.yaml | sed -E 's/.*\+([0-9]+)/\1/')
+          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          curl -fsS -X POST https://nav-server.tail85596c.ts.net/releases/publish \
+            -H "X-Api-Key: ${{ secrets.TRIPSPLIT_API_KEY }}" \
+            -F "version_code=${VERSION_CODE}" \
+            -F "version_name=${VERSION_NAME}" \
+            -F "notes=<release_notes.md" \
+            -F "apk=@TripSplit-${GITHUB_REF_NAME}.apk;type=application/vnd.android.package-archive"

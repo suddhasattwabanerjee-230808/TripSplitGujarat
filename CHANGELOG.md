@@ -6,6 +6,14 @@ number after `+` in `pubspec.yaml` increments on every release.
 
 ## [1.2.0] - 2026-10-14
 
+### Added
+- Over-the-air updates: the app checks the TripSplit backend
+  (`/releases/latest`) on launch and lets you download + install a newer
+  build directly, without going through the Play Store. A manual "check for
+  updates" button also lives next to the logout icon on the trips list. The
+  release workflow now pushes each tagged build straight to the server after
+  creating the GitHub Release.
+
 ### Changed
 - Location search now calls Google's Places API (New) directly over REST
   (`places:autocomplete` + place details), with the `X-Android-Package`/
