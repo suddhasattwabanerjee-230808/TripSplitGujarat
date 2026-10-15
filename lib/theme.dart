@@ -19,6 +19,12 @@ const memberPalette = [
 
 Color colorForMember(int index) => memberPalette[index % memberPalette.length];
 
+/// A soft, background-tinted shadow for elevated cards — used in place of a
+/// hard border so white/colored surfaces read as "lifted" rather than flat.
+List<BoxShadow> softShadow([Color tint = ink, double opacity = .07]) => [
+  BoxShadow(color: tint.withValues(alpha: opacity), blurRadius: 16, offset: const Offset(0, 5)),
+];
+
 const categoryOrder = ['Food', 'Stay', 'Transport', 'Activities', 'Other'];
 
 const _categoryIcons = {

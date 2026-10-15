@@ -8,8 +8,13 @@ import 'screens/trip_list_screen.dart';
 import 'screens/update_dialog.dart';
 import 'theme.dart';
 import 'update_service.dart';
+import 'upi_popup.dart';
 
 void main() => runApp(const TripSplitApp());
+
+/// Entrypoint for UpiPopupActivity (the "UPI payment detected" quick-add card).
+@pragma('vm:entry-point')
+void upiPopupMain() => runApp(const UpiPopupApp());
 
 class TripSplitApp extends StatefulWidget {
   const TripSplitApp({super.key});

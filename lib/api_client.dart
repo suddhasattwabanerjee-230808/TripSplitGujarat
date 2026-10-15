@@ -24,6 +24,7 @@ class ApiClient {
 
   static const _tokenKey = 'trip_split.auth_token.v1';
   static const _userKey = 'trip_split.auth_user.v1';
+  static const _lastTripKey = 'trip_split.last_trip_id.v1';
 
   final _preferences = SharedPreferencesAsync();
   String? _token;
@@ -46,6 +47,11 @@ class ApiClient {
     await _preferences.setString(_tokenKey, token);
     await _preferences.setString(_userKey, jsonEncode(user.toJson()));
   }
+
+  /// The trip opened most recently — where quick-added UPI payments go by default.
+  Future<void> rememberTrip(int tripId) => _preferences.setInt(_lastTripKey, tripId);
+
+  Future<int?> lastTripId() => _preferences.getInt(_lastTripKey);
 
   Future<void> logOut() async {
     _token = null;

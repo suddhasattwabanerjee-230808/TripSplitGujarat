@@ -46,3 +46,30 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local Claude Code and agent settings
+.claude/
+.agents/
+
+# Local ADB and Scrcpy tools
+/Scrcpy/
+/adb
+/adb.exe
+/AdbWinApi.dll
+/AdbWinUsbApi.dll
+/SDL2.dll
+/avcodec-61.dll
+/avformat-61.dll
+/avutil-59.dll
+/libusb-1.0.dll
+/swresample-5.dll
+/scrcpy.exe
+/scrcpy-server
+/scrcpy-console.bat
+/scrcpy-noconsole.vbs
+/open_a_terminal_here.bat
+
+# Local screenshots and design references
+/Screenshots/
+screen3.png
+screen4.png

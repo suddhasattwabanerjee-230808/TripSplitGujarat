@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../api_client.dart';
 import '../models.dart';
@@ -16,22 +17,55 @@ class TripListScreen extends StatefulWidget {
 }
 
 class _TripListScreenState extends State<TripListScreen> {
+  static const _owe = Color(0xFFD1805C);
+
   List<Trip>? _trips;
+  Map<int, double?> _myNet = {};
   String? _error;
+  bool _upiDetection = true;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _checkUpiDetection();
+  }
+
+  Future<void> _checkUpiDetection() async {
+    final granted = await Permission.sms.isGranted;
+    if (mounted) setState(() => _upiDetection = granted);
+  }
+
+  Future<void> _enableUpiDetection() async {
+    final result = await [Permission.sms, Permission.notification].request();
+    if (result[Permission.sms]?.isPermanentlyDenied ?? false) {
+      await openAppSettings();
+    }
+    await _checkUpiDetection();
   }
 
   Future<void> _load() async {
     setState(() => _error = null);
     try {
       final trips = await ApiClient.instance.listTrips();
-      if (mounted) setState(() => _trips = trips);
+      if (!mounted) return;
+      setState(() => _trips = trips);
+      final nets = await Future.wait(trips.map((t) => _netFor(t.id)));
+      if (mounted) setState(() => _myNet = {for (var i = 0; i < trips.length; i++) trips[i].id: nets[i]});
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
+    }
+  }
+
+  Future<double?> _netFor(int tripId) async {
+    try {
+      final me = ApiClient.instance.currentUser?.id;
+      for (final b in await ApiClient.instance.getBalances(tripId)) {
+        if (b.userId == me) return b.netBalance;
+      }
+      return 0;
+    } on ApiException {
+      return null;
     }
   }
 
@@ -100,40 +134,45 @@ class _TripListScreenState extends State<TripListScreen> {
           child: CustomScrollView(
             slivers: [
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+                padding: const EdgeInsets.fromLTRB(20, 10, 8, 0),
                 sliver: SliverToBoxAdapter(
                   child: Row(
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'TRIPSPLIT',
-                            style: TextStyle(
-                              color: muted,
-                              fontSize: 11,
-                              letterSpacing: 2.2,
-                              fontWeight: FontWeight.w800,
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'TRIPSPLIT',
+                              style: TextStyle(
+                                color: muted,
+                                fontSize: 11,
+                                letterSpacing: 2.2,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Hi, ${user?.name ?? ''}',
-                            style: const TextStyle(
-                              color: ink,
-                              fontSize: 25,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -.6,
+                            const SizedBox(height: 2),
+                            Text(
+                              'Hi, ${user?.name ?? ''}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: ink,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -.5,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                      const Spacer(),
                       IconButton(
+                        tooltip: 'Check for updates',
                         onPressed: _checkForUpdate,
                         icon: const Icon(Icons.system_update_rounded, color: muted),
                       ),
                       IconButton(
+                        tooltip: 'Log out',
                         onPressed: _logOut,
                         icon: const Icon(Icons.logout_rounded, color: muted),
                       ),
@@ -141,8 +180,18 @@ class _TripListScreenState extends State<TripListScreen> {
                   ),
                 ),
               ),
+              if (_trips != null && _trips!.isNotEmpty)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  sliver: SliverToBoxAdapter(child: _overallCard()),
+                ),
+              if (!_upiDetection)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  sliver: SliverToBoxAdapter(child: _upiBanner()),
+                ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(22, 18, 22, 0),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 sliver: SliverToBoxAdapter(
                   child: Row(
                     children: [
@@ -153,11 +202,10 @@ class _TripListScreenState extends State<TripListScreen> {
                           label: const Text('Join trip'),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: ink,
-                            side: const BorderSide(color: Color(0xFFD9DED8)),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
+                            backgroundColor: Colors.white,
+                            side: const BorderSide(color: Color(0xFFE4E1D6)),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           ),
                         ),
                       ),
@@ -170,10 +218,8 @@ class _TripListScreenState extends State<TripListScreen> {
                           style: FilledButton.styleFrom(
                             backgroundColor: ink,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                           ),
                         ),
                       ),
@@ -182,24 +228,19 @@ class _TripListScreenState extends State<TripListScreen> {
                 ),
               ),
               const SliverPadding(
-                padding: EdgeInsets.fromLTRB(22, 26, 22, 0),
+                padding: EdgeInsets.fromLTRB(20, 22, 20, 8),
                 sliver: SliverToBoxAdapter(
                   child: Text(
-                    'Your trips',
-                    style: TextStyle(
-                      fontSize: 17,
-                      color: ink,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -.3,
-                    ),
+                    'YOUR TRIPS',
+                    style: TextStyle(color: muted, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w800),
                   ),
                 ),
               ),
               if (_error != null)
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 14, 22, 0),
+                  padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
                   sliver: SliverToBoxAdapter(
-                    child: Text(_error!, style: const TextStyle(color: Color(0xFFD1805C))),
+                    child: Text(_error!, style: const TextStyle(color: _owe)),
                   ),
                 )
               else if (_trips == null)
@@ -209,7 +250,7 @@ class _TripListScreenState extends State<TripListScreen> {
                 )
               else if (_trips!.isEmpty)
                 const SliverPadding(
-                  padding: EdgeInsets.fromLTRB(22, 14, 22, 0),
+                  padding: EdgeInsets.fromLTRB(20, 6, 20, 0),
                   sliver: SliverToBoxAdapter(
                     child: Text(
                       'No trips yet — start one or join with an invite code.',
@@ -219,10 +260,24 @@ class _TripListScreenState extends State<TripListScreen> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 13, 22, 24),
-                  sliver: SliverList.builder(
-                    itemCount: _trips!.length,
-                    itemBuilder: (context, index) => _tripCard(_trips![index]),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                  sliver: SliverToBoxAdapter(
+                    child: Container(
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(18),
+                        boxShadow: softShadow(ink, .05),
+                      ),
+                      child: Column(
+                        children: [
+                          for (var i = 0; i < _trips!.length; i++) ...[
+                            if (i > 0) const Divider(height: 1, indent: 72, color: Color(0xFFEDEBE3)),
+                            _tripRow(_trips![i]),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
                 ),
             ],
@@ -232,55 +287,173 @@ class _TripListScreenState extends State<TripListScreen> {
     );
   }
 
-  Widget _tripCard(Trip trip) => Container(
-    margin: const EdgeInsets.only(bottom: 10),
-    child: Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => _openTrip(trip),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F3EE),
-                  borderRadius: BorderRadius.circular(15),
+  Widget _overallCard() {
+    final known = _myNet.values.whereType<double>();
+    final owed = known.where((v) => v > 0).fold<double>(0, (a, b) => a + b);
+    final owing = known.where((v) => v < 0).fold<double>(0, (a, b) => a - b);
+    final net = owed - owing;
+    final settled = net.abs() < 0.5;
+    final color = settled ? teal : (net > 0 ? teal : _owe);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: softShadow()),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  settled ? 'Overall' : (net > 0 ? 'Overall, you are owed' : 'Overall, you owe'),
+                  style: const TextStyle(color: muted, fontSize: 13, fontWeight: FontWeight.w600),
                 ),
-                child: const Icon(Icons.map_rounded, color: teal),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      trip.name,
-                      style: const TextStyle(
-                        color: ink,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                Text(
+                  settled ? 'All settled up' : money(net.abs()),
+                  style: TextStyle(
+                    color: settled ? ink : color,
+                    fontSize: settled ? 20 : 26,
+                    height: 1.2,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -.6,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                if (owed > 0.5 && owing > 0.5)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text.rich(
+                      TextSpan(
+                        style: const TextStyle(color: muted, fontSize: 12),
+                        children: [
+                          const TextSpan(text: 'owed '),
+                          TextSpan(text: money(owed), style: const TextStyle(color: teal, fontWeight: FontWeight.w700)),
+                          const TextSpan(text: '  ·  you owe '),
+                          TextSpan(text: money(owing), style: const TextStyle(color: _owe, fontWeight: FontWeight.w700)),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${trip.destination ?? 'No destination set'} · ${trip.memberCount} people · code ${trip.inviteCode}',
-                      style: const TextStyle(color: muted, fontSize: 11),
-                    ),
-                  ],
-                ),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: color.withValues(alpha: .12), shape: BoxShape.circle),
+            child: Icon(Icons.account_balance_wallet_rounded, color: color, size: 22),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _upiBanner() => Container(
+    padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+    decoration: BoxDecoration(
+      color: const Color(0xFFE3F1EC),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(color: teal.withValues(alpha: .15), shape: BoxShape.circle),
+          child: const Icon(Icons.sms_rounded, color: teal, size: 19),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Auto-add UPI payments', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
+              SizedBox(height: 2),
+              Text(
+                'Get a tap-to-add alert when your bank texts about a UPI payment.',
+                style: TextStyle(color: muted, fontSize: 12),
               ),
-              const Icon(Icons.chevron_right_rounded, color: muted),
             ],
           ),
         ),
-      ),
+        TextButton(
+          onPressed: _enableUpiDetection,
+          child: const Text('Enable', style: TextStyle(color: teal, fontWeight: FontWeight.w800)),
+        ),
+      ],
     ),
   );
+
+  Widget _tripRow(Trip trip) {
+    final net = _myNet[trip.id];
+    final settled = net != null && net.abs() < 0.5;
+    final color = net == null || settled ? muted : (net > 0 ? teal : _owe);
+    final tile = memberPalette[trip.id % memberPalette.length];
+    return InkWell(
+      onTap: () => _openTrip(trip),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: tile.withValues(alpha: .25),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(Icons.landscape_rounded, color: Color.lerp(tile, ink, .35), size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    trip.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${trip.memberCount} people${trip.destination == null ? '' : ' · ${trip.destination}'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: muted, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (_myNet.containsKey(trip.id))
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    net == null
+                        ? ''
+                        : settled
+                        ? 'settled up'
+                        : (net > 0 ? 'you are owed' : 'you owe'),
+                    style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  if (net != null && !settled)
+                    Text(
+                      money(net.abs()),
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _CreateTripSheet extends StatefulWidget {
