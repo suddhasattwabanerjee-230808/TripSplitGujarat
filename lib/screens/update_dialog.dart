@@ -29,7 +29,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       _error = null;
     });
     try {
-      await UpdateService.downloadAndInstall((p) {
+      await UpdateService.downloadAndInstall(widget.info, (p) {
         if (mounted) setState(() => _progress = p);
       });
       if (mounted) Navigator.of(context).pop();

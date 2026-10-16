@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -31,6 +32,12 @@ class UpdateService {
 
   static const _baseUrl = 'https://nav-server.tail85596c.ts.net';
 
+  // Over a Tailscale Funnel on a mobile connection, a transfer can silently
+  // stall (no error, no more bytes) instead of failing outright. Without a
+  // watchdog that looks exactly like the app "hanging" at some percentage.
+  static const _stallTimeout = Duration(seconds: 12);
+  static const _maxAttempts = 5;
+
   /// Returns update info if the server has a build newer than the one
   /// currently installed, or null if up to date / unreachable.
   static Future<UpdateInfo?> checkForUpdate() async {
@@ -50,32 +57,123 @@ class UpdateService {
   }
 
   /// Downloads the latest APK, reporting progress in [0, 1], then opens it
-  /// so the system installer takes over. Throws on failure.
-  static Future<void> downloadAndInstall(void Function(double progress) onProgress) async {
-    final request = http.Request('GET', Uri.parse('$_baseUrl/releases/download'));
-    final streamed = await http.Client().send(request);
-    if (streamed.statusCode != 200) {
-      throw Exception('Download failed (${streamed.statusCode})');
-    }
-
-    final total = streamed.contentLength ?? 0;
-    var received = 0;
+  /// so the system installer takes over. Resumes a partial download (via
+  /// HTTP Range) and retries through stalls/drops instead of restarting
+  /// from zero each time. Throws on failure after exhausting retries.
+  static Future<void> downloadAndInstall(
+    UpdateInfo info,
+    void Function(double progress) onProgress,
+  ) async {
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/trip_split_update.apk');
-    final sink = file.openWrite();
+    // Keyed by version so a partial download from a prior attempt at the
+    // same release can be resumed, but a stale file from a different
+    // release never gets mistaken for one.
+    final file = File('${dir.path}/trip_split_update_${info.versionCode}.apk');
 
-    await streamed.stream
-        .map((chunk) {
-          received += chunk.length;
-          if (total > 0) onProgress(received / total);
-          return chunk;
-        })
-        .pipe(sink);
-    await sink.close();
+    Object? lastError;
+    for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
+      try {
+        await _downloadOnce(file, onProgress);
+        lastError = null;
+        break;
+      } catch (e) {
+        lastError = e;
+        if (attempt < _maxAttempts) {
+          await Future.delayed(Duration(seconds: attempt * 2));
+        }
+      }
+    }
+    if (lastError != null) throw lastError;
 
     final result = await OpenFilex.open(file.path);
     if (result.type != ResultType.done) {
       throw Exception(result.message);
+    }
+  }
+
+  /// One attempt: resumes [file] from its current length if it's non-empty,
+  /// aborts (to be retried) if no bytes arrive for [_stallTimeout].
+  static Future<void> _downloadOnce(
+    File file,
+    void Function(double progress) onProgress,
+  ) async {
+    final existing = await file.exists() ? await file.length() : 0;
+
+    final request = http.Request('GET', Uri.parse('$_baseUrl/releases/download'));
+    if (existing > 0) {
+      request.headers['Range'] = 'bytes=$existing-';
+    }
+
+    final client = http.Client();
+    try {
+      final streamed = await client.send(request);
+
+      int received;
+      int total;
+      final bool resumed = streamed.statusCode == 206;
+      if (resumed) {
+        received = existing;
+        final range = streamed.headers['content-range'];
+        total = int.tryParse(range?.split('/').last ?? '') ??
+            (existing + (streamed.contentLength ?? 0));
+      } else if (streamed.statusCode == 200) {
+        // Server didn't honor the Range request (or this is the first
+        // attempt) — start over from scratch rather than appending onto
+        // data that no longer lines up.
+        received = 0;
+        total = streamed.contentLength ?? 0;
+      } else {
+        throw Exception('Download failed (${streamed.statusCode})');
+      }
+
+      final sink = file.openWrite(mode: resumed ? FileMode.append : FileMode.write);
+      final completer = Completer<void>();
+      Timer? stallTimer;
+      StreamSubscription<List<int>>? sub;
+
+      void armStallTimer() {
+        stallTimer?.cancel();
+        stallTimer = Timer(_stallTimeout, () {
+          sub?.cancel();
+          if (!completer.isCompleted) {
+            completer.completeError(
+              TimeoutException('Download stalled — no data for ${_stallTimeout.inSeconds}s'),
+            );
+          }
+        });
+      }
+
+      armStallTimer();
+      sub = streamed.stream.listen(
+        (chunk) {
+          armStallTimer();
+          sink.add(chunk);
+          received += chunk.length;
+          if (total > 0) onProgress(received / total);
+        },
+        onDone: () {
+          stallTimer?.cancel();
+          if (!completer.isCompleted) completer.complete();
+        },
+        onError: (Object e) {
+          stallTimer?.cancel();
+          if (!completer.isCompleted) completer.completeError(e);
+        },
+        cancelOnError: true,
+      );
+
+      try {
+        await completer.future;
+      } finally {
+        stallTimer?.cancel();
+        await sink.close();
+      }
+
+      if (total > 0 && received < total) {
+        throw Exception('Download incomplete ($received of $total bytes)');
+      }
+    } finally {
+      client.close();
     }
   }
 }

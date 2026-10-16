@@ -22,7 +22,11 @@ jobs:
         run: echo "googleMaps.apiKey=${{ secrets.GOOGLE_MAPS_API_KEY }}" >> android/local.properties
 
       - run: flutter pub get
-      - run: flutter build apk --release --dart-define=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
+      # arm64-v8a only: every phone this app has ever been installed on is
+      # 64-bit, and a universal build triples the OTA payload (bundles
+      # armeabi-v7a and x86_64 libs nobody's device uses). This is the single
+      # biggest lever on download time — ~53MB -> ~20MB.
+      - run: flutter build apk --release --target-platform android-arm64 --dart-define=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
 
       - name: Extract changelog section for this tag
         id: notes
