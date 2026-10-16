@@ -340,9 +340,11 @@ class _UpiPopupState extends State<_UpiPopup> {
         ),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 220),
-          transitionBuilder: (child, animation) => FadeTransition(
-            opacity: animation,
-            child: SizeTransition(sizeFactor: animation, axisAlignment: -1, child: child),
+          // The surrounding AnimatedSize already animates the height change.
+          transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+          layoutBuilder: (current, previous) => Stack(
+            alignment: Alignment.topCenter,
+            children: [...previous, if (current != null) current],
           ),
           child: _hasDescription ? _categorySection() : const SizedBox(width: double.infinity),
         ),

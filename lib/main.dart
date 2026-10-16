@@ -145,7 +145,7 @@ class _AppRootState extends State<_AppRoot> {
     navigator.popUntil((route) => route.isFirst);
     navigator.push(
       MaterialPageRoute(
-        builder: (_) => TripHomeScreen(tripId: trip['id'] as int, tripName: trip['name'] as String? ?? 'Trip'),
+        builder: (_) => TripHomeScreen(tripId: trip['id'] as int, tripName: (trip['name'] as String?) ?? 'Trip'),
       ),
     );
   }
