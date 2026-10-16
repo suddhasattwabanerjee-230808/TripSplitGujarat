@@ -71,6 +71,11 @@ object UpiParser {
 
 object UpiNotifier {
     private const val CHANNEL = "upi_payments"
+    const val EXTRA_NOTIFICATION_ID = "notification_id"
+
+    fun cancel(context: Context, id: Int) {
+        if (id != -1) NotificationManagerCompat.from(context).cancel(id)
+    }
 
     fun show(context: Context, txn: UpiTxn, time: Long) {
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -90,9 +95,16 @@ object UpiNotifier {
             putExtra("amount", txn.amount)
             putExtra("payee", txn.payee)
             putExtra("time", time)
+            putExtra(EXTRA_NOTIFICATION_ID, id)
         }
-        val tap = PendingIntent.getActivity(
+        val add = PendingIntent.getActivity(
             context, id, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val ignore = PendingIntent.getBroadcast(
+            context,
+            id,
+            Intent(context, UpiIgnoreReceiver::class.java).putExtra(EXTRA_NOTIFICATION_ID, id),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val amountText = if (txn.amount % 1.0 == 0.0) {
             String.format(Locale.US, "%,.0f", txn.amount)
@@ -103,11 +115,21 @@ object UpiNotifier {
             .setSmallIcon(R.drawable.ic_stat_upi)
             .setColor(0xFF087E78.toInt())
             .setContentTitle("₹$amountText paid" + (txn.payee?.let { " to $it" } ?: ""))
-            .setContentText("Tap to add it to your trip")
+            .setContentText("Add it to your Gujarat trip?")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_RECOMMENDATION)
             .setAutoCancel(true)
-            .setContentIntent(tap)
+            .setContentIntent(add)
+            .addAction(0, "Add", add)
+            .addAction(0, "Ignore", ignore)
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
+    }
+}
+
+/** "Ignore" action on the UPI notification — just dismisses it. */
+class UpiIgnoreReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        UpiNotifier.cancel(context, intent.getIntExtra(UpiNotifier.EXTRA_NOTIFICATION_ID, -1))
     }
 }

@@ -26,18 +26,36 @@ class UpiPopupApp extends StatelessWidget {
   );
 }
 
-/// Best-effort category from the payee / description so the totals stay useful.
+/// Best-effort category from the description / payee so the totals stay useful.
+/// Matches at word starts, so "ola" doesn't fire on "cola" or "bus" on "business".
 String guessCategory(String text) {
   final t = text.toLowerCase();
-  bool has(List<String> words) => words.any(t.contains);
-  if (has(['zomato', 'swiggy', 'restaurant', 'cafe', 'food', 'dhaba', 'pizza', 'bakery', 'chai', 'kitchen', 'lunch', 'dinner', 'breakfast'])) {
+  bool has(List<String> words) => RegExp('\\b(${words.join('|')})').hasMatch(t);
+  if (has([
+    'zomato', 'swiggy', 'restaurant', 'cafe', 'café', 'food', 'dhaba', 'pizza', 'bakery', 'chai', 'tea', 'coffee',
+    'kitchen', 'lunch', 'dinner', 'breakfast', 'snack', 'thali', 'dhokla', 'fafda', 'khaman', 'jalebi', 'juice',
+    'ice cream', 'icecream', 'sweets', 'mithai', 'water', 'meal', 'biryani', 'paan', 'kulfi', 'lassi', 'drinks',
+  ])) {
     return 'Food';
   }
-  if (has(['uber', 'ola', 'rapido', 'irctc', 'railway', 'redbus', 'metro', 'petrol', 'fuel', 'indigo', 'airlines', 'cab', 'taxi', 'toll', 'fastag'])) {
+  if (has([
+    'uber', 'ola', 'rapido', 'irctc', 'railway', 'train', 'redbus', 'bus', 'metro', 'petrol', 'diesel', 'fuel',
+    'indigo', 'airline', 'flight', 'cab', 'taxi', 'auto', 'rickshaw', 'toll', 'fastag', 'parking', 'ferry',
+  ])) {
     return 'Transport';
   }
-  if (has(['oyo', 'airbnb', 'hotel', 'resort', 'stay', 'lodge', 'makemytrip', 'goibibo', 'booking'])) return 'Stay';
-  if (has(['ticket', 'bookmyshow', 'museum', 'safari', 'entry', 'park'])) return 'Activities';
+  if (has([
+    'oyo', 'airbnb', 'hotel', 'resort', 'stay', 'lodge', 'room', 'hostel', 'dharamshala', 'guest house',
+    'guesthouse', 'homestay', 'makemytrip', 'goibibo', 'booking', 'check-in', 'checkin',
+  ])) {
+    return 'Stay';
+  }
+  if (has([
+    'ticket', 'bookmyshow', 'museum', 'safari', 'entry', 'park', 'temple', 'darshan', 'boat', 'ropeway', 'tour',
+    'guide', 'garba', 'show', 'fort', 'zoo', 'camel', 'ride', 'statue', 'beach',
+  ])) {
+    return 'Activities';
+  }
   return 'Other';
 }
 
@@ -50,28 +68,41 @@ class _UpiPopup extends StatefulWidget {
 
 class _UpiPopupState extends State<_UpiPopup> {
   final _description = TextEditingController();
+  final _location = TextEditingController();
   double _amount = 0;
   String? _payee;
   DateTime _time = DateTime.now();
-  List<Trip> _trips = [];
-  int? _tripId;
-  String? _location;
+  Trip? _trip;
+  String _category = 'Other';
+  // Once the user taps a category chip, stop re-guessing it as they type.
+  bool _categoryPicked = false;
+  bool _locationEdited = false;
   bool _locating = true;
   bool _loading = true;
   bool _busy = false;
   bool _done = false;
   String? _error;
 
+  bool get _hasDescription => _description.text.trim().isNotEmpty;
+
   @override
   void initState() {
     super.initState();
+    _description.addListener(_onDescriptionChanged);
     _init();
   }
 
   @override
   void dispose() {
     _description.dispose();
+    _location.dispose();
     super.dispose();
+  }
+
+  void _onDescriptionChanged() {
+    setState(() {
+      if (!_categoryPicked) _category = guessCategory('${_description.text} ${_payee ?? ''}');
+    });
   }
 
   Future<void> _init() async {
@@ -86,22 +117,14 @@ class _UpiPopupState extends State<_UpiPopup> {
       });
       return;
     }
-    fetchLocationLabel().then((label) {
-      if (mounted) {
-        setState(() {
-          _location = label;
-          _locating = false;
-        });
-      }
-    });
+    _fillCurrentLocation();
     try {
       final trips = await ApiClient.instance.listTrips();
       final last = await ApiClient.instance.lastTripId();
       setState(() {
-        _trips = trips;
-        _tripId = trips.any((t) => t.id == last) ? last : (trips.isEmpty ? null : trips.first.id);
+        _trip = _pickTrip(trips, last);
         _loading = false;
-        if (trips.isEmpty) _error = 'Create or join a trip in TripSplit first.';
+        if (_trip == null) _error = 'Create or join a trip in TripSplit first.';
       });
     } on ApiException catch (e) {
       setState(() {
@@ -111,30 +134,70 @@ class _UpiPopupState extends State<_UpiPopup> {
     }
   }
 
+  /// UPI payments always go to the Gujarat trip; falls back to the last-opened trip
+  /// only if there isn't one.
+  Trip? _pickTrip(List<Trip> trips, int? lastId) {
+    if (trips.isEmpty) return null;
+    bool isGujarat(Trip t) => '${t.name} ${t.destination ?? ''}'.toLowerCase().contains('gujarat');
+    final gujarat = trips.where(isGujarat).toList();
+    if (gujarat.isNotEmpty) {
+      return gujarat.firstWhere((t) => t.id == lastId, orElse: () => gujarat.first);
+    }
+    return trips.firstWhere((t) => t.id == lastId, orElse: () => trips.first);
+  }
+
+  Future<void> _fillCurrentLocation() async {
+    setState(() => _locating = true);
+    final label = await fetchLocationLabel();
+    if (!mounted) return;
+    setState(() {
+      _locating = false;
+      if (label != null && !_locationEdited) _location.text = label;
+    });
+  }
+
+  Future<void> _useCurrentLocation() async {
+    _locationEdited = false;
+    await _fillCurrentLocation();
+  }
+
+  Future<void> _pickDateTime() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: _time,
+      firstDate: _time.subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (date == null || !mounted) return;
+    final time = await showTimePicker(context: context, initialTime: TimeOfDay.fromDateTime(_time));
+    if (time == null) return;
+    setState(() => _time = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+  }
+
   Future<void> _close() => _channel.invokeMethod('close');
 
-  String get _tripName => _trips.firstWhere((t) => t.id == _tripId, orElse: () => _trips.first).name;
-
   Future<void> _save() async {
-    if (_tripId == null) return;
+    final trip = _trip;
+    if (trip == null) return;
     final typed = _description.text.trim();
     final description = typed.isNotEmpty ? typed : (_payee ?? 'UPI payment');
+    final location = _location.text.trim();
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
       await ApiClient.instance.createExpense(
-        tripId: _tripId!,
+        tripId: trip.id,
         description: description,
         amount: _amount,
-        category: guessCategory('$description ${_payee ?? ''}'),
+        category: _hasDescription ? _category : guessCategory(description),
         date: _time.toIso8601String(),
-        location: _location,
+        location: location.isEmpty ? null : location,
       );
       setState(() => _done = true);
-      await Future<void>.delayed(const Duration(milliseconds: 900));
-      await _close();
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await _channel.invokeMethod('openTrip', {'id': trip.id, 'name': trip.name});
     } on ApiException catch (e) {
       setState(() {
         _busy = false;
@@ -163,9 +226,13 @@ class _UpiPopupState extends State<_UpiPopup> {
               ),
               child: SafeArea(
                 top: false,
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 200),
-                  child: _done ? _doneView() : _formView(),
+                child: SingleChildScrollView(
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: _done ? _doneView() : _formView(),
+                  ),
                 ),
               ),
             ),
@@ -187,10 +254,12 @@ class _UpiPopupState extends State<_UpiPopup> {
           child: const Icon(Icons.check_rounded, color: teal, size: 30),
         ),
         const SizedBox(height: 12),
-        Text(
-          'Added to $_tripName',
-          style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
+        const Text(
+          'Expense added',
+          style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
         ),
+        const SizedBox(height: 4),
+        const Text('Opening your expenses…', style: TextStyle(color: muted, fontSize: 12)),
       ],
     ),
   );
@@ -220,9 +289,11 @@ class _UpiPopupState extends State<_UpiPopup> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'UPI payment detected',
-                  style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600),
+                Text(
+                  _payee == null ? 'UPI payment detected' : 'Paid to $_payee',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 Text(
                   money(_amount),
@@ -234,42 +305,83 @@ class _UpiPopupState extends State<_UpiPopup> {
           IconButton(onPressed: _busy ? null : _close, icon: const Icon(Icons.close_rounded, color: muted)),
         ],
       ),
-      const SizedBox(height: 4),
-      Text(
-        '${_payee == null ? '' : 'to $_payee · '}${formatDateTime(_time)}',
-        style: const TextStyle(color: muted, fontSize: 12),
-      ),
       const SizedBox(height: 16),
       if (_loading)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 20),
           child: Center(child: CircularProgressIndicator(color: teal)),
         )
-      else if (_tripId != null) ...[
+      else if (_trip != null) ...[
+        fieldLabel('WHAT WAS IT FOR?'),
+        const SizedBox(height: 8),
         TextField(
           controller: _description,
           autofocus: true,
           textCapitalization: TextCapitalization.sentences,
-          textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _busy ? null : _save(),
+          textInputAction: TextInputAction.next,
           decoration: appInputDecoration(
-            _payee == null ? 'What was it for?' : 'What was it for? (e.g. Lunch at $_payee)',
+            _payee == null ? 'e.g. Lunch, auto, hotel' : 'e.g. Lunch at $_payee',
             Icons.edit_rounded,
           ),
         ),
-        const SizedBox(height: 10),
-        _infoRow(
-          Icons.landscape_rounded,
-          _trips.length > 1 ? null : 'Adding to $_tripName',
-          trailing: _trips.length > 1 ? _tripPicker() : null,
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SizeTransition(sizeFactor: animation, axisAlignment: -1, child: child),
+          ),
+          child: _hasDescription ? _categorySection() : const SizedBox(width: double.infinity),
         ),
-        const SizedBox(height: 6),
-        _infoRow(
-          Icons.location_on_rounded,
-          _locating ? 'Finding your location…' : (_location ?? 'Location unavailable'),
-          trailing: _locating
-              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: teal))
-              : null,
+        const SizedBox(height: 14),
+        fieldLabel('WHERE'),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _location,
+          textCapitalization: TextCapitalization.words,
+          onChanged: (_) => _locationEdited = true,
+          onSubmitted: (_) => _busy ? null : _save(),
+          decoration: appInputDecoration(
+            _locating ? 'Finding your location…' : 'Add a location',
+            Icons.location_on_rounded,
+          ).copyWith(
+            suffixIcon: _locating
+                ? const Padding(
+                    padding: EdgeInsets.all(15),
+                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: teal)),
+                  )
+                : IconButton(
+                    tooltip: 'Use current location',
+                    onPressed: _busy ? null : _useCurrentLocation,
+                    icon: const Icon(Icons.my_location_rounded, size: 18, color: teal),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 14),
+        fieldLabel('WHEN'),
+        const SizedBox(height: 8),
+        Material(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap: _busy ? null : _pickDateTime,
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule_rounded, size: 18, color: muted),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _fullDateTime(_time),
+                      style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const Icon(Icons.edit_calendar_rounded, size: 17, color: teal),
+                ],
+              ),
+            ),
+          ),
         ),
       ],
       if (_error != null)
@@ -277,8 +389,8 @@ class _UpiPopupState extends State<_UpiPopup> {
           padding: const EdgeInsets.only(top: 10),
           child: Text(_error!, style: const TextStyle(color: Color(0xFFD1805C), fontSize: 12)),
         ),
-      if (_tripId != null) ...[
-        const SizedBox(height: 16),
+      if (_trip != null) ...[
+        const SizedBox(height: 18),
         SizedBox(
           width: double.infinity,
           height: 50,
@@ -291,42 +403,72 @@ class _UpiPopupState extends State<_UpiPopup> {
             ),
             child: _busy
                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Text('Add to $_tripName', style: const TextStyle(fontWeight: FontWeight.w700)),
+                : const Text('Save expense', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ),
       ],
     ],
   );
 
-  Widget _infoRow(IconData icon, String? text, {Widget? trailing}) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-    child: Row(
+  Widget _categorySection() => Padding(
+    key: const ValueKey('category'),
+    padding: const EdgeInsets.only(top: 14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 17, color: teal),
-        const SizedBox(width: 10),
-        if (text != null)
-          Expanded(
-            child: Text(
-              text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w600),
-            ),
-          ),
-        if (trailing != null) text == null ? Expanded(child: trailing) : trailing,
+        Row(
+          children: [
+            fieldLabel('CATEGORY'),
+            if (!_categoryPicked) ...[
+              const SizedBox(width: 6),
+              const Icon(Icons.auto_awesome_rounded, size: 11, color: teal),
+              const SizedBox(width: 3),
+              const Text('auto', style: TextStyle(color: teal, fontSize: 9, fontWeight: FontWeight.w800)),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: [
+            for (final c in categoryOrder)
+              ChoiceChip(
+                label: Text(c),
+                avatar: Icon(iconForCategory(c), size: 15, color: _category == c ? colorForCategory(c) : muted),
+                selected: _category == c,
+                onSelected: _busy
+                    ? null
+                    : (_) => setState(() {
+                        _category = c;
+                        _categoryPicked = true;
+                      }),
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                selectedColor: colorForCategory(c).withValues(alpha: .16),
+                backgroundColor: Colors.white,
+                side: BorderSide(color: _category == c ? colorForCategory(c) : Colors.transparent),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                labelStyle: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _category == c ? ink : muted,
+                ),
+              ),
+          ],
+        ),
       ],
     ),
   );
+}
 
-  Widget _tripPicker() => DropdownButtonHideUnderline(
-    child: DropdownButton<int>(
-      value: _tripId,
-      isDense: true,
-      isExpanded: true,
-      style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w600),
-      items: [for (final t in _trips) DropdownMenuItem(value: t.id, child: Text('Adding to ${t.name}'))],
-      onChanged: _busy ? null : (id) => setState(() => _tripId = id),
-    ),
-  );
+const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/// "Fri, 16 Oct 2026 · 7:42 PM" — the popup shows the full date, not "Today".
+String _fullDateTime(DateTime dt) {
+  final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+  final m = dt.minute.toString().padLeft(2, '0');
+  final period = dt.hour >= 12 ? 'PM' : 'AM';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${_weekdays[dt.weekday - 1]}, ${dt.day} ${months[dt.month - 1]} ${dt.year} · $h:$m $period';
 }

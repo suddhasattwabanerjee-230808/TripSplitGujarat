@@ -46,6 +46,9 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize" />
         <receiver
+            android:name=".UpiIgnoreReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".UpiSmsReceiver"
             android:exported="true"
             android:permission="android.permission.BROADCAST_SMS">

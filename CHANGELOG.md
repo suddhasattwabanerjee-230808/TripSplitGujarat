@@ -4,6 +4,26 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.4.0] - 2026-10-16
+
+### Added
+- UPI payment notifications now have **Add** and **Ignore** buttons, so you
+  can act on a detected payment straight from the notification shade.
+  Ignore just dismisses it.
+- The quick-add popup suggests a category (Food, Stay, Transport,
+  Activities, Other) as soon as you type a description, and updates the
+  guess as you type. Tap a different chip to override it.
+- The popup shows the payment's full date and time, and you can tap it to
+  change either one.
+
+### Changed
+- The popup's location is now an editable field. It's pre-filled with your
+  current location, and a button restores that default if you've changed it.
+- UPI payments always go to your Gujarat trip, so the popup no longer
+  shows a trip picker.
+- After you save, the popup closes and TripSplit opens on that trip's
+  expense list.
+
 ## [1.3.1] - 2026-10-16
 
 ### Fixed

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'api_client.dart';
 import 'screens/login_screen.dart';
 import 'screens/splash_screen.dart';
+import 'screens/trip_home_screen.dart';
 import 'screens/trip_list_screen.dart';
 import 'screens/update_dialog.dart';
 import 'theme.dart';
@@ -11,6 +12,11 @@ import 'update_service.dart';
 import 'upi_popup.dart';
 
 void main() => runApp(const TripSplitApp());
+
+final _navigatorKey = GlobalKey<NavigatorState>();
+
+/// MainActivity → Dart: "open this trip", sent after a UPI quick-add is saved.
+const _launchChannel = MethodChannel('tripsplit/launch');
 
 /// Entrypoint for UpiPopupActivity (the "UPI payment detected" quick-add card).
 @pragma('vm:entry-point')
@@ -58,6 +64,7 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
     final scheme = ColorScheme.fromSeed(seedColor: teal, brightness: Brightness.light);
     return MaterialApp(
       title: 'TripSplit',
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -116,9 +123,31 @@ class _AppRootState extends State<_AppRoot> {
   void initState() {
     super.initState();
     ApiClient.instance.restoreSession().then((loggedIn) {
-      if (mounted) setState(() => _loggedIn = loggedIn);
+      if (!mounted) return;
+      setState(() => _loggedIn = loggedIn);
+      if (loggedIn) _openPendingTrip();
+    });
+    _launchChannel.setMethodCallHandler((call) async {
+      if (call.method == 'openTrip' && _loggedIn == true) _openTrip(call.arguments as Map);
     });
     _checkForUpdate();
+  }
+
+  /// Cold start from the UPI popup's save — jump straight to that trip's expenses.
+  Future<void> _openPendingTrip() async {
+    final trip = await _launchChannel.invokeMapMethod<String, dynamic>('takePendingTrip');
+    if (trip != null) _openTrip(trip);
+  }
+
+  void _openTrip(Map<dynamic, dynamic> trip) {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    navigator.popUntil((route) => route.isFirst);
+    navigator.push(
+      MaterialPageRoute(
+        builder: (_) => TripHomeScreen(tripId: trip['id'] as int, tripName: trip['name'] as String? ?? 'Trip'),
+      ),
+    );
   }
 
   Future<void> _checkForUpdate() async {
