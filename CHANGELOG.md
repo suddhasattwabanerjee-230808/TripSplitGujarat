@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.3.0] - 2026-10-16
+
+### Added
+- Auto-add UPI payments: when your bank texts a UPI debit alert, the app
+  posts a notification with the amount and payee. Tapping it opens a small
+  popup (no need to open the full app) to add a description and save it as
+  an expense on whichever trip you last had open — amount, date/time, and
+  location are filled in automatically. Enabled per-device from a banner on
+  the trips list, since it needs SMS access.
+- Trip screen and trips list redesigned: your own balance now comes first
+  ("You owe ₹X" / "You are owed ₹X"), expenses are grouped by month with a
+  running "you lent / you borrowed" per entry computed from your actual
+  share, and the overview/balances tab bar is replaced by Settle up /
+  Balances / Totals / Invite chips.
+
 ## [1.2.0] - 2026-10-14
 
 ### Added
