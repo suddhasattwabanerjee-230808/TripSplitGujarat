@@ -210,8 +210,8 @@ class _UpiPopupState extends State<_UpiPopup> {
         location: location.isEmpty ? null : location,
       );
       setState(() => _done = true);
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      await _channel.invokeMethod('openTrip', {'id': trip.id, 'name': trip.name});
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await _close();
     } on ApiException catch (e) {
       setState(() {
         _busy = false;
@@ -273,7 +273,7 @@ class _UpiPopupState extends State<_UpiPopup> {
           style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
-        const Text('Opening your expenses…', style: TextStyle(color: muted, fontSize: 12)),
+        Text('Added to ${_trip?.name ?? 'your trip'}', style: const TextStyle(color: muted, fontSize: 12)),
       ],
     ),
   );

@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.4.3] - 2026-10-16
+
+### Changed
+- Saving a UPI expense from the quick-add popup no longer opens the app.
+  The popup shows a short success message ("Expense added" and the trip
+  name) and closes by itself after 2 seconds.
+
 ## [1.4.2] - 2026-10-16
 
 ### Fixed
