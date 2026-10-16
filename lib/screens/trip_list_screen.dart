@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../api_client.dart';
@@ -23,12 +24,19 @@ class _TripListScreenState extends State<TripListScreen> {
   Map<int, double?> _myNet = {};
   String? _error;
   bool _upiDetection = true;
+  PackageInfo? _packageInfo;
 
   @override
   void initState() {
     super.initState();
     _load();
     _checkUpiDetection();
+    _loadPackageInfo();
+  }
+
+  Future<void> _loadPackageInfo() async {
+    final info = await PackageInfo.fromPlatform();
+    if (mounted) setState(() => _packageInfo = info);
   }
 
   Future<void> _checkUpiDetection() async {
@@ -166,10 +174,37 @@ class _TripListScreenState extends State<TripListScreen> {
                           ],
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Check for updates',
-                        onPressed: _checkForUpdate,
-                        icon: const Icon(Icons.system_update_rounded, color: muted),
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Check for updates',
+                            onPressed: _checkForUpdate,
+                            icon: const Icon(Icons.system_update_rounded, color: muted),
+                          ),
+                          if (_packageInfo != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEFEDE3),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  child: Text(
+                                    'v${_packageInfo!.version} · build ${_packageInfo!.buildNumber}',
+                                    style: const TextStyle(
+                                      color: muted,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: .2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                       IconButton(
                         tooltip: 'Log out',

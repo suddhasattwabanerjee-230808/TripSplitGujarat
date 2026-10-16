@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.3.1] - 2026-10-16
+
+### Fixed
+- OTA updates were slow and would sometimes hang mid-download. Release
+  builds now ship arm64-v8a only instead of bundling armeabi-v7a and
+  x86_64 as well, cutting the update download from ~53MB to ~19MB.
+  The in-app downloader also resumes a dropped download instead of
+  restarting from zero, and gives up and retries a stalled transfer
+  instead of hanging indefinitely.
+
+### Added
+- The app's version and build number now show as a small label under
+  the update icon on the trips list, so it's obvious at a glance
+  whether an update actually installed.
+
 ## [1.3.0] - 2026-10-16
 
 ### Added
