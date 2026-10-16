@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.4.2] - 2026-10-16
+
+### Fixed
+- The category chips in the UPI quick-add popup now simply fade in when
+  you start typing. This removes a deprecated Flutter animation setting
+  that was failing the CI analyzer. No other change to how the app works.
+
 ## [1.4.1] - 2026-10-16
 
 ### Added
