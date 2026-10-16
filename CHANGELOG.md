@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.4.1] - 2026-10-16
+
+### Added
+- The UPI quick-add popup's location field now has a map button that opens
+  the same map picker as the full expense form. You can drag the pin or
+  search for a place, and the result fills the location field.
+
 ## [1.4.0] - 2026-10-16
 
 ### Added

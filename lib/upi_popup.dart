@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'api_client.dart';
 import 'location_service.dart';
 import 'models.dart';
+import 'screens/location_picker_screen.dart';
 import 'theme.dart';
 
 const _channel = MethodChannel('tripsplit/upi');
@@ -153,6 +154,19 @@ class _UpiPopupState extends State<_UpiPopup> {
     setState(() {
       _locating = false;
       if (label != null && !_locationEdited) _location.text = label;
+    });
+  }
+
+  Future<void> _openLocationPicker() async {
+    FocusScope.of(context).unfocus();
+    final current = _location.text.trim();
+    final picked = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => LocationPickerScreen(initialLabel: current.isEmpty ? null : current)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _location.text = picked;
+      _locationEdited = true;
     });
   }
 
@@ -344,16 +358,27 @@ class _UpiPopupState extends State<_UpiPopup> {
             _locating ? 'Finding your location…' : 'Add a location',
             Icons.location_on_rounded,
           ).copyWith(
-            suffixIcon: _locating
-                ? const Padding(
+            suffixIcon: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_locating)
+                  const Padding(
                     padding: EdgeInsets.all(15),
                     child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: teal)),
                   )
-                : IconButton(
+                else
+                  IconButton(
                     tooltip: 'Use current location',
                     onPressed: _busy ? null : _useCurrentLocation,
                     icon: const Icon(Icons.my_location_rounded, size: 18, color: teal),
                   ),
+                IconButton(
+                  tooltip: 'Pick on map',
+                  onPressed: _busy ? null : _openLocationPicker,
+                  icon: const Icon(Icons.map_rounded, size: 18, color: teal),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 14),
