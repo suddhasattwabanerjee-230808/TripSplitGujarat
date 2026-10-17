@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.4.5] - 2026-10-17
+
+The same app as the release-signed 1.4.3, published with a higher version
+so devices already on it receive an update. Its purpose is to exercise the
+new one-step updater (download + install + reopen in a single step). The
+first update to a release-signed build may still show Android's one-time
+install confirmation.
+
 ## [1.4.3] - 2026-10-17 (re-released, build 14)
 
 Rebuilt so that a fresh install from this release has everything below.
