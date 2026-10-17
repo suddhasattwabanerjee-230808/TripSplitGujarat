@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.provider.Telephony
 import androidx.core.app.NotificationCompat
@@ -112,8 +113,9 @@ object UpiNotifier {
             String.format(Locale.US, "%,.2f", txn.amount)
         }
         val notification = NotificationCompat.Builder(context, CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_upi)
-            .setColor(0xFF087E78.toInt())
+            .setSmallIcon(R.drawable.ic_stat_logo)
+            .setLargeIcon(BitmapFactory.decodeResource(context.resources, R.drawable.ic_notification_large))
+            .setColor(0xFFF08018.toInt())
             .setContentTitle("₹$amountText paid" + (txn.payee?.let { " to $it" } ?: ""))
             .setContentText("Add it to your Gujarat trip?")
             .setPriority(NotificationCompat.PRIORITY_HIGH)

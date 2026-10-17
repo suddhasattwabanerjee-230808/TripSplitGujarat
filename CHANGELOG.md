@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.4.4] - 2026-10-17
+
+### Changed
+- New app icon: the Gujarat lion emblem replaces the default Flutter logo.
+  On Android 13+ it also supports themed (monochrome) icons.
+- The UPI payment notification now shows the lion instead of the rupee
+  symbol in the status bar, and the full-colour emblem inside the
+  notification.
+
 ## [1.4.3] - 2026-10-16
 
 ### Changed
