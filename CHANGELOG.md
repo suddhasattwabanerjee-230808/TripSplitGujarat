@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.4.5] - 2026-10-17
+
+### Changed
+- Tapping "Update now" now downloads and installs the update in one go,
+  with a single progress bar, and reopens TripSplit on the new version.
+  There's no separate "Install?" screen any more. The first update after
+  this one may still ask once, because Android needs one confirmation
+  before an app can update itself silently.
+- If Android doesn't allow the app to reopen by itself, a "TripSplit
+  updated — tap to open" notification appears instead.
+
 ## [1.4.4] - 2026-10-17
 
 ### Changed

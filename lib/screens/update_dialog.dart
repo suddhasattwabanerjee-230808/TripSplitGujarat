@@ -21,23 +21,31 @@ class _UpdateDialog extends StatefulWidget {
 
 class _UpdateDialogState extends State<_UpdateDialog> {
   double? _progress;
+  bool _installing = false;
   String? _error;
 
   Future<void> _update() async {
     setState(() {
       _progress = 0;
+      _installing = false;
       _error = null;
     });
     try {
-      await UpdateService.downloadAndInstall(widget.info, (p) {
-        if (mounted) setState(() => _progress = p);
+      // Downloads, installs and relaunches in one go; on success this app
+      // instance is replaced, so we only get past this line on failure.
+      await UpdateService.downloadAndInstall(widget.info, (p, installing) {
+        if (mounted) {
+          setState(() {
+            _progress = p;
+            _installing = installing;
+          });
+        }
       });
-      if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
         setState(() {
           _progress = null;
-          _error = 'Could not install the update. $e';
+          _error = 'Could not update. $e';
         });
       }
     }
@@ -83,12 +91,48 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             ],
             if (downloading) ...[
               const SizedBox(height: 18),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: LinearProgressIndicator(
-                  value: _progress! > 0 ? _progress : null,
-                  color: teal,
-                  backgroundColor: const Color(0xFFE4E8DF),
+              // One bar for download + install; animated so the jumps between
+              // chunks and the install phase's creep read as smooth motion.
+              TweenAnimationBuilder<double>(
+                tween: Tween(end: _progress!),
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+                builder: (context, value, _) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: LinearProgressIndicator(
+                        value: value > 0 ? value : null,
+                        minHeight: 8,
+                        color: teal,
+                        backgroundColor: const Color(0xFFE4E8DF),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: Text(
+                            _installing ? 'Installing… the app will reopen' : 'Downloading…',
+                            key: ValueKey(_installing),
+                            style: const TextStyle(color: muted, fontSize: 12),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${(value * 100).floor()}%',
+                          style: const TextStyle(
+                            color: ink,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -113,7 +157,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  child: Text(downloading ? 'Downloading…' : 'Update now'),
+                  child: Text(downloading ? 'Updating…' : 'Update now'),
                 ),
               ],
             ),

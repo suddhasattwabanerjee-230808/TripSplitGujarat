@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -23,7 +23,8 @@ class UpdateInfo {
 }
 
 /// Checks the TripSplit backend for a newer APK build and installs it
-/// in-place, without going through the Play Store. The backend is the same
+/// in-place, without going through the Play Store or the system's
+/// "Install?" screen (see AppUpdater.kt). The backend is the same
 /// server the app's API already talks to (see api_client.dart) — it just
 /// also serves whatever APK was last pushed to its /releases/publish
 /// endpoint.
@@ -37,6 +38,14 @@ class UpdateService {
   // watchdog that looks exactly like the app "hanging" at some percentage.
   static const _stallTimeout = Duration(seconds: 12);
   static const _maxAttempts = 5;
+
+  static const _channel = MethodChannel('tripsplit/updater');
+
+  // Shares of the single progress bar: the download dominates; handing the
+  // APK to the installer is quick; then Android installs with no progress
+  // reporting, so the bar creeps through the rest until the app restarts.
+  static const _downloadShare = 0.85;
+  static const _stagingShare = 0.08;
 
   /// Returns update info if the server has a build newer than the one
   /// currently installed, or null if up to date / unreachable.
@@ -56,13 +65,15 @@ class UpdateService {
     }
   }
 
-  /// Downloads the latest APK, reporting progress in [0, 1], then opens it
-  /// so the system installer takes over. Resumes a partial download (via
-  /// HTTP Range) and retries through stalls/drops instead of restarting
-  /// from zero each time. Throws on failure after exhausting retries.
+  /// Downloads the latest APK and installs it, reporting one combined
+  /// progress value in [0, 1] and whether the install phase has begun.
+  /// Resumes a partial download (via HTTP Range) and retries through
+  /// stalls/drops instead of restarting from zero each time. On success
+  /// Android replaces the running app and the new version opens, so this
+  /// only ever returns by throwing.
   static Future<void> downloadAndInstall(
     UpdateInfo info,
-    void Function(double progress) onProgress,
+    void Function(double progress, bool installing) onProgress,
   ) async {
     final dir = await getTemporaryDirectory();
     // Keyed by version so a partial download from a prior attempt at the
@@ -73,7 +84,7 @@ class UpdateService {
     Object? lastError;
     for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
       try {
-        await _downloadOnce(file, onProgress);
+        await _downloadOnce(file, (p) => onProgress(p * _downloadShare, false));
         lastError = null;
         break;
       } catch (e) {
@@ -85,9 +96,29 @@ class UpdateService {
     }
     if (lastError != null) throw lastError;
 
-    final result = await OpenFilex.open(file.path);
-    if (result.type != ResultType.done) {
-      throw Exception(result.message);
+    var progress = _downloadShare;
+    onProgress(progress, true);
+    Timer? creep;
+    _channel.setMethodCallHandler((call) async {
+      if (call.method != 'installProgress') return;
+      final staged = (call.arguments as num).toDouble();
+      progress = _downloadShare + staged * _stagingShare;
+      onProgress(progress, true);
+      if (staged >= 1) {
+        // Approach, never reach, 100% while Android installs.
+        creep ??= Timer.periodic(const Duration(milliseconds: 250), (_) {
+          progress += (0.99 - progress) * 0.04;
+          onProgress(progress, true);
+        });
+      }
+    });
+    try {
+      await _channel.invokeMethod<void>('install', {'path': file.path});
+    } on PlatformException catch (e) {
+      throw Exception(e.message ?? e.code);
+    } finally {
+      creep?.cancel();
+      _channel.setMethodCallHandler(null);
     }
   }
 
@@ -116,6 +147,17 @@ class UpdateService {
         final range = streamed.headers['content-range'];
         total = int.tryParse(range?.split('/').last ?? '') ??
             (existing + (streamed.contentLength ?? 0));
+      } else if (streamed.statusCode == 416 && existing > 0) {
+        // Nothing left to send: the file is already complete (e.g. a retry
+        // after a cancelled install) — unless the server's copy changed size.
+        await streamed.stream.drain<void>();
+        final size = int.tryParse(streamed.headers['content-range']?.split('/').last ?? '');
+        if (size == existing) {
+          onProgress(1);
+          return;
+        }
+        await file.delete();
+        throw Exception('Stale partial download discarded');
       } else if (streamed.statusCode == 200) {
         // Server didn't honor the Range request (or this is the first
         // attempt) — start over from scratch rather than appending onto

@@ -2,8 +2,10 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
-    <!-- Lets the app launch the system installer for OTA-downloaded APKs. -->
+    <!-- Lets the app install its own OTA-downloaded APKs (PackageInstaller session). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Lets Android 12+ apply OTA updates without an "Install?" prompt. -->
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"/>
     <!-- Bank UPI debit alerts → "add to trip" notification. -->
     <uses-permission android:name="android.permission.RECEIVE_SMS"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -45,6 +47,16 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize" />
+        <receiver
+            android:name=".UpdateStatusReceiver"
+            android:exported="false" />
+        <receiver
+            android:name=".PackageReplacedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".UpiIgnoreReceiver"
             android:exported="false" />
