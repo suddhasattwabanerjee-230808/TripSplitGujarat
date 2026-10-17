@@ -16,10 +16,28 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import java.util.Locale
 
+/**
+ * The home screen's "UPI payment alerts" switch. Kept in native prefs (not Flutter's)
+ * because the receiver below runs without a Flutter engine. Off keeps the SMS
+ * permission but posts nothing, so switching back on needs no re-grant.
+ */
+object UpiSettings {
+    private const val PREFS = "upi_settings"
+    private const val KEY_ENABLED = "alerts_enabled"
+
+    fun isEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ENABLED, true)
+
+    fun setEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ENABLED, enabled).apply()
+    }
+}
+
 /** Watches incoming SMS for bank UPI debit alerts and posts a "add to trip" notification. */
 class UpiSmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        if (!UpiSettings.isEnabled(context)) return
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (messages.isNullOrEmpty()) return
         // Banks send from alphanumeric sender IDs (e.g. "VM-HDFCBK"); personal numbers are all digits.

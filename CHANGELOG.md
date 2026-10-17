@@ -4,13 +4,17 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
-## [1.4.5] - 2026-10-17 (build 18)
+## [1.4.5] - 2026-10-17 (build 19)
 
-The same app as 1.4.3 (build 17), published with a higher version
-so devices already on it receive an update. Its purpose is to exercise the
-new one-step updater (download + install + reopen in a single step). The
-first update to a release-signed build may still show Android's one-time
-install confirmation.
+### Added
+- A "UPI payment alerts" switch on the home screen. Turn it off to stop the
+  tap-to-add alerts for UPI payments without giving up SMS access, and turn
+  it back on any time. If SMS access isn't allowed yet, switching it on
+  walks you through allowing it.
+
+This is also the first update you can install straight from the app's
+"Update now" button: one progress bar, then the app reopens on the new
+version. The very first time, Android may ask you to confirm once.
 
 ## [1.4.3] - 2026-10-17 (re-released, build 17)
 

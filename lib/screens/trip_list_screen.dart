@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -23,7 +24,10 @@ class _TripListScreenState extends State<TripListScreen> with WidgetsBindingObse
   List<Trip>? _trips;
   Map<int, double?> _myNet = {};
   String? _error;
+  static const _upiSettings = MethodChannel('tripsplit/upi_settings');
+
   bool _upiDetection = true;
+  bool _upiAlertsOn = true;
   PackageInfo? _packageInfo;
 
   @override
@@ -55,7 +59,32 @@ class _TripListScreenState extends State<TripListScreen> with WidgetsBindingObse
 
   Future<void> _checkUpiDetection() async {
     final granted = await Permission.sms.isGranted;
-    if (mounted) setState(() => _upiDetection = granted);
+    bool on;
+    try {
+      on = await _upiSettings.invokeMethod<bool>('isEnabled') ?? true;
+    } on Exception {
+      on = true;
+    }
+    if (mounted) {
+      setState(() {
+        _upiDetection = granted;
+        _upiAlertsOn = on;
+      });
+    }
+  }
+
+  /// The home screen's UPI alerts switch. Switching on without SMS access runs
+  /// the set-up flow; the switch then reads on only once access is granted
+  /// (re-checked on resume). Switching off keeps the permission, just silences
+  /// the alerts in the native receiver.
+  Future<void> _setUpiAlerts(bool on) async {
+    setState(() => _upiAlertsOn = on);
+    try {
+      await _upiSettings.invokeMethod<void>('setEnabled', on);
+    } on Exception {
+      // Setting stays as it was; the switch re-syncs on the next check.
+    }
+    if (on && !_upiDetection) await _enableUpiDetection();
   }
 
   Future<void> _enableUpiDetection() async {
@@ -280,11 +309,10 @@ class _TripListScreenState extends State<TripListScreen> with WidgetsBindingObse
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                   sliver: SliverToBoxAdapter(child: _overallCard()),
                 ),
-              if (!_upiDetection)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  sliver: SliverToBoxAdapter(child: _upiBanner()),
-                ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                sliver: SliverToBoxAdapter(child: _upiCard()),
+              ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 sliver: SliverToBoxAdapter(
@@ -442,41 +470,68 @@ class _TripListScreenState extends State<TripListScreen> with WidgetsBindingObse
     );
   }
 
-  Widget _upiBanner() => Container(
-    padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-    decoration: BoxDecoration(
-      color: const Color(0xFFE3F1EC),
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Row(
-      children: [
-        Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(color: teal.withValues(alpha: .15), shape: BoxShape.circle),
-          child: const Icon(Icons.sms_rounded, color: teal, size: 19),
-        ),
-        const SizedBox(width: 12),
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Auto-add UPI payments', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
-              SizedBox(height: 2),
-              Text(
-                'Get a tap-to-add alert when your bank texts about a UPI payment.',
-                style: TextStyle(color: muted, fontSize: 12),
-              ),
-            ],
+  Widget _upiCard() {
+    final active = _upiDetection && _upiAlertsOn;
+    final subtitle = !_upiDetection
+        ? 'Needs SMS access — switch on to set it up.'
+        : _upiAlertsOn
+            ? 'On — you get a tap-to-add alert for each UPI payment.'
+            : 'Off — UPI payments won’t send alerts.';
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+      decoration: BoxDecoration(
+        color: active ? const Color(0xFFE3F1EC) : const Color(0xFFEFEDE3),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: (active ? teal : muted).withValues(alpha: .15),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              active ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
+              color: active ? teal : muted,
+              size: 19,
+            ),
           ),
-        ),
-        TextButton(
-          onPressed: _enableUpiDetection,
-          child: const Text('Enable', style: TextStyle(color: teal, fontWeight: FontWeight.w800)),
-        ),
-      ],
-    ),
-  );
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'UPI payment alerts',
+                  style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 2),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: Text(
+                    subtitle,
+                    key: ValueKey(subtitle),
+                    style: const TextStyle(color: muted, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: active,
+            onChanged: _setUpiAlerts,
+            activeThumbColor: Colors.white,
+            activeTrackColor: teal,
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _tripRow(Trip trip) {
     final net = _myNet[trip.id];

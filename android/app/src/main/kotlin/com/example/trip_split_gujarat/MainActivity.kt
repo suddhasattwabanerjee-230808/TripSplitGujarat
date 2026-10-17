@@ -35,5 +35,15 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tripsplit/upi_settings").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isEnabled" -> result.success(UpiSettings.isEnabled(this))
+                "setEnabled" -> {
+                    UpiSettings.setEnabled(this, call.arguments as? Boolean ?: true)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
     }
 }
