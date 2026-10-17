@@ -11,6 +11,8 @@ permissions:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    # A normal run is ~5-10 min; cap hangs well short of GitHub's 6h default.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -58,7 +60,10 @@ jobs:
         run: |
           VERSION_CODE=$(grep '^version:' pubspec.yaml | sed -E 's/.*\+([0-9]+)/\1/')
           VERSION_NAME="${GITHUB_REF_NAME#v}"
-          curl -fsS -X POST https://nav-server.tail85596c.ts.net/releases/publish \
+          # Bounded so a lost reply through the Tailscale tunnel can't hang the
+          # job (v1.4.4 sat "In progress" after the server had the APK). No
+          # --retry: a retried POST could publish the same release twice.
+          curl -fsS --connect-timeout 30 --max-time 300 -X POST https://nav-server.tail85596c.ts.net/releases/publish \
             -H "X-Api-Key: ${{ secrets.TRIPSPLIT_API_KEY }}" \
             -F "version_code=${VERSION_CODE}" \
             -F "version_name=${VERSION_NAME}" \
