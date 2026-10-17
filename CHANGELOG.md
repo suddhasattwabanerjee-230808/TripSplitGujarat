@@ -4,16 +4,27 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
-## [1.4.5] - 2026-10-17
+## [1.4.3] - 2026-10-17 (re-released, build 13)
+
+Rebuilt so that a fresh install from this release has everything below.
+It replaces the original 1.4.3 (build 11) and includes all of 1.4.4.
 
 ### Changed
 - Tapping "Update now" now downloads and installs the update in one go,
   with a single progress bar, and reopens TripSplit on the new version.
   There's no separate "Install?" screen any more. The first update after
-  this one may still ask once, because Android needs one confirmation
-  before an app can update itself silently.
+  installing this one may still ask once, because Android needs one
+  confirmation before an app can update itself silently.
 - If Android doesn't allow the app to reopen by itself, a "TripSplit
   updated — tap to open" notification appears instead.
+- New app icon: the Gujarat lion emblem replaces the default Flutter logo.
+  On Android 13+ it also supports themed (monochrome) icons.
+- The UPI payment notification now shows the lion instead of the rupee
+  symbol in the status bar, and the full-colour emblem inside the
+  notification.
+- Saving a UPI expense from the quick-add popup no longer opens the app.
+  The popup shows a short success message ("Expense added" and the trip
+  name) and closes by itself after 2 seconds.
 
 ## [1.4.4] - 2026-10-17
 
@@ -23,13 +34,6 @@ number after `+` in `pubspec.yaml` increments on every release.
 - The UPI payment notification now shows the lion instead of the rupee
   symbol in the status bar, and the full-colour emblem inside the
   notification.
-
-## [1.4.3] - 2026-10-16
-
-### Changed
-- Saving a UPI expense from the quick-add popup no longer opens the app.
-  The popup shows a short success message ("Expense added" and the trip
-  name) and closes by itself after 2 seconds.
 
 ## [1.4.2] - 2026-10-16
 
