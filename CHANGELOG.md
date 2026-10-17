@@ -12,12 +12,14 @@ new one-step updater (download + install + reopen in a single step). The
 first update to a release-signed build may still show Android's one-time
 install confirmation.
 
-## [1.4.3] - 2026-10-17 (re-released, build 16)
+## [1.4.3] - 2026-10-17 (re-released, build 17)
 
 Rebuilt so that a fresh install from this release has everything below.
-It replaces the earlier 1.4.3 builds (11, 13 and 14) and includes all of 1.4.4.
+It replaces the earlier 1.4.3 builds (11, 13, 14 and 16) and includes all of 1.4.4.
 
 ### Changed
+- The update pop-up now scrolls, so the "Update now" button stays reachable
+  even when the release notes are long (they were pushing it off-screen).
 - When you turn on "Auto-add UPI payments", if Android keeps SMS access
   switched off (it does this for apps installed outside the Play Store),
   the app now shows exactly how to allow it — tap the ⋮ menu on the App

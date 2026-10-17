@@ -51,13 +51,37 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     }
   }
 
+  /// Release notes come straight from the CHANGELOG section, hard-wrapped and
+  /// with Markdown markers. Unwrap the wrapped lines, drop the "###"/"-"
+  /// markers, and bullet the list so it reads cleanly in a narrow dialog.
+  String _cleanNotes(String raw) {
+    final out = <String>[];
+    for (final line in raw.trim().split('\n')) {
+      if (line.trim().isEmpty) {
+        out.add('');
+      } else if (line.startsWith('  ') && out.isNotEmpty && out.last.isNotEmpty) {
+        // Continuation of the previous wrapped bullet/line — join it on.
+        out[out.length - 1] = '${out.last} ${line.trim()}';
+      } else {
+        var l = line.trimLeft().replaceFirst(RegExp(r'^#{1,6}\s+'), '');
+        if (l.startsWith('- ')) l = '•  ${l.substring(2)}';
+        out.add(l);
+      }
+    }
+    return out.join('\n');
+  }
+
   @override
   Widget build(BuildContext context) {
     final downloading = _progress != null;
     return Dialog(
       backgroundColor: paper,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
-      child: Padding(
+      child: ConstrainedBox(
+        // Cap the dialog so long release notes never push the buttons off
+        // the screen — the notes scroll inside, the buttons stay put.
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.8),
+        child: Padding(
         padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -84,9 +108,13 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             ),
             if (widget.info.notes.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text(
-                widget.info.notes,
-                style: const TextStyle(color: ink, fontSize: 13, height: 1.4),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Text(
+                    _cleanNotes(widget.info.notes),
+                    style: const TextStyle(color: ink, fontSize: 13, height: 1.4),
+                  ),
+                ),
               ),
             ],
             if (downloading) ...[
@@ -163,6 +191,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
