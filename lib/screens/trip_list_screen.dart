@@ -17,7 +17,7 @@ class TripListScreen extends StatefulWidget {
   State<TripListScreen> createState() => _TripListScreenState();
 }
 
-class _TripListScreenState extends State<TripListScreen> {
+class _TripListScreenState extends State<TripListScreen> with WidgetsBindingObserver {
   static const _owe = Color(0xFFD1805C);
 
   List<Trip>? _trips;
@@ -29,9 +29,23 @@ class _TripListScreenState extends State<TripListScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
     _checkUpiDetection();
     _loadPackageInfo();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning from the Settings app where SMS may have just been allowed —
+    // re-check so the "Auto-add UPI payments" banner clears itself.
+    if (state == AppLifecycleState.resumed) _checkUpiDetection();
   }
 
   Future<void> _loadPackageInfo() async {
@@ -46,11 +60,57 @@ class _TripListScreenState extends State<TripListScreen> {
 
   Future<void> _enableUpiDetection() async {
     final result = await [Permission.sms, Permission.notification].request();
-    if (result[Permission.sms]?.isPermanentlyDenied ?? false) {
-      await openAppSettings();
+    final sms = result[Permission.sms] ?? PermissionStatus.denied;
+    // On a build installed from outside the Play Store, Play Protect treats SMS
+    // as a restricted permission and auto-denies the request — the toggle in
+    // Settings stays greyed out until the user turns on "Allow restricted
+    // settings" first. A plain openAppSettings() drops them there with no clue
+    // how to proceed, so when SMS didn't get granted we spell the steps out.
+    if (!sms.isGranted && mounted) {
+      await _showSmsHelpDialog();
     }
     await _checkUpiDetection();
   }
+
+  Future<void> _showSmsHelpDialog() => showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: paper,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text(
+        'Allow SMS access',
+        style: TextStyle(color: ink, fontWeight: FontWeight.w800, fontSize: 18),
+      ),
+      content: const Text(
+        'Because TripSplit is installed outside the Play Store, Android keeps '
+        'SMS access switched off and greys out the toggle. Turn it on by hand:\n\n'
+        '1.  Tap “Open settings” below.\n'
+        '2.  On the App info screen, tap ⋮ in the top-right corner.\n'
+        '3.  Choose “Allow restricted settings”.\n'
+        '4.  Open Permissions → SMS → Allow.\n\n'
+        'Then come back here — the banner will disappear once it’s on.',
+        style: TextStyle(color: ink, fontSize: 13.5, height: 1.45),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Not now', style: TextStyle(color: muted)),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            openAppSettings();
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: ink,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: const Text('Open settings'),
+        ),
+      ],
+    ),
+  );
 
   Future<void> _load() async {
     setState(() => _error = null);
