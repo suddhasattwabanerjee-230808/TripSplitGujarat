@@ -4,12 +4,18 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
-## [1.4.3] - 2026-10-17 (re-released, build 13)
+## [1.4.3] - 2026-10-17 (re-released, build 14)
 
 Rebuilt so that a fresh install from this release has everything below.
-It replaces the original 1.4.3 (build 11) and includes all of 1.4.4.
+It replaces the earlier 1.4.3 builds (11 and 13) and includes all of 1.4.4.
 
 ### Changed
+- The app is now signed with its own release certificate instead of the
+  Android debug key, so Google Play Protect no longer blocks installing
+  the downloaded APK. (You may still see a one-time "install anyway?"
+  prompt for an app from outside the Play Store.) Because the signing key
+  changed, a device already running an older build must be uninstalled
+  and reinstalled once to move onto this version.
 - Tapping "Update now" now downloads and installs the update in one go,
   with a single progress bar, and reopens TripSplit on the new version.
   There's no separate "Install?" screen any more. The first update after

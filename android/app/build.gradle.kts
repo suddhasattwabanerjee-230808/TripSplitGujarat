@@ -52,13 +52,31 @@ android {
             keyAlias = "androiddebugkey"
             keyPassword = "android"
         }
+        create("release") {
+            // Dedicated release certificate (PKCS12). Unlike the shared Android
+            // debug cert — which every developer's machine uses and which Play
+            // Protect blocks as an unsafe sideload — this is a unique cert, so
+            // fresh installs from the GitHub asset are no longer blocked.
+            // Committed alongside its password like debug.keystore above: same
+            // informal model for this personal app; the key only governs who
+            // can ship updates to it. Regenerating it would change the SHA-1
+            // and require re-registering (below) and reinstalling every device.
+            //
+            // The Google Maps API key is SHA-1-restricted. Both certs' SHA-1s
+            // must be on the key's Android restriction in Google Cloud Console:
+            //   release: CC:F1:7A:DD:B4:5D:EA:72:5C:20:49:FF:53:01:0A:4C:4E:19:C9:6F
+            //   debug:   used by `flutter run` / CI debug builds (already registered)
+            storeFile = file("release.keystore")
+            storeType = "PKCS12"
+            storePassword = "<release-password>"
+            keyAlias = "tripsplit"
+            keyPassword = "<release-password>"
+        }
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

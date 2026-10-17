@@ -17,3 +17,8 @@ key.properties
 # with the Google Maps API key restriction. It is not used for production
 # release signing and its password is the public, well-known Android default.
 !app/debug.keystore
+# The release keystore is also intentionally committed (app/release.keystore)
+# so CI signs release APKs with a stable, non-debug certificate — that is what
+# lets Play Protect install sideloaded builds. Its SHA-1 is registered with the
+# Google Maps API key restriction too (see app/build.gradle.kts).
+!app/release.keystore
