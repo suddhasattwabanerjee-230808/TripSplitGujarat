@@ -4,3 +4,10 @@
 /// Maps SDK — this constant is what the Places Autocomplete plugin needs on
 /// the Dart side to talk to the native Places SDK layer.
 const googleMapsApiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
+
+/// The *Web application* OAuth client ID from Google Cloud Console (APIs &
+/// Services → Credentials), ending in `.apps.googleusercontent.com`. Android's
+/// Credential Manager needs it to mint an ID token the backend can verify; it
+/// is a public identifier, not a secret. The Android OAuth client (package +
+/// signing SHA-1) must exist in the same Cloud project, but isn't referenced here.
+const googleWebClientId = '';

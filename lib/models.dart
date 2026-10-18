@@ -1,18 +1,50 @@
 import 'package:flutter/material.dart';
 
 class AppUser {
-  const AppUser({required this.id, required this.name, required this.phone});
+  const AppUser({
+    required this.id,
+    required this.name,
+    this.phone,
+    this.email,
+    this.photoUrl,
+  });
   final int id;
   final String name;
-  final String phone;
+
+  /// Only set on accounts first created with the old phone + OTP login.
+  final String? phone;
+
+  /// Set once the account is signed in with (or linked to) Google.
+  final String? email;
+  final String? photoUrl;
+
+  bool get hasGoogle => email != null;
+
+  String get initials {
+    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    final first = parts.first[0];
+    return (parts.length > 1 ? first + parts.last[0] : first).toUpperCase();
+  }
+
+  AppUser copyWith({String? name}) =>
+      AppUser(id: id, name: name ?? this.name, phone: phone, email: email, photoUrl: photoUrl);
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
     id: json['id'] as int,
     name: json['name'] as String,
-    phone: json['phone'] as String,
+    phone: json['phone'] as String?,
+    email: json['email'] as String?,
+    photoUrl: json['photo_url'] as String?,
   );
 
-  Map<String, Object> toJson() => {'id': id, 'name': name, 'phone': phone};
+  Map<String, Object?> toJson() => {
+    'id': id,
+    'name': name,
+    'phone': phone,
+    'email': email,
+    'photo_url': photoUrl,
+  };
 }
 
 class TripMember {

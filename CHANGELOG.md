@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [Unreleased]
+
+### Changed
+- Sign in with your Google account. No more phone number or OTP code: one tap
+  on "Continue with Google" and you're in.
+- You stay signed in. The app only signs you out when you tap "Sign out".
+
+### Added
+- A profile page (tap your picture at the top of the home screen). It shows
+  your photo, name and email, your trip count and overall balance, and the
+  app version. You can change the name your tripmates see, check for
+  updates, and sign out from here.
+- Signed in with a phone number before? Open your profile and tap
+  "Connect Google" to keep the same account and all its trips.
+
 ## [1.4.5] - 2026-10-17 (build 19)
 
 ### Added

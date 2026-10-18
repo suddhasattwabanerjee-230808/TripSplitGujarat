@@ -7,7 +7,7 @@ import '../api_client.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../update_service.dart';
-import 'login_screen.dart';
+import 'profile_screen.dart';
 import 'trip_home_screen.dart';
 import 'update_dialog.dart';
 
@@ -211,13 +211,17 @@ class _TripListScreenState extends State<TripListScreen> with WidgetsBindingObse
     }
   }
 
-  Future<void> _logOut() async {
-    await ApiClient.instance.logOut();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
+  Future<void> _openProfile() async {
+    final known = _myNet.values.whereType<double>();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProfileScreen(
+          tripCount: _trips?.length,
+          netBalance: _trips == null ? null : known.fold<double>(0, (a, b) => a + b),
+        ),
+      ),
     );
+    if (mounted) setState(() {}); // the name may have been edited
   }
 
   @override
@@ -295,11 +299,28 @@ class _TripListScreenState extends State<TripListScreen> with WidgetsBindingObse
                             ),
                         ],
                       ),
-                      IconButton(
-                        tooltip: 'Log out',
-                        onPressed: _logOut,
-                        icon: const Icon(Icons.logout_rounded, color: muted),
-                      ),
+                      if (user != null)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, right: 8),
+                          child: Tooltip(
+                            message: 'Profile',
+                            child: InkWell(
+                              onTap: _openProfile,
+                              customBorder: const CircleBorder(),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: lime, width: 2),
+                                  boxShadow: softShadow(ink, .08),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(2),
+                                  child: UserAvatar(user: user, size: 36),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),

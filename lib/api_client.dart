@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'google_auth.dart';
 import 'models.dart';
 
 class ApiException implements Exception {
@@ -53,6 +54,8 @@ class ApiClient {
 
   Future<int?> lastTripId() => _preferences.getInt(_lastTripKey);
 
+  /// Signing out is always the user's choice (or a session the server
+  /// rejected and Google couldn't renew); the saved session never expires locally.
   Future<void> logOut() async {
     _token = null;
     _user = null;
@@ -65,6 +68,12 @@ class ApiClient {
     if (_token != null) 'Authorization': 'Bearer $_token',
   };
 
+  /// Called when the server rejects the saved session and it can't be renewed
+  /// silently — the only way the app ever signs someone out on its own.
+  void Function()? onSessionExpired;
+
+  Future<bool>? _renewing;
+
   dynamic _unwrap(http.Response response) {
     final body = response.body.isEmpty ? '{}' : jsonDecode(response.body);
     if (response.statusCode >= 400) {
@@ -76,83 +85,101 @@ class ApiClient {
     return body;
   }
 
-  Future<dynamic> _get(String path) async {
+  /// Sends [request] (re-run for a retry, so it re-reads [_headers]). A 401 on
+  /// a signed-in session gets one silent renewal through Google before giving up,
+  /// so a session the server dropped never bounces the user to the login screen.
+  Future<dynamic> _send(Future<http.Response> Function() request, {bool renew = true}) async {
+    http.Response response;
     try {
-      final response = await http
-          .get(Uri.parse('$_baseUrl$path'), headers: _headers)
-          .timeout(const Duration(seconds: 12));
-      return _unwrap(response);
-    } on ApiException {
-      rethrow;
+      response = await request().timeout(const Duration(seconds: 12));
+      if (response.statusCode == 401 && _token != null && renew) {
+        if (await _renewSession()) {
+          response = await request().timeout(const Duration(seconds: 12));
+        } else {
+          await logOut();
+          onSessionExpired?.call();
+        }
+      }
     } catch (_) {
       throw ApiException('Could not reach the server. Check your connection.');
     }
+    try {
+      return _unwrap(response);
+    } on FormatException {
+      throw ApiException('Unexpected reply from the server (${response.statusCode}).');
+    }
   }
 
-  Future<dynamic> _post(String path, Map<String, Object?> body) async {
+  /// Parallel requests that all hit a 401 share one renewal.
+  Future<bool> _renewSession() =>
+      _renewing ??= _renewWithGoogle().whenComplete(() => _renewing = null);
+
+  Future<bool> _renewWithGoogle() async {
+    // Accounts that never linked Google can't be renewed without the user.
+    if (_user?.hasGoogle != true) return false;
+    final idToken = await GoogleAuth.silentIdToken();
+    if (idToken == null) return false;
     try {
       final response = await http
           .post(
-            Uri.parse('$_baseUrl$path'),
-            headers: _headers,
-            body: jsonEncode(body),
+            Uri.parse('$_baseUrl/auth/google'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'id_token': idToken}),
           )
           .timeout(const Duration(seconds: 12));
-      return _unwrap(response);
-    } on ApiException {
-      rethrow;
+      if (response.statusCode != 200) return false;
+      final result = jsonDecode(response.body) as Map<String, dynamic>;
+      final user = AppUser.fromJson(result['user'] as Map<String, dynamic>);
+      if (user.id != _user?.id) return false; // a different Google account; don't swap users silently
+      await _saveSession(result['token'] as String, user);
+      return true;
     } catch (_) {
-      throw ApiException('Could not reach the server. Check your connection.');
+      return false;
     }
   }
 
-  Future<dynamic> _put(String path, Map<String, Object?> body) async {
-    try {
-      final response = await http
-          .put(
-            Uri.parse('$_baseUrl$path'),
-            headers: _headers,
-            body: jsonEncode(body),
-          )
-          .timeout(const Duration(seconds: 12));
-      return _unwrap(response);
-    } on ApiException {
-      rethrow;
-    } catch (_) {
-      throw ApiException('Could not reach the server. Check your connection.');
-    }
-  }
+  Future<dynamic> _get(String path) =>
+      _send(() => http.get(Uri.parse('$_baseUrl$path'), headers: _headers));
 
-  Future<dynamic> _delete(String path) async {
-    try {
-      final response = await http
-          .delete(Uri.parse('$_baseUrl$path'), headers: _headers)
-          .timeout(const Duration(seconds: 12));
-      return _unwrap(response);
-    } on ApiException {
-      rethrow;
-    } catch (_) {
-      throw ApiException('Could not reach the server. Check your connection.');
-    }
-  }
+  Future<dynamic> _post(String path, Map<String, Object?> body, {bool renew = true}) => _send(
+    () => http.post(Uri.parse('$_baseUrl$path'), headers: _headers, body: jsonEncode(body)),
+    renew: renew,
+  );
+
+  Future<dynamic> _put(String path, Map<String, Object?> body) => _send(
+    () => http.put(Uri.parse('$_baseUrl$path'), headers: _headers, body: jsonEncode(body)),
+  );
+
+  Future<dynamic> _patch(String path, Map<String, Object?> body) => _send(
+    () => http.patch(Uri.parse('$_baseUrl$path'), headers: _headers, body: jsonEncode(body)),
+  );
+
+  Future<dynamic> _delete(String path) =>
+      _send(() => http.delete(Uri.parse('$_baseUrl$path'), headers: _headers));
 
   // --- Auth -----------------------------------------------------------
 
-  /// Returns the mock OTP code (the backend hands it back directly since no
-  /// real SMS provider is wired up yet).
-  Future<String> requestOtp(String phone) async {
-    final result = await _post('/auth/request-otp', {'phone': phone});
-    return result['otp'] as String;
-  }
-
-  Future<AppUser> verifyOtp(String phone, String code, {String? name}) async {
-    final result = await _post('/auth/verify-otp', {
-      'phone': phone,
-      'code': code,
-      if (name != null) 'name': name,
-    });
+  /// Exchanges a Google ID token for a TripSplit session. When someone is
+  /// already signed in (an old phone account), the current session is sent
+  /// too, and the server links Google to that account instead of making a new one.
+  Future<AppUser> signInWithGoogle(String idToken) async {
+    // A 401 here means Google's token was refused, not that the session died.
+    final result = await _post('/auth/google', {'id_token': idToken}, renew: false);
     final user = AppUser.fromJson(result['user'] as Map<String, dynamic>);
     await _saveSession(result['token'] as String, user);
+    return user;
+  }
+
+  /// Re-reads the profile from the server (name/photo may have changed).
+  Future<AppUser> refreshMe() async {
+    final user = AppUser.fromJson(await _get('/me') as Map<String, dynamic>);
+    await _saveSession(_token!, user);
+    return user;
+  }
+
+  Future<AppUser> updateName(String name) async {
+    final user = AppUser.fromJson(await _patch('/me', {'name': name}) as Map<String, dynamic>);
+    await _saveSession(_token!, user);
     return user;
   }
 

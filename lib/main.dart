@@ -24,6 +24,7 @@ class TripSplitApp extends StatefulWidget {
 }
 
 class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver {
+  final _navigatorKey = GlobalKey<NavigatorState>();
   Key _splashKey = UniqueKey();
   bool _showSplash = true;
   bool _splashFadingOut = false;
@@ -32,11 +33,18 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Sessions don't expire; this only fires if the server rejects one and
+    // Google can't silently renew it.
+    ApiClient.instance.onSessionExpired = () => _navigatorKey.currentState?.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    ApiClient.instance.onSessionExpired = null;
     super.dispose();
   }
 
@@ -58,6 +66,7 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
     final scheme = ColorScheme.fromSeed(seedColor: teal, brightness: Brightness.light);
     return MaterialApp(
       title: 'TripSplit',
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
