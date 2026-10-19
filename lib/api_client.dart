@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'google_auth.dart';
 import 'models.dart';
+import 'theme.dart';
 
 class ApiException implements Exception {
   ApiException(this.message);
@@ -177,10 +178,21 @@ class ApiClient {
     return user;
   }
 
-  Future<AppUser> updateName(String name) async {
-    final user = AppUser.fromJson(await _patch('/me', {'name': name}) as Map<String, dynamic>);
+  Future<AppUser> updateName(String name) => _updateMe({'name': name});
+
+  /// An empty [upiId] removes it.
+  Future<AppUser> updateUpiId(String upiId) => _updateMe({'upi_id': upiId});
+
+  Future<AppUser> _updateMe(Map<String, Object?> body) async {
+    final user = AppUser.fromJson(await _patch('/me', body) as Map<String, dynamic>);
     await _saveSession(_token!, user);
     return user;
+  }
+
+  /// Recent expenses across all the user's trips, newest first.
+  Future<List<ActivityItem>> activity({int limit = 50}) async {
+    final result = await _get('/activity?limit=$limit') as List<dynamic>;
+    return result.map((item) => ActivityItem.fromJson(item as Map<String, dynamic>)).toList();
   }
 
   // --- Trips ------------------------------------------------------------
@@ -195,12 +207,14 @@ class ApiClient {
     String? destination,
     String? startDate,
     String? endDate,
+    String? kind,
   }) async {
     final result = await _post('/trips', {
       'name': name,
       'destination': destination,
       'start_date': startDate,
       'end_date': endDate,
+      'kind': kind,
     });
     return Trip.fromJson(result as Map<String, dynamic>);
   }
@@ -258,6 +272,27 @@ class ApiClient {
       'category': category,
       'date': date,
       'location': location,
+    });
+    return TripExpense.fromJson(result as Map<String, dynamic>);
+  }
+
+  /// Records that the user paid [toUserId] back: an expense they paid with the
+  /// whole amount as [toUserId]'s share, which cancels that much of the debt.
+  Future<TripExpense> recordPayment({
+    required int tripId,
+    required int toUserId,
+    required double amount,
+    String method = 'UPI',
+  }) async {
+    final result = await _post('/trips/$tripId/expenses', {
+      'description': 'Paid back via $method',
+      'amount': amount,
+      'category': settlementCategory,
+      'date': DateTime.now().toIso8601String(),
+      'split_type': 'custom',
+      'custom_shares': [
+        {'user_id': toUserId, 'share_amount': amount},
+      ],
     });
     return TripExpense.fromJson(result as Map<String, dynamic>);
   }

@@ -148,7 +148,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       body: Stack(
         children: [
           if (_loadingStartPosition)
-            const Center(child: CircularProgressIndicator(color: teal))
+            const Center(child: CircularProgressIndicator(color: accent))
           else
             GoogleMap(
               initialCameraPosition: CameraPosition(target: _center, zoom: 16),
@@ -165,7 +165,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
               child: Center(
                 child: Padding(
                   padding: EdgeInsets.only(bottom: 34),
-                  child: Icon(Icons.location_on_rounded, size: 46, color: ink, shadows: [
+                  child: Icon(Icons.location_on_outlined, size: 46, color: ink, shadows: [
                     Shadow(color: Colors.black26, blurRadius: 6, offset: Offset(0, 3)),
                   ]),
                 ),
@@ -204,7 +204,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                       child: SizedBox(
                                         width: 14,
                                         height: 14,
-                                        child: CircularProgressIndicator(strokeWidth: 2, color: teal),
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: accent),
                                       ),
                                     )
                                   : (_searchController.text.isNotEmpty
@@ -228,7 +228,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      _roundButton(Icons.my_location_rounded, _recenterOnCurrentLocation),
+                      _roundButton(Icons.my_location_outlined, _recenterOnCurrentLocation),
                     ],
                   ),
                   if (_searchResults.isNotEmpty)
@@ -251,7 +251,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           final result = _searchResults[index];
                           return ListTile(
                             dense: true,
-                            leading: const Icon(Icons.place_outlined, color: teal, size: 20),
+                            leading: const Icon(Icons.place_outlined, color: accent, size: 20),
                             title: Text(
                               result.mainText,
                               maxLines: 1,
@@ -290,7 +290,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.location_on_rounded, color: teal, size: 18),
+                        const Icon(Icons.location_on_outlined, color: accent, size: 18),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(

@@ -1,5 +1,22 @@
 import 'package:flutter/material.dart';
 
+import 'theme.dart';
+
+String _initials(String name) {
+  final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+  if (parts.isEmpty) return '?';
+  final first = parts.first[0];
+  return (parts.length > 1 ? first + parts.last[0] : first).toUpperCase();
+}
+
+/// Server timestamps are UTC "YYYY-MM-DD HH:MM:SS"; read them as UTC, show local.
+DateTime? _parseServerTime(String? value) {
+  if (value == null) return null;
+  final iso = value.contains('T') ? value : value.replaceFirst(' ', 'T');
+  final parsed = DateTime.tryParse(iso.endsWith('Z') || iso.contains('+') ? iso : '${iso}Z');
+  return parsed?.toLocal();
+}
+
 class AppUser {
   const AppUser({
     required this.id,
@@ -7,6 +24,7 @@ class AppUser {
     this.phone,
     this.email,
     this.photoUrl,
+    this.upiId,
   });
   final int id;
   final String name;
@@ -18,17 +36,12 @@ class AppUser {
   final String? email;
   final String? photoUrl;
 
+  /// Where tripmates pay this person from "Pay now" (e.g. name@okhdfc).
+  final String? upiId;
+
   bool get hasGoogle => email != null;
 
-  String get initials {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
-    if (parts.isEmpty) return '?';
-    final first = parts.first[0];
-    return (parts.length > 1 ? first + parts.last[0] : first).toUpperCase();
-  }
-
-  AppUser copyWith({String? name}) =>
-      AppUser(id: id, name: name ?? this.name, phone: phone, email: email, photoUrl: photoUrl);
+  String get initials => _initials(name);
 
   factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
     id: json['id'] as int,
@@ -36,6 +49,7 @@ class AppUser {
     phone: json['phone'] as String?,
     email: json['email'] as String?,
     photoUrl: json['photo_url'] as String?,
+    upiId: json['upi_id'] as String?,
   );
 
   Map<String, Object?> toJson() => {
@@ -44,16 +58,25 @@ class AppUser {
     'phone': phone,
     'email': email,
     'photo_url': photoUrl,
+    'upi_id': upiId,
   };
 }
 
 class TripMember {
-  const TripMember({required this.id, required this.name});
+  const TripMember({required this.id, required this.name, this.photoUrl, this.upiId});
   final int id;
   final String name;
+  final String? photoUrl;
+  final String? upiId;
 
-  factory TripMember.fromJson(Map<String, dynamic> json) =>
-      TripMember(id: json['id'] as int, name: json['name'] as String);
+  String get initials => _initials(name);
+
+  factory TripMember.fromJson(Map<String, dynamic> json) => TripMember(
+    id: json['id'] as int,
+    name: json['name'] as String,
+    photoUrl: json['photo_url'] as String?,
+    upiId: json['upi_id'] as String?,
+  );
 }
 
 class Trip {
@@ -64,6 +87,10 @@ class Trip {
     required this.inviteCode,
     required this.memberCount,
     this.members = const [],
+    this.kind,
+    this.startDate,
+    this.createdAt,
+    this.totalSpent = 0,
   });
   final int id;
   final String name;
@@ -71,6 +98,26 @@ class Trip {
   final String inviteCode;
   final int memberCount;
   final List<TripMember> members;
+
+  /// One of [tripKinds]' ids; null for trips made before kinds existed.
+  final String? kind;
+  final String? startDate;
+  final DateTime? createdAt;
+
+  /// Money spent on the trip, not counting settle-up payments.
+  final double totalSpent;
+
+  TripKind get tripKind => tripKindFor(kind);
+
+  /// The trip's start date if it has one, otherwise when it was made.
+  DateTime? get date => DateTime.tryParse(startDate ?? '') ?? createdAt;
+
+  TripMember? member(int userId) {
+    for (final m in members) {
+      if (m.id == userId) return m;
+    }
+    return null;
+  }
 
   factory Trip.fromJson(Map<String, dynamic> json) => Trip(
     id: json['id'] as int,
@@ -81,6 +128,10 @@ class Trip {
     members: (json['members'] as List<dynamic>? ?? [])
         .map((item) => TripMember.fromJson(item as Map<String, dynamic>))
         .toList(),
+    kind: json['kind'] as String?,
+    startDate: json['start_date'] as String?,
+    createdAt: _parseServerTime(json['created_at'] as String?),
+    totalSpent: (json['total_spent'] as num?)?.toDouble() ?? 0,
   );
 }
 
@@ -106,6 +157,7 @@ class TripExpense {
     required this.date,
     required this.location,
     required this.shares,
+    this.createdAt,
   });
   final int id;
   final String description;
@@ -116,16 +168,20 @@ class TripExpense {
   final String date;
   final String? location;
   final List<ExpenseShare> shares;
+  final DateTime? createdAt;
 
   DateTime get dateTime => DateTime.tryParse(date) ?? DateTime.now();
 
-  IconData get icon => switch (category) {
-    'Food' => Icons.restaurant_rounded,
-    'Stay' => Icons.hotel_rounded,
-    'Transport' => Icons.local_taxi_rounded,
-    'Activities' => Icons.local_activity_rounded,
-    _ => Icons.more_horiz_rounded,
-  };
+  IconData get icon => iconForCategory(category);
+
+  bool get isSettlement => category == settlementCategory;
+
+  double shareOf(int userId) {
+    for (final s in shares) {
+      if (s.userId == userId) return s.shareAmount;
+    }
+    return 0;
+  }
 
   factory TripExpense.fromJson(Map<String, dynamic> json) => TripExpense(
     id: json['id'] as int,
@@ -139,6 +195,7 @@ class TripExpense {
     shares: (json['shares'] as List<dynamic>)
         .map((item) => ExpenseShare.fromJson(item as Map<String, dynamic>))
         .toList(),
+    createdAt: _parseServerTime(json['created_at'] as String?),
   );
 }
 
@@ -170,14 +227,59 @@ class Settlement {
     required this.fromUser,
     required this.toUser,
     required this.amount,
+    this.fromUserId,
+    this.toUserId,
   });
   final String fromUser;
   final String toUser;
   final double amount;
+  final int? fromUserId;
+  final int? toUserId;
 
   factory Settlement.fromJson(Map<String, dynamic> json) => Settlement(
     fromUser: json['from_user'] as String,
     toUser: json['to_user'] as String,
     amount: (json['amount'] as num).toDouble(),
+    fromUserId: json['from_user_id'] as int?,
+    toUserId: json['to_user_id'] as int?,
+  );
+}
+
+/// One expense in the notification feed (any trip the user is in).
+class ActivityItem {
+  const ActivityItem({
+    required this.expenseId,
+    required this.tripId,
+    required this.tripName,
+    required this.description,
+    required this.amount,
+    required this.category,
+    required this.paidBy,
+    required this.paidByName,
+    required this.createdAt,
+    required this.myShare,
+  });
+  final int expenseId;
+  final int tripId;
+  final String tripName;
+  final String description;
+  final double amount;
+  final String? category;
+  final int paidBy;
+  final String paidByName;
+  final DateTime createdAt;
+  final double myShare;
+
+  factory ActivityItem.fromJson(Map<String, dynamic> json) => ActivityItem(
+    expenseId: json['expense_id'] as int,
+    tripId: json['trip_id'] as int,
+    tripName: json['trip_name'] as String,
+    description: json['description'] as String,
+    amount: (json['amount'] as num).toDouble(),
+    category: json['category'] as String?,
+    paidBy: json['paid_by'] as int,
+    paidByName: json['paid_by_name'] as String,
+    createdAt: _parseServerTime(json['created_at'] as String?) ?? DateTime.now(),
+    myShare: (json['my_share'] as num).toDouble(),
   );
 }

@@ -89,7 +89,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           children: [
             const Row(
               children: [
-                Icon(Icons.system_update_rounded, color: teal),
+                Icon(Icons.system_update_outlined, color: accent),
                 SizedBox(width: 10),
                 Text(
                   'Update available',
@@ -133,7 +133,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                       child: LinearProgressIndicator(
                         value: value > 0 ? value : null,
                         minHeight: 8,
-                        color: teal,
+                        color: accent,
                         backgroundColor: const Color(0xFFE4E8DF),
                       ),
                     ),

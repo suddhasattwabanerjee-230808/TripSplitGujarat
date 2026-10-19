@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'api_client.dart';
 import 'screens/login_screen.dart';
 import 'screens/splash_screen.dart';
-import 'screens/trip_list_screen.dart';
+import 'screens/home_shell.dart';
 import 'screens/update_dialog.dart';
 import 'theme.dart';
 import 'update_service.dart';
@@ -63,7 +63,7 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(seedColor: teal, brightness: Brightness.light);
+    final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: Brightness.light);
     return MaterialApp(
       title: 'TripSplit',
       navigatorKey: _navigatorKey,
@@ -141,11 +141,11 @@ class _AppRootState extends State<_AppRoot> {
         ? const Scaffold(
             key: ValueKey('loading'),
             backgroundColor: paper,
-            body: Center(child: CircularProgressIndicator(color: teal)),
+            body: Center(child: CircularProgressIndicator(color: accent)),
           )
         : KeyedSubtree(
             key: ValueKey(_loggedIn),
-            child: _loggedIn! ? const TripListScreen() : const LoginScreen(),
+            child: _loggedIn! ? const HomeShell() : const LoginScreen(),
           );
     return AnimatedSwitcher(duration: const Duration(milliseconds: 300), child: child);
   }

@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../google_auth.dart';
 import '../theme.dart';
-import 'trip_list_screen.dart';
+import 'home_shell.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -38,7 +38,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       await ApiClient.instance.signInWithGoogle(idToken);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const TripListScreen()),
+        MaterialPageRoute(builder: (_) => const HomeShell()),
       );
     } on GoogleAuthException catch (e) {
       if (!e.canceled) setState(() => _error = e.message);
@@ -109,19 +109,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         const Column(
                           children: [
                             _Feature(
-                              icon: Icons.groups_rounded,
-                              color: teal,
+                              icon: Icons.groups_outlined,
+                              color: accent,
                               title: 'Shared with your group',
                               subtitle: 'Join with an invite code; everyone sees the same expenses.',
                             ),
                             _Feature(
-                              icon: Icons.bolt_rounded,
+                              icon: Icons.bolt_outlined,
                               color: Color(0xFFE0A96D),
                               title: 'UPI payments, auto-added',
                               subtitle: 'Pay with any UPI app and add it to the trip in one tap.',
                             ),
                             _Feature(
-                              icon: Icons.handshake_rounded,
+                              icon: Icons.handshake_outlined,
                               color: Color(0xFF7FA8D1),
                               title: 'Settle up simply',
                               subtitle: 'Balances and suggested payments, worked out for you.',
@@ -141,13 +141,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 margin: const EdgeInsets.only(bottom: 12),
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFBE9E1),
+                                  color: const Color(0xFFFCE8EA),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(Icons.error_outline_rounded, size: 18, color: Color(0xFFD1805C)),
+                                    const Icon(Icons.error_outline_rounded, size: 18, color: negative),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
@@ -190,7 +190,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   }
 }
 
-/// The lion emblem on a soft lime halo.
+/// The lion emblem on a soft light halo.
 class _Emblem extends StatelessWidget {
   const _Emblem();
 
@@ -206,7 +206,7 @@ class _Emblem extends StatelessWidget {
             color: ink,
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
-              BoxShadow(color: lime.withValues(alpha: .55), blurRadius: 24, spreadRadius: 1),
+              BoxShadow(color: accentGlow.withValues(alpha: .55), blurRadius: 24, spreadRadius: 1),
             ],
           ),
           child: Image.asset('assets/splash_logo.png', fit: BoxFit.contain),
@@ -217,7 +217,7 @@ class _Emblem extends StatelessWidget {
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 2.4),
             children: [
               TextSpan(text: 'TRIP', style: TextStyle(color: ink)),
-              TextSpan(text: 'SPLIT', style: TextStyle(color: teal)),
+              TextSpan(text: 'SPLIT', style: TextStyle(color: accent)),
             ],
           ),
         ),
@@ -289,7 +289,7 @@ class _GoogleButton extends StatelessWidget {
             foregroundColor: ink,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
-              side: const BorderSide(color: Color(0xFFE4E1D6)),
+              side: const BorderSide(color: line),
             ),
           ),
           child: AnimatedSwitcher(
@@ -299,7 +299,7 @@ class _GoogleButton extends StatelessWidget {
                     key: ValueKey('busy'),
                     width: 22,
                     height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.4, color: teal),
+                    child: CircularProgressIndicator(strokeWidth: 2.4, color: accent),
                   )
                 : const Row(
                     key: ValueKey('idle'),

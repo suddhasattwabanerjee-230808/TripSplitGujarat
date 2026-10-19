@@ -6,12 +6,13 @@ import '../api_client.dart';
 import '../google_auth.dart';
 import '../models.dart';
 import '../theme.dart';
+import '../trip_store.dart';
 import '../update_service.dart';
 import 'login_screen.dart';
 import 'update_dialog.dart';
 
-const _owe = Color(0xFFD1805C);
-const _hairline = Color(0xFFEDEBE3);
+const _owe = negative;
+const _hairline = line;
 
 /// The signed-in user's Google photo, or their initials on a member colour.
 /// Wrapped in a [Hero] so it flies between the home header and the profile.
@@ -61,11 +62,10 @@ class UserAvatar extends StatelessWidget {
 }
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, this.tripCount, this.netBalance});
+  const ProfileScreen({super.key, this.embedded = false});
 
-  /// Passed from the trip list so the stats show instantly.
-  final int? tripCount;
-  final double? netBalance;
+  /// Shown as a tab in the home shell (no back button).
+  final bool embedded;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -76,9 +76,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
   PackageInfo? _packageInfo;
   bool _linking = false;
 
+  int? get _tripCount => TripStore.instance.trips?.length;
+
+  double? get _netBalance {
+    if (TripStore.instance.trips == null) return null;
+    final t = TripStore.instance.totals;
+    return t.owed - t.owing;
+  }
+
+  void _onStore() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    TripStore.instance.removeListener(_onStore);
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    TripStore.instance.addListener(_onStore);
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _packageInfo = info);
     });
@@ -102,9 +121,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _EditNameSheet(initial: _user?.name ?? ''),
+      builder: (_) => _EditFieldSheet(
+        title: 'Your name',
+        subtitle: 'This is what everyone on your trips sees.',
+        label: 'NAME',
+        hint: 'e.g. Aarav',
+        icon: Icons.person_outline_rounded,
+        initial: _user?.name ?? '',
+        emptyError: 'Enter your name.',
+        save: ApiClient.instance.updateName,
+      ),
     );
     if (user != null && mounted) setState(() => _user = user);
+  }
+
+  Future<void> _editUpiId() async {
+    final user = await showModalBottomSheet<AppUser>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _EditFieldSheet(
+        title: 'Your UPI ID',
+        subtitle: 'Tripmates who owe you can tap “Pay” and their UPI app opens with your ID and the amount filled in.',
+        label: 'UPI ID',
+        hint: 'e.g. aarav@okhdfc',
+        icon: Icons.qr_code_2_outlined,
+        initial: _user?.upiId ?? '',
+        keyboard: TextInputType.emailAddress,
+        capitalization: TextCapitalization.none,
+        save: ApiClient.instance.updateUpiId,
+      ),
+    );
+    if (user != null && mounted) {
+      setState(() => _user = user);
+      TripStore.instance.refresh();
+    }
   }
 
   /// For accounts made with the old phone login: attach a Google account so
@@ -165,6 +216,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (confirmed != true) return;
     await GoogleAuth.signOut();
     await ApiClient.instance.logOut();
+    TripStore.instance.clear();
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -184,7 +236,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ? const SizedBox.shrink()
             : RefreshIndicator(
                 onRefresh: _refresh,
-                color: teal,
+                color: accent,
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
@@ -202,13 +254,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               icon: Icons.badge_outlined,
                               label: 'Name',
                               value: user.name,
-                              trailing: const Icon(Icons.edit_rounded, size: 17, color: muted),
+                              trailing: const Icon(Icons.edit_outlined, size: 17, color: muted),
                               onTap: _editName,
+                            ),
+                            _row(
+                              icon: Icons.qr_code_2_outlined,
+                              label: 'UPI ID',
+                              value: user.upiId ?? 'Add one so friends can pay you',
+                              trailing: const Icon(Icons.edit_outlined, size: 17, color: muted),
+                              onTap: _editUpiId,
                             ),
                             if (user.email != null)
                               _row(icon: Icons.alternate_email_rounded, label: 'Email', value: user.email!),
                             if (user.phone != null)
-                              _row(icon: Icons.phone_rounded, label: 'Phone', value: user.phone!),
+                              _row(icon: Icons.phone_outlined, label: 'Phone', value: user.phone!),
                             _row(
                               icon: Icons.verified_user_outlined,
                               label: 'Sign-in',
@@ -227,7 +286,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   : 'v${_packageInfo!.version} · build ${_packageInfo!.buildNumber}',
                             ),
                             _row(
-                              icon: Icons.system_update_rounded,
+                              icon: Icons.system_update_outlined,
                               label: 'Updates',
                               value: 'Check for a new version',
                               trailing: const Icon(Icons.chevron_right_rounded, color: muted),
@@ -244,7 +303,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: _owe,
                                 backgroundColor: Colors.white,
-                                side: const BorderSide(color: Color(0xFFF1D5C8)),
+                                side: const BorderSide(color: Color(0xFFF3CDD2)),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
                             ),
@@ -268,7 +327,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [ink, Color(0xFF0F4F57), teal],
+          colors: [ink, Color(0xFF2A3480), accent],
         ),
         borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
       ),
@@ -276,15 +335,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Row(
             children: [
-              IconButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-              ),
+              if (widget.embedded)
+                const SizedBox(width: 48)
+              else
+                IconButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                ),
               const Expanded(
                 child: Text(
-                  'PROFILE',
+                  'Profile',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 11, letterSpacing: 2.2, fontWeight: FontWeight.w800),
+                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ),
               const SizedBox(width: 48),
@@ -295,8 +357,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: lime,
-              boxShadow: [BoxShadow(color: lime.withValues(alpha: .35), blurRadius: 22)],
+              color: accentGlow,
+              boxShadow: [BoxShadow(color: accentGlow.withValues(alpha: .35), blurRadius: 22)],
             ),
             child: UserAvatar(user: user, size: 88),
           ),
@@ -333,9 +395,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    user.hasGoogle ? Icons.verified_rounded : Icons.phone_iphone_rounded,
+                    user.hasGoogle ? Icons.verified_outlined : Icons.phone_iphone_outlined,
                     size: 14,
-                    color: lime,
+                    color: accentGlow,
                   ),
                   const SizedBox(width: 6),
                   Text(
@@ -352,17 +414,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _stats() {
-    final net = widget.netBalance;
+    final net = _netBalance;
     final settled = net == null || net.abs() < 0.5;
     final owed = (net ?? 0) > 0;
     return Row(
       children: [
         Expanded(
           child: _statTile(
-            icon: Icons.luggage_rounded,
-            color: teal,
-            value: widget.tripCount?.toString() ?? '–',
-            label: widget.tripCount == 1 ? 'Trip' : 'Trips',
+            icon: Icons.luggage_outlined,
+            color: accent,
+            value: _tripCount?.toString() ?? '–',
+            label: _tripCount == 1 ? 'Split' : 'Splits',
           ),
         ),
         const SizedBox(width: 10),
@@ -371,7 +433,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: settled
                 ? Icons.check_circle_outline_rounded
                 : (owed ? Icons.south_west_rounded : Icons.north_east_rounded),
-            color: settled || owed ? teal : _owe,
+            color: settled ? accent : (owed ? positive : _owe),
             value: net == null ? '–' : (settled ? 'All square' : money(net.abs())),
             label: settled ? 'Across all trips' : (owed ? 'You\'re owed' : 'You owe'),
           ),
@@ -383,17 +445,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _statTile({required IconData icon, required Color color, required String value, required String label}) {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: softShadow(ink, .05),
-      ),
+      decoration: cardDecoration(),
       child: Row(
         children: [
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(color: color.withValues(alpha: .12), borderRadius: BorderRadius.circular(11)),
+            decoration: BoxDecoration(color: color.withValues(alpha: .12), shape: BoxShape.circle),
             child: Icon(icon, size: 19, color: color),
           ),
           const SizedBox(width: 10),
@@ -422,9 +480,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFEAF2E8),
+        color: accentSoft,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: teal.withValues(alpha: .18)),
+        border: Border.all(color: accent.withValues(alpha: .18)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -450,14 +508,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 foregroundColor: ink,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
-                  side: const BorderSide(color: Color(0xFFE4E1D6)),
+                  side: const BorderSide(color: line),
                 ),
               ),
               child: _linking
                   ? const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2.2, color: teal),
+                      child: CircularProgressIndicator(strokeWidth: 2.2, color: accent),
                     )
                   : const Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -484,11 +542,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _card(List<Widget> rows) => Container(
     clipBehavior: Clip.antiAlias,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(18),
-      boxShadow: softShadow(ink, .05),
-    ),
+    decoration: cardDecoration(),
     child: Column(
       children: [
         for (var i = 0; i < rows.length; i++) ...[
@@ -537,15 +591,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-class _EditNameSheet extends StatefulWidget {
-  const _EditNameSheet({required this.initial});
+/// A one-field profile edit (name, UPI ID).
+class _EditFieldSheet extends StatefulWidget {
+  const _EditFieldSheet({
+    required this.title,
+    required this.subtitle,
+    required this.label,
+    required this.hint,
+    required this.icon,
+    required this.initial,
+    required this.save,
+    this.emptyError,
+    this.keyboard,
+    this.capitalization = TextCapitalization.words,
+  });
+  final String title;
+  final String subtitle;
+  final String label;
+  final String hint;
+  final IconData icon;
   final String initial;
+  final Future<AppUser> Function(String) save;
+
+  /// Set when the field can't be left empty.
+  final String? emptyError;
+  final TextInputType? keyboard;
+  final TextCapitalization capitalization;
 
   @override
-  State<_EditNameSheet> createState() => _EditNameSheetState();
+  State<_EditFieldSheet> createState() => _EditFieldSheetState();
 }
 
-class _EditNameSheetState extends State<_EditNameSheet> {
+class _EditFieldSheetState extends State<_EditFieldSheet> {
   late final _name = TextEditingController(text: widget.initial);
   bool _busy = false;
   String? _error;
@@ -558,8 +635,8 @@ class _EditNameSheetState extends State<_EditNameSheet> {
 
   Future<void> _save() async {
     final name = _name.text.trim();
-    if (name.isEmpty) {
-      setState(() => _error = 'Enter your name.');
+    if (name.isEmpty && widget.emptyError != null) {
+      setState(() => _error = widget.emptyError);
       return;
     }
     setState(() {
@@ -567,7 +644,7 @@ class _EditNameSheetState extends State<_EditNameSheet> {
       _error = null;
     });
     try {
-      final user = await ApiClient.instance.updateName(name);
+      final user = await widget.save(name);
       if (mounted) Navigator.pop(context, user);
     } on ApiException catch (e) {
       setState(() => _error = e.message);
@@ -596,30 +673,29 @@ class _EditNameSheetState extends State<_EditNameSheet> {
                 width: 38,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD9DED8),
+                  color: const Color(0xFFD5D8E2),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
             ),
             const SizedBox(height: 22),
-            const Text(
-              'Your name',
-              style: TextStyle(color: ink, fontSize: 23, fontWeight: FontWeight.w800, letterSpacing: -.5),
+            Text(
+              widget.title,
+              style: const TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
             ),
             const SizedBox(height: 6),
-            const Text(
-              'This is what everyone on your trips sees.',
-              style: TextStyle(color: muted, fontSize: 13),
-            ),
+            Text(widget.subtitle, style: const TextStyle(color: muted, fontSize: 13)),
             const SizedBox(height: 20),
-            fieldLabel('NAME'),
+            fieldLabel(widget.label),
             const SizedBox(height: 8),
             TextField(
               controller: _name,
               autofocus: true,
-              textCapitalization: TextCapitalization.words,
+              keyboardType: widget.keyboard,
+              autocorrect: widget.keyboard == null,
+              textCapitalization: widget.capitalization,
               onSubmitted: (_) => _save(),
-              decoration: appInputDecoration('e.g. Aarav', Icons.person_outline_rounded),
+              decoration: appInputDecoration(widget.hint, widget.icon),
             ),
             const SizedBox(height: 18),
             if (_error != null)
@@ -633,9 +709,9 @@ class _EditNameSheetState extends State<_EditNameSheet> {
               child: FilledButton(
                 onPressed: _busy ? null : _save,
                 style: FilledButton.styleFrom(
-                  backgroundColor: ink,
+                  backgroundColor: accent,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 child: _busy
                     ? const SizedBox(

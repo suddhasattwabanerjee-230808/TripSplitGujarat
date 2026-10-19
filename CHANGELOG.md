@@ -4,6 +4,38 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.6.0] - 2026-10-19 (build 21)
+
+### Changed
+- A brighter, lighter look: a light grey background, white outlined cards, one
+  blue accent colour (green and red only for money), thin outline icons and
+  plainer titles.
+- A bottom bar with five tabs: Home, Add expense, Balance, Statistics, Profile.
+- Each trip on Home is its own card, with an icon for its type, its date, how much
+  was spent, your balance and the faces of everyone on it.
+- On a trip, each expense is its own card, with its date and time, the amount,
+  and the faces of the people it's split with.
+- A trip opens with a large title, a "Balance summary" card and a "Quick
+  operations" row: Balance, Add expense, Scan receipt, View stats.
+
+### Added
+- **Pay now.** Tap "Pay" next to anyone you owe and your UPI app opens with their
+  UPI ID and the amount filled in. The payment is recorded, so everyone's balance
+  updates. Add your own UPI ID in Profile so friends can pay you. "Pay bill now"
+  on Home takes you to everything you owe.
+- **Scan receipt.** Photograph a bill and the shop name, total, date and category
+  are filled in for you. It's read on the phone, so it works offline.
+- **Statistics.** Charts of spending over time, by category, by who paid, by city
+  and by trip, for all trips or one.
+- **Notifications.** The bell on Home lists expenses your tripmates add, with a
+  badge for new ones.
+- **Trip types** (Trip, Vacation, Roommates, Friends, Couple, Event, Other) and an
+  optional start date when you create one.
+- **More categories** (Groceries, Rent, Fuel, Shopping, Utilities), plus your own:
+  tap "New" when adding an expense. Long-press a custom one to remove it.
+- Everyone's profile photo shows across the app, not just yours.
+- "See all splits" lists every trip, with search and a filter by type.
+
 ## [1.5.0] - 2026-10-19 (build 20)
 
 ### Changed

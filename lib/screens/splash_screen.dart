@@ -171,7 +171,7 @@ class _Strand {
       Color(0xFFFFB25C),
       Color(0xFFE1B764),
       _logoOrange,
-      lime,
+      accentGlow,
     ];
     return List.generate(count, (_) {
       final x = random.nextDouble() * 2 - 1;
@@ -336,8 +336,8 @@ class _IntroPainter extends CustomPainter {
           TextSpan(
             text: 'SPLIT',
             style: TextStyle(
-              color: lime.withValues(alpha: opacity),
-              shadows: [Shadow(color: lime.withValues(alpha: 0.5 * opacity), blurRadius: glow)],
+              color: accentGlow.withValues(alpha: opacity),
+              shadows: [Shadow(color: accentGlow.withValues(alpha: 0.5 * opacity), blurRadius: glow)],
             ),
           ),
         ],

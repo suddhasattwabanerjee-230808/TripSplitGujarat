@@ -20,7 +20,7 @@ class UpiPopupApp extends StatelessWidget {
     color: Colors.transparent,
     theme: ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: teal),
+      colorScheme: ColorScheme.fromSeed(seedColor: accent),
       fontFamily: 'Roboto',
     ),
     home: const _UpiPopup(),
@@ -264,8 +264,8 @@ class _UpiPopupState extends State<_UpiPopup> {
         Container(
           width: 56,
           height: 56,
-          decoration: BoxDecoration(color: teal.withValues(alpha: .14), shape: BoxShape.circle),
-          child: const Icon(Icons.check_rounded, color: teal, size: 30),
+          decoration: BoxDecoration(color: accent.withValues(alpha: .14), shape: BoxShape.circle),
+          child: const Icon(Icons.check_rounded, color: accent, size: 30),
         ),
         const SizedBox(height: 12),
         const Text(
@@ -286,7 +286,7 @@ class _UpiPopupState extends State<_UpiPopup> {
         child: Container(
           width: 38,
           height: 4,
-          decoration: BoxDecoration(color: const Color(0xFFD9DED8), borderRadius: BorderRadius.circular(4)),
+          decoration: BoxDecoration(color: const Color(0xFFD5D8E2), borderRadius: BorderRadius.circular(4)),
         ),
       ),
       const SizedBox(height: 14),
@@ -295,8 +295,8 @@ class _UpiPopupState extends State<_UpiPopup> {
           Container(
             width: 44,
             height: 44,
-            decoration: BoxDecoration(color: teal.withValues(alpha: .14), shape: BoxShape.circle),
-            child: const Icon(Icons.currency_rupee_rounded, color: teal, size: 22),
+            decoration: BoxDecoration(color: accent.withValues(alpha: .14), shape: BoxShape.circle),
+            child: const Icon(Icons.currency_rupee_rounded, color: accent, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -323,7 +323,7 @@ class _UpiPopupState extends State<_UpiPopup> {
       if (_loading)
         const Padding(
           padding: EdgeInsets.symmetric(vertical: 20),
-          child: Center(child: CircularProgressIndicator(color: teal)),
+          child: Center(child: CircularProgressIndicator(color: accent)),
         )
       else if (_trip != null) ...[
         fieldLabel('WHAT WAS IT FOR?'),
@@ -335,7 +335,7 @@ class _UpiPopupState extends State<_UpiPopup> {
           textInputAction: TextInputAction.next,
           decoration: appInputDecoration(
             _payee == null ? 'e.g. Lunch, auto, hotel' : 'e.g. Lunch at $_payee',
-            Icons.edit_rounded,
+            Icons.edit_outlined,
           ),
         ),
         AnimatedSwitcher(
@@ -358,7 +358,7 @@ class _UpiPopupState extends State<_UpiPopup> {
           onSubmitted: (_) => _busy ? null : _save(),
           decoration: appInputDecoration(
             _locating ? 'Finding your location…' : 'Add a location',
-            Icons.location_on_rounded,
+            Icons.location_on_outlined,
           ).copyWith(
             suffixIcon: Row(
               mainAxisSize: MainAxisSize.min,
@@ -366,18 +366,18 @@ class _UpiPopupState extends State<_UpiPopup> {
                 if (_locating)
                   const Padding(
                     padding: EdgeInsets.all(15),
-                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: teal)),
+                    child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: accent)),
                   )
                 else
                   IconButton(
                     tooltip: 'Use current location',
                     onPressed: _busy ? null : _useCurrentLocation,
-                    icon: const Icon(Icons.my_location_rounded, size: 18, color: teal),
+                    icon: const Icon(Icons.my_location_outlined, size: 18, color: accent),
                   ),
                 IconButton(
                   tooltip: 'Pick on map',
                   onPressed: _busy ? null : _openLocationPicker,
-                  icon: const Icon(Icons.map_rounded, size: 18, color: teal),
+                  icon: const Icon(Icons.map_outlined, size: 18, color: accent),
                 ),
               ],
             ),
@@ -396,7 +396,7 @@ class _UpiPopupState extends State<_UpiPopup> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               child: Row(
                 children: [
-                  const Icon(Icons.schedule_rounded, size: 18, color: muted),
+                  const Icon(Icons.schedule_outlined, size: 18, color: muted),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -404,7 +404,7 @@ class _UpiPopupState extends State<_UpiPopup> {
                       style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w700),
                     ),
                   ),
-                  const Icon(Icons.edit_calendar_rounded, size: 17, color: teal),
+                  const Icon(Icons.edit_calendar_outlined, size: 17, color: accent),
                 ],
               ),
             ),
@@ -414,7 +414,7 @@ class _UpiPopupState extends State<_UpiPopup> {
       if (_error != null)
         Padding(
           padding: const EdgeInsets.only(top: 10),
-          child: Text(_error!, style: const TextStyle(color: Color(0xFFD1805C), fontSize: 12)),
+          child: Text(_error!, style: const TextStyle(color: negative, fontSize: 12)),
         ),
       if (_trip != null) ...[
         const SizedBox(height: 18),
@@ -448,9 +448,9 @@ class _UpiPopupState extends State<_UpiPopup> {
             fieldLabel('CATEGORY'),
             if (!_categoryPicked) ...[
               const SizedBox(width: 6),
-              const Icon(Icons.auto_awesome_rounded, size: 11, color: teal),
+              const Icon(Icons.auto_awesome_outlined, size: 11, color: accent),
               const SizedBox(width: 3),
-              const Text('auto', style: TextStyle(color: teal, fontSize: 9, fontWeight: FontWeight.w800)),
+              const Text('auto', style: TextStyle(color: accent, fontSize: 9, fontWeight: FontWeight.w800)),
             ],
           ],
         ),

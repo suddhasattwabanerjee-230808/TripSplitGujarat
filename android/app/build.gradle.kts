@@ -93,4 +93,6 @@ flutter {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
+    // On-device OCR for "Scan receipt" (bundled model, works offline).
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }
