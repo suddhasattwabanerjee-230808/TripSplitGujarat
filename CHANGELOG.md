@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
-## [Unreleased]
+## [1.5.0] - 2026-10-19 (build 20)
 
 ### Changed
 - Sign in with your Google account. No more phone number or OTP code: one tap
