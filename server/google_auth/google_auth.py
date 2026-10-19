@@ -1,22 +1,25 @@
 """Google sign-in + profile endpoints for tripsplit_backend.
 
-Drop this file next to the backend's main app module and register it:
+Lives next to tripsplit_server.py on nav-server, which registers it:
 
-    from google_auth import router as google_auth_router
+    from google_auth import router as google_auth_router, migrate as google_auth_migrate
+    google_auth_migrate()            # in the startup hook, after init_db()
     app.include_router(google_auth_router)
 
-Needs:  pip install google-auth requests
-Env:    GOOGLE_WEB_CLIENT_ID=<the Web application OAuth client ID>
+Needs:  pip install google-auth requests   (in /home/nav/nav_backend/venv)
 
-Everything marked ADAPT touches the existing database / session code, which
-isn't in the app repo. The reference versions assume SQLite tables
-`users(id, name, phone, ...)` and `sessions(token, user_id, ...)`; rename to
-match the real schema (or swap in the backend's own helpers).
+The Web application OAuth client ID is read on every request from
+`google_web_client_id.txt` beside this file (or the GOOGLE_WEB_CLIENT_ID env
+var), so it can be set or changed without a restart or sudo.
+
+Sessions never expire: tripsplit_server's require_user only checks that the
+token exists, which is what makes the login permanent.
 """
 
 import os
 import secrets
 import sqlite3
+from contextlib import contextmanager
 from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException
@@ -24,36 +27,78 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from pydantic import BaseModel, Field
 
-GOOGLE_WEB_CLIENT_ID = os.environ.get("GOOGLE_WEB_CLIENT_ID", "")
+HERE = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.environ.get("TRIPSPLIT_DB", os.path.join(HERE, "tripsplit.db"))
+CLIENT_ID_FILE = os.path.join(HERE, "google_web_client_id.txt")
 
 router = APIRouter()
 _google_request = google_requests.Request()
 
 
-# --- ADAPT: database access ---------------------------------------------------
-
-DB_PATH = os.environ.get("TRIPSPLIT_DB", "tripsplit.db")  # ADAPT: the backend's DB file
-
-
-def _db() -> sqlite3.Connection:
+@contextmanager
+def _db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _web_client_id() -> str:
+    try:
+        with open(CLIENT_ID_FILE) as f:
+            value = f.read().strip()
+    except FileNotFoundError:
+        value = ""
+    return value or os.environ.get("GOOGLE_WEB_CLIENT_ID", "").strip()
 
 
 def migrate() -> None:
-    """Adds the Google columns once; safe to call on every start-up."""
-    with _db() as conn:
-        cols = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
-        for col, ddl in [
-            ("email", "ALTER TABLE users ADD COLUMN email TEXT"),
-            ("google_sub", "ALTER TABLE users ADD COLUMN google_sub TEXT"),
-            ("photo_url", "ALTER TABLE users ADD COLUMN photo_url TEXT"),
-        ]:
+    """Makes users.phone nullable and adds the Google columns; safe on every start-up."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        cols = {row["name"]: row for row in conn.execute("PRAGMA table_info(users)")}
+        if cols["phone"]["notnull"]:
+            # SQLite can't drop a NOT NULL constraint, so rebuild the table
+            # (https://sqlite.org/lang_altertable.html#otheralter). Ids are
+            # copied as-is, so every foreign key keeps pointing at the same row.
+            conn.execute("PRAGMA foreign_keys = OFF")
+            conn.execute("BEGIN")
+            conn.execute(
+                """
+                CREATE TABLE users_new (
+                    id INTEGER PRIMARY KEY,
+                    phone TEXT UNIQUE,
+                    name TEXT NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO users_new (id, phone, name, created_at) "
+                "SELECT id, phone, name, created_at FROM users"
+            )
+            conn.execute("DROP TABLE users")
+            conn.execute("ALTER TABLE users_new RENAME TO users")
+            if conn.execute("PRAGMA foreign_key_check").fetchall():
+                conn.execute("ROLLBACK")
+                raise RuntimeError("users rebuild broke a foreign key; rolled back")
+            conn.execute("COMMIT")
+            conn.execute("PRAGMA foreign_keys = ON")
+            cols = {row["name"]: row for row in conn.execute("PRAGMA table_info(users)")}
+
+        for col in ("email", "google_sub", "photo_url"):
             if col not in cols:
-                conn.execute(ddl)
+                conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_google_sub ON users(google_sub)")
         conn.execute("CREATE INDEX IF NOT EXISTS users_email ON users(email)")
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _user_json(row: sqlite3.Row) -> dict:
@@ -67,9 +112,6 @@ def _user_json(row: sqlite3.Row) -> dict:
 
 
 def _user_for_token(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Row]:
-    # ADAPT: reuse the backend's existing session lookup. Sessions must NOT
-    # expire: drop any expires_at / created_at age check there too, so phone
-    # accounts stay signed in as well ("permanent login").
     return conn.execute(
         "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token = ?",
         (token,),
@@ -77,7 +119,6 @@ def _user_for_token(conn: sqlite3.Connection, token: str) -> Optional[sqlite3.Ro
 
 
 def _issue_session(conn: sqlite3.Connection, user_id: int) -> str:
-    # ADAPT: reuse the backend's session creation; just give it no expiry.
     token = secrets.token_urlsafe(32)
     conn.execute("INSERT INTO sessions (token, user_id) VALUES (?, ?)", (token, user_id))
     return token
@@ -101,10 +142,11 @@ def _current_user(conn: sqlite3.Connection, authorization: Optional[str]) -> sql
 
 
 def _verify_google(raw_token: str) -> dict:
-    if not GOOGLE_WEB_CLIENT_ID:
-        raise HTTPException(500, "GOOGLE_WEB_CLIENT_ID is not set on the server")
+    client_id = _web_client_id()
+    if not client_id:
+        raise HTTPException(503, "Google sign-in isn't set up on the server yet")
     try:
-        claims = google_id_token.verify_oauth2_token(raw_token, _google_request, GOOGLE_WEB_CLIENT_ID)
+        claims = google_id_token.verify_oauth2_token(raw_token, _google_request, client_id)
     except ValueError:
         raise HTTPException(401, "Google sign-in could not be verified. Try again.")
     if not claims.get("email") or not claims.get("email_verified"):
@@ -152,8 +194,6 @@ def auth_google(body: GoogleBody, authorization: Optional[str] = Header(None)):
         elif owner is not None:
             user_id = owner["id"]
         else:
-            # ADAPT: if users.phone is NOT NULL in the real schema, rebuild the
-            # table with phone nullable (SQLite can't ALTER a constraint away).
             user_id = conn.execute(
                 "INSERT INTO users (name, phone, email, google_sub, photo_url) VALUES (?, NULL, ?, ?, ?)",
                 (name, email, sub, photo),

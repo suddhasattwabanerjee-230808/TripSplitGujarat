@@ -46,8 +46,10 @@ fails with a "misconfigured" error. Nothing is downloaded: there is no
    so tokens stay valid until the user signs out. The app also renews a
    rejected session silently through Google, but phone-only accounts can't
    renew, so expiry has to go.
-5. Set `GOOGLE_WEB_CLIENT_ID=<Web client ID from step 1.2>` in the service
-   environment and restart.
+5. Put the Web client ID (from step 1.2) in
+   `/home/nav/tripsplit_backend/google_web_client_id.txt`. It's read on every
+   request, so no restart is needed. `GOOGLE_WEB_CLIENT_ID` in the service
+   environment also works.
 6. Check that `curl https://nav-server.tail85596c.ts.net/openapi.json` lists
    `/auth/google` and `/me`.
 7. Optional: remove `/auth/request-otp` and `/auth/verify-otp`. The app no
