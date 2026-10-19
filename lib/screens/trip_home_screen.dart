@@ -1,9 +1,13 @@
+import 'dart:async';
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
+import '../ledger.dart';
 import '../location_service.dart';
 import '../models.dart';
 import '../receipt_scanner.dart';
@@ -17,7 +21,7 @@ import 'trips_ui.dart';
 
 class TripHomeScreen extends StatefulWidget {
   const TripHomeScreen({super.key, required this.tripId, required this.tripName, this.embedded = false});
-  final int tripId;
+  final String tripId;
   final String tripName;
 
   /// Shown as the Trip tab: a trip switcher and the bell instead of a back arrow.
@@ -37,72 +41,88 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   bool _fabExtended = true;
 
   final _store = TripStore.instance;
-  late int _seenRevision = _store.revision;
-  Future<void>? _inFlight;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _expensesSub;
+  bool _gotExpenses = false;
 
   @override
   void initState() {
     super.initState();
     ApiClient.instance.rememberTrip(widget.tripId);
+    _trip = _store.trips?.where((t) => t.id == widget.tripId).firstOrNull;
     _store.addListener(_onStore);
-    _loadAll();
+    _expensesSub = ApiClient.instance.watchExpenseSnapshots(widget.tripId).listen(_onExpenses, onError: _onError);
+    if (_trip == null) _loadAll();
   }
 
   @override
   void dispose() {
+    _expensesSub?.cancel();
     _store.removeListener(_onStore);
     super.dispose();
   }
 
-  /// Reload when the shared data was refreshed elsewhere (a payment from the
-  /// Balance tab, an expense added from the bottom bar); repaint for the bell.
+  /// Trip details (members, name) arrive live through the store; the bell
+  /// repaints from it too.
   void _onStore() {
     if (!mounted) return;
-    if (_store.revision != _seenRevision) {
-      _seenRevision = _store.revision;
-      _loadAll();
-    } else {
-      setState(() {});
+    final trip = _store.trips?.where((t) => t.id == widget.tripId).firstOrNull;
+    setState(() {
+      if (trip != null) _trip = trip;
+      _recompute();
+    });
+  }
+
+  void _onExpenses(QuerySnapshot<Map<String, dynamic>> snap) {
+    if (!mounted) return;
+    setState(() {
+      _expenses = snap.docs.map(TripExpense.fromDoc).toList();
+      _gotExpenses = true;
+      _error = null;
+      _recompute();
+    });
+    // Fix the trip's running totals if they drifted, using server-confirmed data only.
+    if (_trip != null && !snap.metadata.isFromCache && !snap.metadata.hasPendingWrites) {
+      ApiClient.instance.repairTotals(_trip!, _expenses).catchError((Object _) {});
     }
   }
 
-  Future<void> _refreshEverything() async {
-    await _store.refresh();
-    await _loadAll();
+  void _onError(Object e) {
+    if (!mounted) return;
+    setState(() {
+      _error = e is ApiException ? e.message : 'Couldn’t load this trip.';
+      _loading = false;
+    });
   }
 
-  /// One load at a time; callers arriving mid-load share it.
-  Future<void> _loadAll() => _inFlight ??= _load().whenComplete(() => _inFlight = null);
+  /// Balances come straight from the expenses (the source of truth).
+  void _recompute() {
+    final trip = _trip;
+    _loading = trip == null || !_gotExpenses;
+    if (trip == null) return;
+    final totals = totalsFromExpenses(_expenses);
+    _balances = balancesFor(trip.members, totals.paid, totals.owed);
+    _settlements = settlementsFor(_balances);
+  }
 
-  Future<void> _load() async {
-    setState(() => _error = null);
+  /// Everything is live; this only re-reads the trip itself (pull to refresh,
+  /// or when it isn't in the store yet).
+  Future<void> _loadAll() async {
     try {
-      final results = await Future.wait([
-        ApiClient.instance.getTrip(widget.tripId),
-        ApiClient.instance.listExpenses(widget.tripId),
-        ApiClient.instance.getBalances(widget.tripId),
-        ApiClient.instance.getSettlements(widget.tripId),
-      ]);
+      final trip = await ApiClient.instance.getTrip(widget.tripId);
       if (!mounted) return;
       setState(() {
-        _trip = results[0] as Trip;
-        _expenses = results[1] as List<TripExpense>;
-        _balances = results[2] as List<Balance>;
-        _settlements = results[3] as List<Settlement>;
-        _loading = false;
+        _trip = trip;
+        _recompute();
       });
     } on ApiException catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.message;
-          _loading = false;
-        });
-      }
+      _onError(e);
     }
   }
 
+  Future<void> _refreshEverything() => _loadAll();
+
   /// Money spent on the trip, not counting settle-up payments.
-  double get total => _expenses.where((e) => !e.isSettlement).fold(0, (sum, item) => sum + item.amount);
+  double get total => _expenses.where((e) => !e.isSettlement).fold(0, (acc, item) => acc + item.amount);
 
   Future<void> _addExpense({bool scan = false}) async {
     if (_trip == null) return;
@@ -146,8 +166,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     );
     if (confirmed != true) return;
     try {
-      await ApiClient.instance.deleteExpense(widget.tripId, expense.id);
-      await _loadAll();
+      await ApiClient.instance.deleteExpense(expense);
     } on ApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
@@ -181,15 +200,14 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     final newDateTime = DateTime(date.year, date.month, date.day, time.hour, time.minute);
     try {
       await ApiClient.instance.updateExpense(
-        tripId: widget.tripId,
-        expenseId: expense.id,
+        existing: expense,
+        trip: _trip,
         description: expense.description,
         amount: expense.amount,
         category: expense.category,
         date: newDateTime.toIso8601String(),
         location: expense.location,
       );
-      await _loadAll();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
@@ -203,15 +221,14 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     if (result == null || !mounted) return;
     try {
       await ApiClient.instance.updateExpense(
-        tripId: widget.tripId,
-        expenseId: expense.id,
+        existing: expense,
+        trip: _trip,
         description: expense.description,
         amount: expense.amount,
         category: expense.category,
         date: expense.date,
         location: result,
       );
-      await _loadAll();
     } on ApiException catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
     }
@@ -281,12 +298,12 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     return null;
   }
 
-  String _memberName(int id) {
+  String _memberName(String id) {
     if (id == _me?.id) return 'You';
     return _trip?.member(id)?.name ?? 'Someone';
   }
 
-  Widget _avatarFor(int userId, {double size = 30, double ring = 0}) {
+  Widget _avatarFor(String userId, {double size = 30, double ring = 0}) {
     final member = _trip?.member(userId);
     return member != null
         ? MemberAvatar.of(member, size: size, ring: ring)
@@ -299,9 +316,9 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     if (me == null || _trip == null) return [];
     return [
       for (final s in _settlements)
-        if ((s.fromUserId ?? -1) == me.id || (s.fromUserId == null && s.fromUser == me.name))
+        if (s.fromUserId == me.id)
           Debt(trip: _trip!, settlement: s, iOwe: true)
-        else if ((s.toUserId ?? -1) == me.id || (s.toUserId == null && s.toUser == me.name))
+        else if (s.toUserId == me.id)
           Debt(trip: _trip!, settlement: s, iOwe: false),
     ];
   }
@@ -655,7 +672,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                 ),
                 const Spacer(),
                 Text(
-                  money(entry.value.where((e) => !e.isSettlement).fold<double>(0, (sum, e) => sum + e.amount)),
+                  money(entry.value.where((e) => !e.isSettlement).fold<double>(0, (acc, e) => acc + e.amount)),
                   style: const TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ],
@@ -676,7 +693,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
 
   Widget _expenseCard(TripExpense expense) {
     final iPaid = expense.paidBy == _me?.id;
-    final share = expense.shareOf(_me?.id ?? -1);
+    final share = expense.shareOf(_me?.id ?? '');
     final delta = iPaid ? expense.amount - share : share;
     final involved = (iPaid || share > 0) && delta >= 0.5;
     final catColor = colorForCategory(expense.category);
@@ -798,12 +815,12 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(
                 children: [
-                  s.fromUserId != null ? _avatarFor(s.fromUserId!, size: 28) : MemberAvatar(id: 0, name: s.fromUser, size: 28),
+                  s.fromUserId != null ? _avatarFor(s.fromUserId!, size: 28) : MemberAvatar(id: s.fromUser, name: s.fromUser, size: 28),
                   const Padding(
                     padding: EdgeInsets.symmetric(horizontal: 6),
                     child: Icon(Icons.arrow_forward_rounded, size: 16, color: muted),
                   ),
-                  s.toUserId != null ? _avatarFor(s.toUserId!, size: 28) : MemberAvatar(id: 1, name: s.toUser, size: 28),
+                  s.toUserId != null ? _avatarFor(s.toUserId!, size: 28) : MemberAvatar(id: s.toUser, name: s.toUser, size: 28),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -1000,7 +1017,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
 
 class ExpenseSheet extends StatefulWidget {
   const ExpenseSheet({super.key, required this.tripId, this.existing, this.startWithScan = false});
-  final int tripId;
+  final String tripId;
   final TripExpense? existing;
 
   /// Opens the camera straight away ("Scan receipt").
@@ -1146,6 +1163,9 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
       }
     }
   }
+
+  /// The trip from the live store, so saving works offline (no fetch needed).
+  Trip? get _tripForSheet => TripStore.instance.trips?.where((t) => t.id == widget.tripId).firstOrNull;
 
   String _plainAmount(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
 
@@ -1434,8 +1454,8 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     try {
       if (widget.isEditing) {
         await ApiClient.instance.updateExpense(
-          tripId: widget.tripId,
-          expenseId: widget.existing!.id,
+          existing: widget.existing!,
+          trip: _tripForSheet,
           description: title,
           amount: amount,
           category: _category,
@@ -1445,6 +1465,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
       } else {
         await ApiClient.instance.createExpense(
           tripId: widget.tripId,
+          trip: _tripForSheet,
           description: title,
           amount: amount,
           category: _category,

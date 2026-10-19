@@ -22,7 +22,7 @@ class StatsScreen extends StatefulWidget {
 
 class _StatsScreenState extends State<StatsScreen> {
   final _store = TripStore.instance;
-  int? _tripFilter;
+  String? _tripFilter;
   bool _loading = false;
 
   bool get _single => widget.trip != null;
@@ -64,7 +64,7 @@ class _StatsScreenState extends State<StatsScreen> {
   @override
   Widget build(BuildContext context) {
     final rows = _rows;
-    final me = ApiClient.instance.currentUser?.id ?? -1;
+    final me = ApiClient.instance.currentUser?.id ?? '';
     final total = rows.fold(0.0, (s, r) => s + r.$2.amount);
     final myShare = rows.fold(0.0, (s, r) => s + r.$2.shareOf(me));
     final iPaid = rows.where((r) => r.$2.paidBy == me).fold(0.0, (s, r) => s + r.$2.amount);
@@ -149,7 +149,7 @@ class _StatsScreenState extends State<StatsScreen> {
     ),
   );
 
-  Widget _filterChip(String label, int? id) {
+  Widget _filterChip(String label, String? id) {
     final selected = _tripFilter == id;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
@@ -277,9 +277,9 @@ class _StatsScreenState extends State<StatsScreen> {
   }
 
   List<BarDatum> _byPayer(List<(Trip, TripExpense)> rows) {
-    final sums = <int, double>{};
-    final names = <int, String>{};
-    final members = <int, TripMember>{};
+    final sums = <String, double>{};
+    final names = <String, String>{};
+    final members = <String, TripMember>{};
     for (final r in rows) {
       sums[r.$2.paidBy] = (sums[r.$2.paidBy] ?? 0) + r.$2.amount;
       names[r.$2.paidBy] = r.$2.paidByName;

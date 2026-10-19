@@ -37,7 +37,7 @@ class UserAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final fallback = Container(
       alignment: Alignment.center,
-      color: colorForMember(user.id),
+      color: colorForId(user.id),
       child: Text(
         user.initials,
         style: TextStyle(color: Colors.white, fontSize: size * .38, fontWeight: FontWeight.w800),

@@ -137,7 +137,7 @@ class _UpiPopupState extends State<_UpiPopup> {
 
   /// UPI payments always go to the Gujarat trip; falls back to the last-opened trip
   /// only if there isn't one.
-  Trip? _pickTrip(List<Trip> trips, int? lastId) {
+  Trip? _pickTrip(List<Trip> trips, String? lastId) {
     if (trips.isEmpty) return null;
     bool isGujarat(Trip t) => '${t.name} ${t.destination ?? ''}'.toLowerCase().contains('gujarat');
     final gujarat = trips.where(isGujarat).toList();
@@ -203,6 +203,7 @@ class _UpiPopupState extends State<_UpiPopup> {
     try {
       await ApiClient.instance.createExpense(
         tripId: trip.id,
+        trip: trip,
         description: description,
         amount: _amount,
         category: _hasDescription ? _category : guessCategory(description),

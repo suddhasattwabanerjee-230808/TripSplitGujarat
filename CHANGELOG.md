@@ -4,6 +4,20 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.7.0] - unreleased (build 23)
+
+### Changed
+- TripSplit no longer runs on a home server. Your trips are kept by Google
+  Firebase instead, so "Can't reach the server" should be a thing of the past.
+- Works offline: add or edit expenses with no signal and they sync when you're
+  back online.
+- Live: when a tripmate adds an expense, it appears on your phone right away.
+- Updates now download from GitHub.
+
+### Note
+- Sign in with the same Google account as before. All your trips, expenses and
+  balances have been moved across.
+
 ## [1.6.1] - 2026-10-19 (build 22)
 
 ### Changed

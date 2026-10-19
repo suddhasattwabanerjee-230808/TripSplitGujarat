@@ -8,7 +8,7 @@ import '../widgets.dart';
 /// the user's debts.
 class BalanceScreen extends StatefulWidget {
   const BalanceScreen({super.key, this.onOpenTrip});
-  final void Function(int tripId)? onOpenTrip;
+  final void Function(String tripId)? onOpenTrip;
 
   @override
   State<BalanceScreen> createState() => _BalanceScreenState();

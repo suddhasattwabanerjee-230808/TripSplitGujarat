@@ -1,316 +1,484 @@
-import 'dart:convert';
+import 'dart:async';
 
-import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'google_auth.dart';
+import 'ledger.dart';
 import 'models.dart';
 import 'theme.dart';
 
 class ApiException implements Exception {
   ApiException(this.message);
   final String message;
+
   @override
   String toString() => message;
 }
 
-/// Base URL for the TripSplit backend. Served through Tailscale Funnel,
-/// which exposes the server's local port 8001 at a public HTTPS address —
-/// works from any network (home WiFi, mobile data), not just devices on the
-/// server's own tailnet.
-const _baseUrl = 'https://nav-server.tail85596c.ts.net';
-
+/// TripSplit's data layer on Firebase: Google sign-in through Firebase Auth,
+/// trips and expenses in Firestore. The money rules run here on the phone
+/// (ledger.dart); firestore.rules decides who may read and write what.
+///
+/// Writes go into Firestore's local cache at once and sync when there's a
+/// connection, so adding an expense works offline. Write methods return after
+/// the server confirms or after a short wait, whichever comes first; a write
+/// the server rejects later is reported through [onWriteError].
 class ApiClient {
   ApiClient._();
   static final ApiClient instance = ApiClient._();
 
-  static const _tokenKey = 'trip_split.auth_token.v1';
-  static const _userKey = 'trip_split.auth_user.v1';
-  static const _lastTripKey = 'trip_split.last_trip_id.v1';
+  static const _lastTripKey = 'trip_split.last_trip_id.v2';
 
   final _preferences = SharedPreferencesAsync();
-  String? _token;
   AppUser? _user;
+  StreamSubscription<User?>? _authWatch;
 
   AppUser? get currentUser => _user;
 
+  /// Called if Firebase signs the user out on its own (e.g. account disabled).
+  void Function()? onSessionExpired;
+
+  /// A write that failed after its method had already returned.
+  void Function(ApiException error)? onWriteError;
+
+  FirebaseFirestore get _db => FirebaseFirestore.instance;
+
+  String get _uid {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw ApiException('You’re signed out. Sign in again.');
+    return user.uid;
+  }
+
+  DocumentReference<Map<String, dynamic>> _tripRef(String id) => _db.collection('trips').doc(id);
+
+  CollectionReference<Map<String, dynamic>> _expenses(String tripId) => _tripRef(tripId).collection('expenses');
+
+  // --- Session ------------------------------------------------------------
+
   Future<bool> restoreSession() async {
-    final token = await _preferences.getString(_tokenKey);
-    final userJson = await _preferences.getString(_userKey);
-    if (token == null || userJson == null) return false;
-    _token = token;
-    _user = AppUser.fromJson(jsonDecode(userJson) as Map<String, dynamic>);
+    if (Firebase.apps.isEmpty) return false;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return false;
+    _user = await _loadProfile(user);
+    _watchAuth();
     return true;
   }
 
-  Future<void> _saveSession(String token, AppUser user) async {
-    _token = token;
-    _user = user;
-    await _preferences.setString(_tokenKey, token);
-    await _preferences.setString(_userKey, jsonEncode(user.toJson()));
-  }
-
-  /// The trip opened most recently — where quick-added UPI payments go by default.
-  Future<void> rememberTrip(int tripId) => _preferences.setInt(_lastTripKey, tripId);
-
-  Future<int?> lastTripId() => _preferences.getInt(_lastTripKey);
-
-  /// Signing out is always the user's choice (or a session the server
-  /// rejected and Google couldn't renew); the saved session never expires locally.
-  Future<void> logOut() async {
-    _token = null;
-    _user = null;
-    await _preferences.remove(_tokenKey);
-    await _preferences.remove(_userKey);
-  }
-
-  Map<String, String> get _headers => {
-    'Content-Type': 'application/json',
-    if (_token != null) 'Authorization': 'Bearer $_token',
-  };
-
-  /// Called when the server rejects the saved session and it can't be renewed
-  /// silently — the only way the app ever signs someone out on its own.
-  void Function()? onSessionExpired;
-
-  Future<bool>? _renewing;
-
-  dynamic _unwrap(http.Response response) {
-    final body = response.body.isEmpty ? '{}' : jsonDecode(response.body);
-    if (response.statusCode >= 400) {
-      final message = body is Map && body['detail'] != null
-          ? body['detail'].toString()
-          : 'Request failed (${response.statusCode})';
-      throw ApiException(message);
-    }
-    return body;
-  }
-
-  /// Sends [request] (re-run for a retry, so it re-reads [_headers]). A 401 on
-  /// a signed-in session gets one silent renewal through Google before giving up,
-  /// so a session the server dropped never bounces the user to the login screen.
-  Future<dynamic> _send(Future<http.Response> Function() request, {bool renew = true}) async {
-    http.Response response;
-    try {
-      response = await request().timeout(const Duration(seconds: 12));
-      if (response.statusCode == 401 && _token != null && renew) {
-        if (await _renewSession()) {
-          response = await request().timeout(const Duration(seconds: 12));
-        } else {
-          await logOut();
-          onSessionExpired?.call();
-        }
+  void _watchAuth() {
+    _authWatch ??= FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user == null && _user != null) {
+        _user = null;
+        onSessionExpired?.call();
       }
-    } catch (_) {
-      throw ApiException('Could not reach the server. Check your connection.');
-    }
-    try {
-      return _unwrap(response);
-    } on FormatException {
-      throw ApiException('Unexpected reply from the server (${response.statusCode}).');
-    }
+    });
   }
 
-  /// Parallel requests that all hit a 401 share one renewal.
-  Future<bool> _renewSession() =>
-      _renewing ??= _renewWithGoogle().whenComplete(() => _renewing = null);
-
-  Future<bool> _renewWithGoogle() async {
-    // Accounts that never linked Google can't be renewed without the user.
-    if (_user?.hasGoogle != true) return false;
-    final idToken = await GoogleAuth.silentIdToken();
-    if (idToken == null) return false;
-    try {
-      final response = await http
-          .post(
-            Uri.parse('$_baseUrl/auth/google'),
-            headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({'id_token': idToken}),
-          )
-          .timeout(const Duration(seconds: 12));
-      if (response.statusCode != 200) return false;
-      final result = jsonDecode(response.body) as Map<String, dynamic>;
-      final user = AppUser.fromJson(result['user'] as Map<String, dynamic>);
-      if (user.id != _user?.id) return false; // a different Google account; don't swap users silently
-      await _saveSession(result['token'] as String, user);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<dynamic> _get(String path) =>
-      _send(() => http.get(Uri.parse('$_baseUrl$path'), headers: _headers));
-
-  Future<dynamic> _post(String path, Map<String, Object?> body, {bool renew = true}) => _send(
-    () => http.post(Uri.parse('$_baseUrl$path'), headers: _headers, body: jsonEncode(body)),
-    renew: renew,
-  );
-
-  Future<dynamic> _put(String path, Map<String, Object?> body) => _send(
-    () => http.put(Uri.parse('$_baseUrl$path'), headers: _headers, body: jsonEncode(body)),
-  );
-
-  Future<dynamic> _patch(String path, Map<String, Object?> body) => _send(
-    () => http.patch(Uri.parse('$_baseUrl$path'), headers: _headers, body: jsonEncode(body)),
-  );
-
-  Future<dynamic> _delete(String path) =>
-      _send(() => http.delete(Uri.parse('$_baseUrl$path'), headers: _headers));
-
-  // --- Auth -----------------------------------------------------------
-
-  /// Exchanges a Google ID token for a TripSplit session. When someone is
-  /// already signed in (an old phone account), the current session is sent
-  /// too, and the server links Google to that account instead of making a new one.
+  /// Signs in to Firebase with the Google ID token from Credential Manager.
+  /// Accounts moved from the old server keep their uid, so their trips are there.
   Future<AppUser> signInWithGoogle(String idToken) async {
-    // A 401 here means Google's token was refused, not that the session died.
-    final result = await _post('/auth/google', {'id_token': idToken}, renew: false);
-    final user = AppUser.fromJson(result['user'] as Map<String, dynamic>);
-    await _saveSession(result['token'] as String, user);
-    return user;
+    try {
+      final result = await FirebaseAuth.instance.signInWithCredential(GoogleAuthProvider.credential(idToken: idToken));
+      _user = await _loadProfile(result.user!);
+      _watchAuth();
+      return _user!;
+    } on FirebaseAuthException catch (e) {
+      throw ApiException(e.message ?? 'Google sign-in failed (${e.code}).');
+    }
   }
 
-  /// Re-reads the profile from the server (name/photo may have changed).
+  /// The user's profile doc, created from their Google account the first time.
+  /// Keeps a name they chose; refreshes email and photo from Google.
+  Future<AppUser> _loadProfile(User account) async {
+    final ref = _db.collection('users').doc(account.uid);
+    final fallback = AppUser(
+      id: account.uid,
+      name: account.displayName ?? account.email?.split('@').first ?? 'You',
+      email: account.email,
+      photoUrl: account.photoURL,
+    );
+    try {
+      final snap = await ref.get();
+      if (!snap.exists) {
+        await ref.set({
+          'name': fallback.name,
+          'email': fallback.email,
+          'photoUrl': fallback.photoUrl,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+        return fallback;
+      }
+      final user = AppUser.fromMap(account.uid, snap.data()!);
+      if (account.photoURL != null && (user.photoUrl != account.photoURL || user.email != account.email)) {
+        final updated = AppUser(
+          id: user.id,
+          name: user.name,
+          phone: user.phone,
+          email: account.email ?? user.email,
+          photoUrl: account.photoURL,
+          upiId: user.upiId,
+        );
+        unawaited(_saveProfile(updated, {'email': updated.email, 'photoUrl': updated.photoUrl}).catchError((_) {}));
+        return updated;
+      }
+      return user;
+    } on FirebaseException {
+      return fallback; // offline on first launch: show what Google gave us
+    }
+  }
+
   Future<AppUser> refreshMe() async {
-    final user = AppUser.fromJson(await _get('/me') as Map<String, dynamic>);
-    await _saveSession(_token!, user);
-    return user;
+    final account = FirebaseAuth.instance.currentUser;
+    if (account == null) throw ApiException('You’re signed out.');
+    return _user = await _loadProfile(account);
   }
 
-  Future<AppUser> updateName(String name) => _updateMe({'name': name});
+  Future<AppUser> updateName(String name) {
+    final user = _user!;
+    final updated = AppUser(
+      id: user.id,
+      name: name,
+      phone: user.phone,
+      email: user.email,
+      photoUrl: user.photoUrl,
+      upiId: user.upiId,
+    );
+    return _saveProfile(updated, {'name': name}).then((_) => _user = updated);
+  }
 
   /// An empty [upiId] removes it.
-  Future<AppUser> updateUpiId(String upiId) => _updateMe({'upi_id': upiId});
-
-  Future<AppUser> _updateMe(Map<String, Object?> body) async {
-    final user = AppUser.fromJson(await _patch('/me', body) as Map<String, dynamic>);
-    await _saveSession(_token!, user);
-    return user;
+  Future<AppUser> updateUpiId(String upiId) {
+    final value = upiId.trim().isEmpty ? null : upiId.trim();
+    if (value != null && !upiIdPattern.hasMatch(value)) {
+      throw ApiException('That doesn’t look like a UPI ID (it should be like name@bank).');
+    }
+    final user = _user!;
+    final updated = AppUser(
+      id: user.id,
+      name: user.name,
+      phone: user.phone,
+      email: user.email,
+      photoUrl: user.photoUrl,
+      upiId: value,
+    );
+    return _saveProfile(updated, {'upiId': value}).then((_) => _user = updated);
   }
 
-  /// Recent expenses across all the user's trips, newest first.
-  Future<List<ActivityItem>> activity({int limit = 50}) async {
-    final result = await _get('/activity?limit=$limit') as List<dynamic>;
-    return result.map((item) => ActivityItem.fromJson(item as Map<String, dynamic>)).toList();
+  /// Writes the profile and its copy on every trip the user is in, together.
+  Future<void> _saveProfile(AppUser user, Map<String, Object?> fields) async {
+    final batch = _db.batch()..set(_db.collection('users').doc(user.id), fields, SetOptions(merge: true));
+    final trips = await _db.collection('trips').where('memberIds', arrayContains: user.id).get();
+    for (final t in trips.docs) {
+      batch.update(t.reference, {'members.${user.id}': user.memberEntry});
+    }
+    await _commit(batch);
   }
 
-  // --- Trips ------------------------------------------------------------
-
-  Future<List<Trip>> listTrips() async {
-    final result = await _get('/trips') as List<dynamic>;
-    return result.map((item) => Trip.fromJson(item as Map<String, dynamic>)).toList();
+  Future<void> logOut() async {
+    _user = null;
+    if (Firebase.apps.isNotEmpty) await FirebaseAuth.instance.signOut();
   }
 
+  Future<void> rememberTrip(String tripId) => _preferences.setString(_lastTripKey, tripId);
+
+  Future<String?> lastTripId() => _preferences.getString(_lastTripKey);
+
+  // --- Live data --------------------------------------------------------------
+
+  /// Every trip the user is in, newest first.
+  Stream<List<Trip>> watchTrips() => _db
+      .collection('trips')
+      .where('memberIds', arrayContains: _uid)
+      .snapshots()
+      .map((s) => s.docs.map(Trip.fromDoc).toList()
+        ..sort((a, b) => (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0))));
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> watchExpenseSnapshots(String tripId) =>
+      _expenses(tripId).orderBy('date', descending: true).snapshots(includeMetadataChanges: true);
+
+  /// The 50 newest expenses across all the user's trips (the bell's feed).
+  Stream<List<TripExpense>> watchActivity() => _db
+      .collectionGroup('expenses')
+      .where('memberIds', arrayContains: _uid)
+      .orderBy('createdAt', descending: true)
+      .limit(50)
+      .snapshots()
+      .map((s) => s.docs.map(TripExpense.fromDoc).toList());
+
+  // --- Trips ------------------------------------------------------------------
+
+  Future<List<Trip>> listTrips() => _guard(() async {
+    final snap = await _db.collection('trips').where('memberIds', arrayContains: _uid).get();
+    return snap.docs.map(Trip.fromDoc).toList();
+  });
+
+  Future<Trip> getTrip(String tripId) => _guard(() async {
+    final snap = await _tripRef(tripId).get();
+    if (!snap.exists) throw ApiException('That trip no longer exists.');
+    return Trip.fromDoc(snap);
+  });
+
+  /// Needs a connection: the invite code must be checked as unused.
   Future<Trip> createTrip({
     required String name,
     String? destination,
     String? startDate,
     String? endDate,
     String? kind,
-  }) async {
-    final result = await _post('/trips', {
-      'name': name,
-      'destination': destination,
-      'start_date': startDate,
-      'end_date': endDate,
-      'kind': kind,
+  }) => _guard(() async {
+    final me = _user!;
+    String? code;
+    for (var i = 0; i < 10 && code == null; i++) {
+      final candidate = newInviteCode();
+      final taken = await _db.collection('invites').doc(candidate).get(const GetOptions(source: Source.server));
+      if (!taken.exists) code = candidate;
+    }
+    if (code == null) throw ApiException('Couldn’t make an invite code. Try again.');
+    final ref = _db.collection('trips').doc();
+    final batch = _db.batch()
+      ..set(ref, {
+        'name': name,
+        'destination': destination,
+        'startDate': startDate,
+        'endDate': endDate,
+        'kind': kind,
+        'inviteCode': code,
+        'createdBy': me.id,
+        'createdAt': FieldValue.serverTimestamp(),
+        'memberIds': [me.id],
+        'members': {me.id: me.memberEntry},
+        'totalSpent': 0,
+        'paid': <String, double>{},
+        'owed': <String, double>{},
+      })
+      ..set(_db.collection('invites').doc(code), {'tripId': ref.id});
+    await batch.commit();
+    return Trip(
+      id: ref.id,
+      name: name,
+      destination: destination,
+      inviteCode: code,
+      members: [TripMember(id: me.id, name: me.name, photoUrl: me.photoUrl, upiId: me.upiId)],
+      kind: kind,
+      startDate: startDate,
+      createdAt: DateTime.now(),
+    );
+  });
+
+  /// Needs a connection. Adding yourself is the only change a non-member may
+  /// make to a trip (firestore.rules).
+  Future<Trip> joinTrip(String inviteCode) => _guard(() async {
+    final code = inviteCode.trim().toUpperCase();
+    final invite = await _db.collection('invites').doc(code).get(const GetOptions(source: Source.server));
+    final tripId = invite.data()?['tripId'] as String?;
+    if (tripId == null) throw ApiException('No trip has that invite code. Check it and try again.');
+    final me = _user!;
+    await _tripRef(tripId).update({
+      'memberIds': FieldValue.arrayUnion([me.id]),
+      'members.${me.id}': me.memberEntry,
     });
-    return Trip.fromJson(result as Map<String, dynamic>);
-  }
+    return getTrip(tripId);
+  });
 
-  Future<Trip> joinTrip(String inviteCode) async {
-    final result = await _post('/trips/join', {'invite_code': inviteCode});
-    return Trip.fromJson(result as Map<String, dynamic>);
-  }
+  // --- Expenses -----------------------------------------------------------------
 
-  Future<Trip> getTrip(int tripId) async {
-    final result = await _get('/trips/$tripId');
-    return Trip.fromJson(result as Map<String, dynamic>);
-  }
+  Future<List<TripExpense>> listExpenses(String tripId) => _guard(() async {
+    final snap = await _expenses(tripId).orderBy('date', descending: true).get();
+    return snap.docs.map(TripExpense.fromDoc).toList();
+  });
 
-  // --- Expenses -----------------------------------------------------------
-
-  Future<List<TripExpense>> listExpenses(int tripId) async {
-    final result = await _get('/trips/$tripId/expenses') as List<dynamic>;
-    return result
-        .map((item) => TripExpense.fromJson(item as Map<String, dynamic>))
-        .toList();
-  }
-
+  /// Split equally across everyone on [trip] (fetched when not passed, e.g.
+  /// from the UPI pop-up).
   Future<TripExpense> createExpense({
-    required int tripId,
+    required String tripId,
+    Trip? trip,
     required String description,
     required double amount,
     String? category,
     required String date,
     String? location,
   }) async {
-    final result = await _post('/trips/$tripId/expenses', {
-      'description': description,
-      'amount': amount,
-      'category': category,
-      'date': date,
-      'location': location,
-      'split_type': 'equal',
-    });
-    return TripExpense.fromJson(result as Map<String, dynamic>);
-  }
-
-  Future<TripExpense> updateExpense({
-    required int tripId,
-    required int expenseId,
-    required String description,
-    required double amount,
-    String? category,
-    required String date,
-    String? location,
-  }) async {
-    final result = await _put('/trips/$tripId/expenses/$expenseId', {
-      'description': description,
-      'amount': amount,
-      'category': category,
-      'date': date,
-      'location': location,
-    });
-    return TripExpense.fromJson(result as Map<String, dynamic>);
+    trip ??= await getTrip(tripId);
+    final shares = equalShares(amount, [for (final m in trip.members) m.id]);
+    return _addExpense(trip, description, amount, category, date, location, shares, 'equal');
   }
 
   /// Records that the user paid [toUserId] back: an expense they paid with the
   /// whole amount as [toUserId]'s share, which cancels that much of the debt.
   Future<TripExpense> recordPayment({
-    required int tripId,
-    required int toUserId,
+    required String tripId,
+    Trip? trip,
+    required String toUserId,
     required double amount,
     String method = 'UPI',
   }) async {
-    final result = await _post('/trips/$tripId/expenses', {
-      'description': 'Paid back via $method',
-      'amount': amount,
-      'category': settlementCategory,
-      'date': DateTime.now().toIso8601String(),
-      'split_type': 'custom',
-      'custom_shares': [
-        {'user_id': toUserId, 'share_amount': amount},
-      ],
+    trip ??= await getTrip(tripId);
+    return _addExpense(
+      trip,
+      'Paid back via $method',
+      amount,
+      settlementCategory,
+      DateTime.now().toIso8601String(),
+      null,
+      {toUserId: amount},
+      'custom',
+    );
+  }
+
+  Future<TripExpense> _addExpense(
+    Trip trip,
+    String description,
+    double amount,
+    String? category,
+    String date,
+    String? location,
+    Map<String, double> shares,
+    String splitType,
+  ) => _guard(() async {
+    final me = _user!;
+    final ref = _expenses(trip.id).doc();
+    final expense = TripExpense(
+      id: ref.id,
+      tripId: trip.id,
+      description: description,
+      amount: amount,
+      paidBy: me.id,
+      paidByName: me.name,
+      category: category,
+      date: date,
+      location: location,
+      splitType: splitType,
+      shares: [for (final e in shares.entries) ExpenseShare(userId: e.key, shareAmount: e.value)],
+    );
+    final batch = _db.batch()
+      ..set(ref, {
+        ..._expenseFields(expense, trip),
+        'paidBy': me.id,
+        'createdAt': FieldValue.serverTimestamp(),
+      })
+      ..update(_tripRef(trip.id), _increments(moneyDelta(null, expense)));
+    await _commit(batch);
+    return expense;
+  });
+
+  /// Edits keep the payer. A normal expense is re-split equally across the
+  /// trip's current members (as the old server did); a settle-up payment
+  /// keeps its single recipient.
+  Future<TripExpense> updateExpense({
+    required TripExpense existing,
+    Trip? trip,
+    required String description,
+    required double amount,
+    String? category,
+    required String date,
+    String? location,
+  }) => _guard(() async {
+    trip ??= await getTrip(existing.tripId);
+    final shares = existing.isSettlement && existing.shares.isNotEmpty
+        ? {existing.shares.first.userId: amount}
+        : equalShares(amount, [for (final m in trip!.members) m.id]);
+    final after = TripExpense(
+      id: existing.id,
+      tripId: existing.tripId,
+      description: description,
+      amount: amount,
+      paidBy: existing.paidBy,
+      paidByName: existing.paidByName,
+      category: category,
+      date: date,
+      location: location,
+      splitType: existing.splitType,
+      shares: [for (final e in shares.entries) ExpenseShare(userId: e.key, shareAmount: e.value)],
+      createdAt: existing.createdAt,
+    );
+    final batch = _db.batch()
+      ..update(_expenses(existing.tripId).doc(existing.id), _expenseFields(after, trip!))
+      ..update(_tripRef(existing.tripId), _increments(moneyDelta(existing, after)));
+    await _commit(batch);
+    return after;
+  });
+
+  Future<void> deleteExpense(TripExpense expense) => _guard(() async {
+    final batch = _db.batch()
+      ..delete(_expenses(expense.tripId).doc(expense.id))
+      ..update(_tripRef(expense.tripId), _increments(moneyDelta(expense, null)));
+    await _commit(batch);
+  });
+
+  /// Rewrites a trip's running totals from its expenses if they've drifted
+  /// (e.g. two phones editing at once). Any member may.
+  Future<void> repairTotals(Trip trip, List<TripExpense> expenses) async {
+    final t = totalsFromExpenses(expenses);
+    bool same(Map<String, double> a, Map<String, double> b) =>
+        {...a.keys, ...b.keys}.every((k) => ((a[k] ?? 0) - (b[k] ?? 0)).abs() < 0.01);
+    if ((trip.totalSpent - t.totalSpent).abs() < 0.01 && same(trip.paid, t.paid) && same(trip.owed, t.owed)) return;
+    await _commit(_db.batch()..update(_tripRef(trip.id), {'paid': t.paid, 'owed': t.owed, 'totalSpent': t.totalSpent}));
+  }
+
+  Map<String, Object?> _expenseFields(TripExpense e, Trip trip) => {
+    'tripId': e.tripId,
+    'description': e.description,
+    'amount': e.amount,
+    'paidByName': e.paidByName,
+    'category': e.category,
+    'date': e.date,
+    'location': e.location,
+    'splitType': e.splitType,
+    'shares': {for (final s in e.shares) s.userId: s.shareAmount},
+    // Lets the bell's collection-group query (and its rule) find it.
+    'memberIds': [for (final m in trip.members) m.id],
+  };
+
+  Map<String, Object> _increments(Map<String, double> delta) => {
+    for (final e in delta.entries) e.key: FieldValue.increment(e.value),
+  };
+
+  // --- Plumbing -------------------------------------------------------------------
+
+  /// Returns once the server confirms or after 1.5 s (the write is already in
+  /// the local cache and syncs later); later failures go to [onWriteError].
+  Future<void> _commit(WriteBatch batch) {
+    final done = Completer<void>();
+    batch.commit().then(
+      (_) {
+        if (!done.isCompleted) done.complete();
+      },
+      onError: (Object e) {
+        final error = _friendly(e);
+        if (!done.isCompleted) {
+          done.completeError(error);
+        } else {
+          onWriteError?.call(error);
+        }
+      },
+    );
+    Timer(const Duration(milliseconds: 1500), () {
+      if (!done.isCompleted) done.complete();
     });
-    return TripExpense.fromJson(result as Map<String, dynamic>);
+    return done.future;
   }
 
-  Future<void> deleteExpense(int tripId, int expenseId) =>
-      _delete('/trips/$tripId/expenses/$expenseId');
-
-  // --- Balances & settlements ----------------------------------------------
-
-  Future<List<Balance>> getBalances(int tripId) async {
-    final result = await _get('/trips/$tripId/balances') as List<dynamic>;
-    return result.map((item) => Balance.fromJson(item as Map<String, dynamic>)).toList();
+  Future<T> _guard<T>(Future<T> Function() body) async {
+    try {
+      return await body();
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw _friendly(e);
+    }
   }
 
-  Future<List<Settlement>> getSettlements(int tripId) async {
-    final result = await _get('/trips/$tripId/settlements') as List<dynamic>;
-    return result
-        .map((item) => Settlement.fromJson(item as Map<String, dynamic>))
-        .toList();
+  ApiException _friendly(Object e) {
+    if (e is ApiException) return e;
+    if (e is FirebaseException) {
+      return ApiException(switch (e.code) {
+        'permission-denied' => 'You don’t have permission to do that.',
+        'unavailable' => 'You’re offline. Connect to the internet and try again.',
+        'not-found' => 'That no longer exists.',
+        _ => e.message ?? 'Something went wrong (${e.code}).',
+      });
+    }
+    return ApiException(e.toString());
   }
 }

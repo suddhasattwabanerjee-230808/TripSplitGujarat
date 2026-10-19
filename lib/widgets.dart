@@ -28,7 +28,7 @@ class MemberAvatar extends StatelessWidget {
   MemberAvatar.of(TripMember member, {Key? key, double size = 32, double ring = 0})
     : this(key: key, id: member.id, name: member.name, photoUrl: member.photoUrl, size: size, ring: ring);
 
-  final int id;
+  final String id;
   final String name;
   final String? photoUrl;
   final double size;
@@ -48,7 +48,7 @@ class MemberAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final fallback = Container(
       alignment: Alignment.center,
-      color: colorForMember(id),
+      color: colorForId(id),
       child: Text(
         _initials,
         style: TextStyle(color: Colors.white, fontSize: size * (size < 30 ? .44 : .36), fontWeight: FontWeight.w700),
@@ -419,6 +419,7 @@ Future<bool> payDebt(BuildContext context, Debt debt) async {
   try {
     await ApiClient.instance.recordPayment(
       tripId: debt.trip.id,
+      trip: debt.trip,
       toUserId: debt.otherId!,
       amount: debt.amount,
       method: method,
@@ -470,7 +471,7 @@ class DebtRow extends StatelessWidget {
           if (other != null)
             MemberAvatar.of(other, size: 34)
           else
-            MemberAvatar(id: debt.otherId ?? 0, name: debt.otherName, size: 34),
+            MemberAvatar(id: debt.otherId ?? '', name: debt.otherName, size: 34),
           const SizedBox(width: 12),
           Expanded(
             child: Column(

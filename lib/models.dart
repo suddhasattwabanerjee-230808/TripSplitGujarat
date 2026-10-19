@@ -1,6 +1,13 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
+
+// Firestore layout (see firestore.rules):
+//   users/{uid}                      AppUser
+//   trips/{tripId}                   Trip (members copied in, running totals)
+//   trips/{tripId}/expenses/{id}     TripExpense
+//   invites/{code}                   {tripId}
 
 String _initials(String name) {
   final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
@@ -9,13 +16,15 @@ String _initials(String name) {
   return (parts.length > 1 ? first + parts.last[0] : first).toUpperCase();
 }
 
-/// Server timestamps are UTC "YYYY-MM-DD HH:MM:SS"; read them as UTC, show local.
-DateTime? _parseServerTime(String? value) {
-  if (value == null) return null;
-  final iso = value.contains('T') ? value : value.replaceFirst(' ', 'T');
-  final parsed = DateTime.tryParse(iso.endsWith('Z') || iso.contains('+') ? iso : '${iso}Z');
-  return parsed?.toLocal();
-}
+DateTime? _time(Object? value) => switch (value) {
+  Timestamp t => t.toDate(),
+  String s => DateTime.tryParse(s)?.toLocal(),
+  _ => null,
+};
+
+Map<String, double> _amounts(Object? value) => {
+  for (final e in (value as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as num).toDouble(),
+};
 
 class AppUser {
   const AppUser({
@@ -26,13 +35,11 @@ class AppUser {
     this.photoUrl,
     this.upiId,
   });
-  final int id;
+  final String id;
   final String name;
 
   /// Only set on accounts first created with the old phone + OTP login.
   final String? phone;
-
-  /// Set once the account is signed in with (or linked to) Google.
   final String? email;
   final String? photoUrl;
 
@@ -43,39 +50,33 @@ class AppUser {
 
   String get initials => _initials(name);
 
-  factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
-    id: json['id'] as int,
-    name: json['name'] as String,
-    phone: json['phone'] as String?,
-    email: json['email'] as String?,
-    photoUrl: json['photo_url'] as String?,
-    upiId: json['upi_id'] as String?,
+  factory AppUser.fromMap(String id, Map<String, dynamic> data) => AppUser(
+    id: id,
+    name: data['name'] as String? ?? '',
+    phone: data['phone'] as String?,
+    email: data['email'] as String?,
+    photoUrl: data['photoUrl'] as String?,
+    upiId: data['upiId'] as String?,
   );
 
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'name': name,
-    'phone': phone,
-    'email': email,
-    'photo_url': photoUrl,
-    'upi_id': upiId,
-  };
+  /// The copy kept on each trip, so faces and "Pay" need no extra reads.
+  Map<String, Object?> get memberEntry => {'name': name, 'photoUrl': photoUrl, 'upiId': upiId};
 }
 
 class TripMember {
   const TripMember({required this.id, required this.name, this.photoUrl, this.upiId});
-  final int id;
+  final String id;
   final String name;
   final String? photoUrl;
   final String? upiId;
 
   String get initials => _initials(name);
 
-  factory TripMember.fromJson(Map<String, dynamic> json) => TripMember(
-    id: json['id'] as int,
-    name: json['name'] as String,
-    photoUrl: json['photo_url'] as String?,
-    upiId: json['upi_id'] as String?,
+  factory TripMember.fromMap(String id, Map<String, dynamic>? data) => TripMember(
+    id: id,
+    name: data?['name'] as String? ?? 'Someone',
+    photoUrl: data?['photoUrl'] as String?,
+    upiId: data?['upiId'] as String?,
   );
 }
 
@@ -85,18 +86,20 @@ class Trip {
     required this.name,
     required this.destination,
     required this.inviteCode,
-    required this.memberCount,
     this.members = const [],
     this.kind,
     this.startDate,
     this.createdAt,
     this.totalSpent = 0,
+    this.paid = const {},
+    this.owed = const {},
   });
-  final int id;
+  final String id;
   final String name;
   final String? destination;
   final String inviteCode;
-  final int memberCount;
+
+  /// In the order people joined.
   final List<TripMember> members;
 
   /// One of [tripKinds]' ids; null for trips made before kinds existed.
@@ -104,51 +107,57 @@ class Trip {
   final String? startDate;
   final DateTime? createdAt;
 
-  /// Money spent on the trip, not counting settle-up payments.
+  /// Running totals kept up to date with every expense write (see moneyDelta):
+  /// money spent (not counting settle-up payments), and per member what they
+  /// paid and what their shares add up to.
   final double totalSpent;
+  final Map<String, double> paid;
+  final Map<String, double> owed;
+
+  int get memberCount => members.length;
 
   TripKind get tripKind => tripKindFor(kind);
 
   /// The trip's start date if it has one, otherwise when it was made.
   DateTime? get date => DateTime.tryParse(startDate ?? '') ?? createdAt;
 
-  TripMember? member(int userId) {
+  TripMember? member(String userId) {
     for (final m in members) {
       if (m.id == userId) return m;
     }
     return null;
   }
 
-  factory Trip.fromJson(Map<String, dynamic> json) => Trip(
-    id: json['id'] as int,
-    name: json['name'] as String,
-    destination: json['destination'] as String?,
-    inviteCode: json['invite_code'] as String,
-    memberCount: json['member_count'] as int,
-    members: (json['members'] as List<dynamic>? ?? [])
-        .map((item) => TripMember.fromJson(item as Map<String, dynamic>))
-        .toList(),
-    kind: json['kind'] as String?,
-    startDate: json['start_date'] as String?,
-    createdAt: _parseServerTime(json['created_at'] as String?),
-    totalSpent: (json['total_spent'] as num?)?.toDouble() ?? 0,
-  );
+  factory Trip.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const <String, dynamic>{};
+    final memberData = data['members'] as Map<String, dynamic>? ?? const {};
+    final ids = (data['memberIds'] as List<dynamic>? ?? const []).cast<String>();
+    return Trip(
+      id: doc.id,
+      name: data['name'] as String? ?? '',
+      destination: data['destination'] as String?,
+      inviteCode: data['inviteCode'] as String? ?? '',
+      members: [for (final id in ids) TripMember.fromMap(id, memberData[id] as Map<String, dynamic>?)],
+      kind: data['kind'] as String?,
+      startDate: data['startDate'] as String?,
+      createdAt: _time(data['createdAt']),
+      totalSpent: (data['totalSpent'] as num?)?.toDouble() ?? 0,
+      paid: _amounts(data['paid']),
+      owed: _amounts(data['owed']),
+    );
+  }
 }
 
 class ExpenseShare {
   const ExpenseShare({required this.userId, required this.shareAmount});
-  final int userId;
+  final String userId;
   final double shareAmount;
-
-  factory ExpenseShare.fromJson(Map<String, dynamic> json) => ExpenseShare(
-    userId: json['user_id'] as int,
-    shareAmount: (json['share_amount'] as num).toDouble(),
-  );
 }
 
 class TripExpense {
   const TripExpense({
     required this.id,
+    required this.tripId,
     required this.description,
     required this.amount,
     required this.paidBy,
@@ -157,17 +166,24 @@ class TripExpense {
     required this.date,
     required this.location,
     required this.shares,
+    this.splitType = 'equal',
     this.createdAt,
   });
-  final int id;
+  final String id;
+  final String tripId;
   final String description;
   final double amount;
-  final int paidBy;
+  final String paidBy;
   final String paidByName;
   final String? category;
+
+  /// Local ISO-8601 date-time of the purchase.
   final String date;
   final String? location;
   final List<ExpenseShare> shares;
+  final String splitType;
+
+  /// When it was added (server time); drives the notification feed.
   final DateTime? createdAt;
 
   DateTime get dateTime => DateTime.tryParse(date) ?? DateTime.now();
@@ -176,27 +192,33 @@ class TripExpense {
 
   bool get isSettlement => category == settlementCategory;
 
-  double shareOf(int userId) {
+  double shareOf(String userId) {
     for (final s in shares) {
       if (s.userId == userId) return s.shareAmount;
     }
     return 0;
   }
 
-  factory TripExpense.fromJson(Map<String, dynamic> json) => TripExpense(
-    id: json['id'] as int,
-    description: json['description'] as String,
-    amount: (json['amount'] as num).toDouble(),
-    paidBy: json['paid_by'] as int,
-    paidByName: json['paid_by_name'] as String,
-    category: json['category'] as String?,
-    date: json['date'] as String,
-    location: json['location'] as String?,
-    shares: (json['shares'] as List<dynamic>)
-        .map((item) => ExpenseShare.fromJson(item as Map<String, dynamic>))
-        .toList(),
-    createdAt: _parseServerTime(json['created_at'] as String?),
-  );
+  factory TripExpense.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const <String, dynamic>{};
+    return TripExpense(
+      id: doc.id,
+      tripId: data['tripId'] as String? ?? doc.reference.parent.parent?.id ?? '',
+      description: data['description'] as String? ?? '',
+      amount: (data['amount'] as num?)?.toDouble() ?? 0,
+      paidBy: data['paidBy'] as String? ?? '',
+      paidByName: data['paidByName'] as String? ?? 'Someone',
+      category: data['category'] as String?,
+      date: data['date'] as String? ?? DateTime.now().toIso8601String(),
+      location: data['location'] as String?,
+      splitType: data['splitType'] as String? ?? 'equal',
+      shares: [
+        for (final e in _amounts(data['shares']).entries) ExpenseShare(userId: e.key, shareAmount: e.value),
+      ],
+      // Pending local writes have no server time yet; treat them as "now".
+      createdAt: _time(data['createdAt']) ?? DateTime.now(),
+    );
+  }
 }
 
 class Balance {
@@ -207,19 +229,11 @@ class Balance {
     required this.totalOwed,
     required this.netBalance,
   });
-  final int userId;
+  final String userId;
   final String name;
   final double totalPaid;
   final double totalOwed;
   final double netBalance;
-
-  factory Balance.fromJson(Map<String, dynamic> json) => Balance(
-    userId: json['user_id'] as int,
-    name: json['name'] as String,
-    totalPaid: (json['total_paid'] as num).toDouble(),
-    totalOwed: (json['total_owed'] as num).toDouble(),
-    netBalance: (json['net_balance'] as num).toDouble(),
-  );
 }
 
 class Settlement {
@@ -233,16 +247,8 @@ class Settlement {
   final String fromUser;
   final String toUser;
   final double amount;
-  final int? fromUserId;
-  final int? toUserId;
-
-  factory Settlement.fromJson(Map<String, dynamic> json) => Settlement(
-    fromUser: json['from_user'] as String,
-    toUser: json['to_user'] as String,
-    amount: (json['amount'] as num).toDouble(),
-    fromUserId: json['from_user_id'] as int?,
-    toUserId: json['to_user_id'] as int?,
-  );
+  final String? fromUserId;
+  final String? toUserId;
 }
 
 /// One expense in the notification feed (any trip the user is in).
@@ -259,27 +265,27 @@ class ActivityItem {
     required this.createdAt,
     required this.myShare,
   });
-  final int expenseId;
-  final int tripId;
+  final String expenseId;
+  final String tripId;
   final String tripName;
   final String description;
   final double amount;
   final String? category;
-  final int paidBy;
+  final String paidBy;
   final String paidByName;
   final DateTime createdAt;
   final double myShare;
 
-  factory ActivityItem.fromJson(Map<String, dynamic> json) => ActivityItem(
-    expenseId: json['expense_id'] as int,
-    tripId: json['trip_id'] as int,
-    tripName: json['trip_name'] as String,
-    description: json['description'] as String,
-    amount: (json['amount'] as num).toDouble(),
-    category: json['category'] as String?,
-    paidBy: json['paid_by'] as int,
-    paidByName: json['paid_by_name'] as String,
-    createdAt: _parseServerTime(json['created_at'] as String?) ?? DateTime.now(),
-    myShare: (json['my_share'] as num).toDouble(),
+  factory ActivityItem.of(TripExpense e, String tripName, String me) => ActivityItem(
+    expenseId: e.id,
+    tripId: e.tripId,
+    tripName: tripName,
+    description: e.description,
+    amount: e.amount,
+    category: e.category,
+    paidBy: e.paidBy,
+    paidByName: e.paidByName,
+    createdAt: e.createdAt ?? DateTime.now(),
+    myShare: e.shareOf(me),
   );
 }

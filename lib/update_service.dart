@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Metadata for a release published on the backend's /releases endpoints.
+/// Metadata for a release: latest.json in the public TripSplit-releases repo.
 class UpdateInfo {
   UpdateInfo({required this.versionCode, required this.versionName, required this.notes});
 
@@ -22,20 +22,18 @@ class UpdateInfo {
   final String notes;
 }
 
-/// Checks the TripSplit backend for a newer APK build and installs it
-/// in-place, without going through the Play Store or the system's
-/// "Install?" screen (see AppUpdater.kt). The backend is the same
-/// server the app's API already talks to (see api_client.dart) — it just
-/// also serves whatever APK was last pushed to its /releases/publish
-/// endpoint.
+/// Checks for a newer APK build and installs it in-place, without going
+/// through the Play Store or the system's "Install?" screen (see
+/// AppUpdater.kt). Releases are published by CI to a public GitHub repo
+/// that holds nothing but the APK and its latest.json.
 class UpdateService {
   UpdateService._();
 
-  static const _baseUrl = 'https://nav-server.tail85596c.ts.net';
+  static const _releases = 'https://github.com/suddhasattwabanerjee-230808/TripSplit-releases/releases/latest/download';
 
-  // Over a Tailscale Funnel on a mobile connection, a transfer can silently
-  // stall (no error, no more bytes) instead of failing outright. Without a
-  // watchdog that looks exactly like the app "hanging" at some percentage.
+  // On a mobile connection a transfer can silently stall (no error, no more
+  // bytes) instead of failing outright. Without a watchdog that looks
+  // exactly like the app "hanging" at some percentage.
   static const _stallTimeout = Duration(seconds: 12);
   static const _maxAttempts = 5;
 
@@ -52,7 +50,7 @@ class UpdateService {
   static Future<UpdateInfo?> checkForUpdate() async {
     try {
       final response = await http
-          .get(Uri.parse('$_baseUrl/releases/latest'))
+          .get(Uri.parse('$_releases/latest.json'))
           .timeout(const Duration(seconds: 8));
       if (response.statusCode != 200) return null;
 
@@ -130,7 +128,7 @@ class UpdateService {
   ) async {
     final existing = await file.exists() ? await file.length() : 0;
 
-    final request = http.Request('GET', Uri.parse('$_baseUrl/releases/download'));
+    final request = http.Request('GET', Uri.parse('$_releases/TripSplit.apk'));
     if (existing > 0) {
       request.headers['Range'] = 'bytes=$existing-';
     }

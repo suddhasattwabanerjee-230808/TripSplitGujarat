@@ -1,0 +1,81 @@
+rules_version = '2';
+
+// TripSplit has no server of its own any more: these rules are what keeps
+// one person from reading or changing another group's trips and money.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function isMember(tripId) {
+      return signedIn() && me() in get(/databases/$(database)/documents/trips/$(tripId)).data.memberIds;
+    }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // Your own profile only. Tripmates see your name/photo/UPI ID through
+    // the copy on each shared trip, never by reading this.
+    match /users/{uid} {
+      allow get, create, update: if signedIn() && uid == me();
+      allow list, delete: if false;
+    }
+
+    // Invite codes: look one up by its exact code only (no browsing).
+    match /invites/{code} {
+      allow get: if signedIn();
+      allow list, update, delete: if false;
+      allow create: if signedIn()
+        && getAfter(/databases/$(database)/documents/trips/$(request.resource.data.tripId)).data.createdBy == me();
+    }
+
+    match /trips/{tripId} {
+      // Members only; queries must filter on memberIds array-contains uid.
+      allow read: if signedIn() && me() in resource.data.memberIds;
+
+      allow create: if signedIn()
+        && request.resource.data.createdBy == me()
+        && request.resource.data.memberIds == [me()];
+
+      allow update: if signedIn() && (memberEdit() || joining());
+      allow delete: if false;
+
+      // A member may change the trip (name, running totals, their own entry)
+      // but not who's in it, its invite code or its creator.
+      function memberEdit() {
+        return me() in resource.data.memberIds
+          && request.resource.data.memberIds == resource.data.memberIds
+          && !changed().hasAny(['inviteCode', 'createdBy'])
+          && (!changed().hasAny(['members'])
+              || request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([me()]));
+      }
+
+      // Someone with the invite code adds exactly themselves, nothing else.
+      function joining() {
+        return !(me() in resource.data.memberIds)
+          && request.resource.data.memberIds == resource.data.memberIds.concat([me()])
+          && changed().hasOnly(['memberIds', 'members'])
+          && request.resource.data.members.diff(resource.data.members).affectedKeys().hasOnly([me()]);
+      }
+
+      match /expenses/{expenseId} {
+        allow read: if isMember(tripId);
+        // Only the payer adds, edits or deletes an expense (as before).
+        allow create: if isMember(tripId)
+          && request.resource.data.paidBy == me()
+          && request.resource.data.tripId == tripId
+          && request.resource.data.amount is number && request.resource.data.amount > 0;
+        allow update: if isMember(tripId)
+          && resource.data.paidBy == me()
+          && request.resource.data.paidBy == me()
+          && request.resource.data.tripId == tripId
+          && request.resource.data.amount is number && request.resource.data.amount > 0;
+        allow delete: if isMember(tripId) && resource.data.paidBy == me();
+      }
+    }
+
+    // The bell: newest expenses across your trips. Each expense carries the
+    // trip's memberIds so this collection-group query can be checked.
+    match /{path=**}/expenses/{expenseId} {
+      allow read: if signedIn() && me() in resource.data.memberIds;
+    }
+  }
+}

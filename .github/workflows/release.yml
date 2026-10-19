@@ -56,7 +56,26 @@ jobs:
           body_path: release_notes.md
           files: TripSplit-${{ github.ref_name }}.apk
 
-      - name: Push OTA update to nav-server
+      - name: Publish OTA update to the public releases repo
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          VERSION_CODE=$(grep '^version:' pubspec.yaml | sed -E 's/.*\+([0-9]+)/\1/')
+          VERSION_NAME="${GITHUB_REF_NAME#v}"
+          python3 - "$VERSION_CODE" "$VERSION_NAME" > latest.json <<'PY'
+          import json, sys
+          print(json.dumps({"versionCode": int(sys.argv[1]), "versionName": sys.argv[2],
+                            "notes": open("release_notes.md").read()}))
+          PY
+          cp "TripSplit-${GITHUB_REF_NAME}.apk" TripSplit.apk
+          gh release create "$GITHUB_REF_NAME" TripSplit.apk latest.json \
+            --repo suddhasattwabanerjee-230808/TripSplit-releases \
+            --title "TripSplit ${GITHUB_REF_NAME}" --notes-file release_notes.md --latest
+
+      # Until every phone runs 1.7.0+, older builds still look for updates on
+      # nav-server. It may be offline, so this step can't fail the release.
+      - name: Push OTA update to nav-server (old installs)
+        continue-on-error: true
         run: |
           VERSION_CODE=$(grep '^version:' pubspec.yaml | sed -E 's/.*\+([0-9]+)/\1/')
           VERSION_NAME="${GITHUB_REF_NAME#v}"

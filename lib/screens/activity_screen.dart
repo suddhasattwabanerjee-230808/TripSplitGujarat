@@ -10,7 +10,7 @@ import '../widgets.dart';
 /// Opening it marks everything read.
 class ActivityScreen extends StatefulWidget {
   const ActivityScreen({super.key, this.onOpenTrip});
-  final void Function(int tripId)? onOpenTrip;
+  final void Function(String tripId)? onOpenTrip;
 
   @override
   State<ActivityScreen> createState() => _ActivityScreenState();
@@ -20,7 +20,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
   final _store = TripStore.instance;
 
   /// Which items were unread when the screen opened (they keep their dot).
-  late final Set<int> _fresh = {
+  late final Set<String> _fresh = {
     for (final a in _store.activity)
       if (_store.isUnread(a)) a.expenseId,
   };

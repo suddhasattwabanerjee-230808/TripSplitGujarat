@@ -6,6 +6,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Firebase reads its project settings from google-services.json (downloaded
+// from the Firebase console). Until that file is added the app still builds;
+// it just can't sign in.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 // Local-only secrets (gitignored) — holds the Google Maps API key so it
 // never ends up committed to source control.
 val localProperties = Properties()

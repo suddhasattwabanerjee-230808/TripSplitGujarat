@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,11 +11,29 @@ import 'theme.dart';
 import 'update_service.dart';
 import 'upi_popup.dart';
 
-void main() => runApp(const TripSplitApp());
+Future<void> main() async {
+  await _initFirebase();
+  runApp(const TripSplitApp());
+}
 
 /// Entrypoint for UpiPopupActivity (the "UPI payment detected" quick-add card).
+/// It runs in its own engine, so it sets Firebase up too; the sign-in is shared.
 @pragma('vm:entry-point')
-void upiPopupMain() => runApp(const UpiPopupApp());
+Future<void> upiPopupMain() async {
+  await _initFirebase();
+  runApp(const UpiPopupApp());
+}
+
+/// Reads the project settings google-services.json compiled into the APK.
+Future<void> _initFirebase() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (Firebase.apps.isNotEmpty) return;
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {
+    // No Firebase config (e.g. tests): the app opens on the sign-in screen.
+  }
+}
 
 class TripSplitApp extends StatefulWidget {
   const TripSplitApp({super.key});
@@ -25,6 +44,7 @@ class TripSplitApp extends StatefulWidget {
 
 class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   Key _splashKey = UniqueKey();
   bool _showSplash = true;
   bool _splashFadingOut = false;
@@ -39,6 +59,9 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (route) => false,
     );
+    // A change saved offline that the server later refused.
+    ApiClient.instance.onWriteError = (error) =>
+        _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('Not saved: ${error.message}')));
   }
 
   @override
@@ -67,6 +90,7 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
     return MaterialApp(
       title: 'TripSplit',
       navigatorKey: _navigatorKey,
+      scaffoldMessengerKey: _messengerKey,
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

@@ -27,7 +27,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   /// Tabs are built the first time they're opened, then kept alive.
   final _visited = <int>{_trip};
   final _store = TripStore.instance;
-  int? _shownTripId;
+  String? _shownTripId;
 
   @override
   void initState() {

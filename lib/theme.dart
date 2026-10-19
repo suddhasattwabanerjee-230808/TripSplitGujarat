@@ -219,3 +219,12 @@ Widget fieldLabel(String text) => Text(
     fontWeight: FontWeight.w700,
   ),
 );
+
+/// A member's colour from their id (stable across launches and devices).
+Color colorForId(String id) {
+  var hash = 0x811c9dc5;
+  for (final unit in id.codeUnits) {
+    hash = ((hash ^ unit) * 0x01000193) & 0x7fffffff;
+  }
+  return colorForMember(hash);
+}
