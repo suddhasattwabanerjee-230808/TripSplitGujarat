@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../api_client.dart';
 import '../google_auth.dart';
@@ -8,7 +9,9 @@ import '../models.dart';
 import '../theme.dart';
 import '../trip_store.dart';
 import '../update_service.dart';
+import '../widgets.dart';
 import 'login_screen.dart';
+import 'trips_ui.dart';
 import 'update_dialog.dart';
 
 const _owe = negative;
@@ -71,7 +74,11 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserver {
+  static const _upiSettings = MethodChannel('tripsplit/upi_settings');
+
+  bool _upiDetection = true;
+  bool _upiAlertsOn = true;
   AppUser? _user = ApiClient.instance.currentUser;
   PackageInfo? _packageInfo;
   bool _linking = false;
@@ -90,14 +97,107 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     TripStore.instance.removeListener(_onStore);
     super.dispose();
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Back from the Settings app, where SMS access may have just been allowed.
+    if (state == AppLifecycleState.resumed) _checkUpiDetection();
+  }
+
+  Future<void> _checkUpiDetection() async {
+    final granted = await Permission.sms.isGranted;
+    bool on;
+    try {
+      on = await _upiSettings.invokeMethod<bool>('isEnabled') ?? true;
+    } on Exception {
+      on = true;
+    }
+    if (mounted) {
+      setState(() {
+        _upiDetection = granted;
+        _upiAlertsOn = on;
+      });
+    }
+  }
+
+  /// The home screen's UPI alerts switch. Switching on without SMS access runs
+  /// the set-up flow; the switch then reads on only once access is granted
+  /// (re-checked on resume). Switching off keeps the permission, just silences
+  /// the alerts in the native receiver.
+  Future<void> _setUpiAlerts(bool on) async {
+    setState(() => _upiAlertsOn = on);
+    try {
+      await _upiSettings.invokeMethod<void>('setEnabled', on);
+    } on Exception {
+      // Setting stays as it was; the switch re-syncs on the next check.
+    }
+    if (on && !_upiDetection) await _enableUpiDetection();
+  }
+
+  Future<void> _enableUpiDetection() async {
+    final result = await [Permission.sms, Permission.notification].request();
+    final sms = result[Permission.sms] ?? PermissionStatus.denied;
+    // On a build installed from outside the Play Store, Play Protect treats SMS
+    // as a restricted permission and auto-denies the request — the toggle in
+    // Settings stays greyed out until the user turns on "Allow restricted
+    // settings" first. A plain openAppSettings() drops them there with no clue
+    // how to proceed, so when SMS didn't get granted we spell the steps out.
+    if (!sms.isGranted && mounted) {
+      await _showSmsHelpDialog();
+    }
+    await _checkUpiDetection();
+  }
+
+  Future<void> _showSmsHelpDialog() => showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: paper,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text(
+        'Allow SMS access',
+        style: TextStyle(color: ink, fontWeight: FontWeight.w800, fontSize: 18),
+      ),
+      content: const Text(
+        'Because TripSplit is installed outside the Play Store, Android keeps '
+        'SMS access switched off and greys out the toggle. Turn it on by hand:\n\n'
+        '1.  Tap “Open settings” below.\n'
+        '2.  On the App info screen, tap ⋮ in the top-right corner.\n'
+        '3.  Choose “Allow restricted settings”.\n'
+        '4.  Open Permissions → SMS → Allow.\n\n'
+        'Then come back here — the banner will disappear once it’s on.',
+        style: TextStyle(color: ink, fontSize: 13.5, height: 1.45),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Not now', style: TextStyle(color: muted)),
+        ),
+        FilledButton(
+          onPressed: () {
+            Navigator.pop(ctx);
+            openAppSettings();
+          },
+          style: FilledButton.styleFrom(
+            backgroundColor: ink,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: const Text('Open settings'),
+        ),
+      ],
+    ),
+  );
+
+  @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     TripStore.instance.addListener(_onStore);
+    _checkUpiDetection();
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _packageInfo = info);
     });
@@ -248,6 +348,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _stats(),
                           if (!user.hasGoogle) ...[const SizedBox(height: 14), _connectCard()],
                           const SizedBox(height: 22),
+                          _sectionLabel('YOUR TRIPS'),
+                          ..._trips(),
+                          const SizedBox(height: 22),
                           _sectionLabel('ACCOUNT'),
                           _card([
                             _row(
@@ -278,6 +381,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 22),
                           _sectionLabel('APP'),
                           _card([
+                            _row(
+                              icon: _upiDetection && _upiAlertsOn
+                                  ? Icons.notifications_active_outlined
+                                  : Icons.notifications_off_outlined,
+                              label: 'UPI payment alerts',
+                              value: !_upiDetection
+                                  ? 'Needs SMS access — switch on'
+                                  : _upiAlertsOn
+                                  ? 'On for every UPI payment'
+                                  : 'Off',
+                              trailing: Switch(
+                                value: _upiDetection && _upiAlertsOn,
+                                onChanged: _setUpiAlerts,
+                                activeThumbColor: Colors.white,
+                                activeTrackColor: accent,
+                              ),
+                            ),
                             _row(
                               icon: Icons.info_outline_rounded,
                               label: 'Version',
@@ -530,6 +650,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ],
       ),
     );
+  }
+
+  /// Every trip (tap to show it on the Trip tab), then New / Join.
+  List<Widget> _trips() {
+    final store = TripStore.instance;
+    final trips = store.trips;
+    return [
+      if (trips == null)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 20),
+          child: Center(child: CircularProgressIndicator(color: accent)),
+        )
+      else
+        for (final t in trips)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: TripCard(trip: t, current: t.id == store.currentTripId),
+          ),
+      Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () => showJoinTrip(context),
+              icon: const Icon(Icons.group_add_outlined, size: 18),
+              label: const Text('Join trip'),
+              style: secondaryButton(),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: FilledButton.icon(
+              onPressed: () => showCreateTrip(context),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('New trip'),
+              style: primaryButton(),
+            ),
+          ),
+        ],
+      ),
+    ];
   }
 
   Widget _sectionLabel(String text) => Padding(

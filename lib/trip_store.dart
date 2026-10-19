@@ -35,12 +35,36 @@ class TripStore extends ChangeNotifier {
   List<ActivityItem> activity = [];
   DateTime? _activitySeenAt;
 
+  /// The trip the Trip tab shows; the app opens on it.
+  int? currentTripId;
+
+  /// Bumped after every refresh, so open screens know to reload their own data.
+  int revision = 0;
+
+  Trip? get currentTrip => trips?.where((t) => t.id == currentTripId).firstOrNull;
+
+  /// Shows [tripId] on the Trip tab (the shell switches to that tab).
+  void selectTrip(int tripId) {
+    currentTripId = tripId;
+    ApiClient.instance.rememberTrip(tripId);
+    notifyListeners();
+  }
+
+  /// Keeps [currentTripId] pointing at a trip the user is still in: the last
+  /// one opened, else the newest.
+  Future<void> _pickCurrentTrip(List<Trip> list) async {
+    if (list.any((t) => t.id == currentTripId)) return;
+    final last = await ApiClient.instance.lastTripId();
+    currentTripId = list.any((t) => t.id == last) ? last : list.firstOrNull?.id;
+  }
+
   int? get _me => ApiClient.instance.currentUser?.id;
 
   Future<void> refresh() async {
     error = null;
     try {
       final list = await ApiClient.instance.listTrips();
+      await _pickCurrentTrip(list);
       trips = list;
       notifyListeners();
       await Future.wait([
@@ -50,6 +74,7 @@ class TripStore extends ChangeNotifier {
     } on ApiException catch (e) {
       error = e.message;
     }
+    revision++;
     notifyListeners();
   }
 
@@ -148,6 +173,7 @@ class TripStore extends ChangeNotifier {
     settlements.clear();
     expenses.clear();
     activity = [];
+    currentTripId = null;
     notifyListeners();
   }
 }

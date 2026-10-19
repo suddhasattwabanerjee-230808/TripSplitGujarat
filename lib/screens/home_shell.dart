@@ -8,9 +8,10 @@ import 'balance_screen.dart';
 import 'profile_screen.dart';
 import 'stats_screen.dart';
 import 'trip_home_screen.dart';
-import 'trip_list_screen.dart';
+import 'trips_ui.dart';
 
-/// The signed-in app: Home, Add expense, Balance, Statistics, Profile.
+/// The signed-in app: Trip (the current trip — where the app opens), Add
+/// expense, Balance, Statistics, Profile.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -18,13 +19,45 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   // Tab indexes into the bar; "Add expense" (1) is an action, not a page.
-  static const _home = 0, _add = 1, _balance = 2, _stats = 3, _profile = 4;
-  int _tab = _home;
+  static const _trip = 0, _add = 1, _balance = 2, _stats = 3, _profile = 4;
+  int _tab = _trip;
 
   /// Tabs are built the first time they're opened, then kept alive.
-  final _visited = <int>{_home};
+  final _visited = <int>{_trip};
+  final _store = TripStore.instance;
+  int? _shownTripId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _store.addListener(_onStore);
+    _store.refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _store.removeListener(_onStore);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _store.refresh();
+  }
+
+  /// Picking a trip anywhere (Profile, Balance, the bell) brings up the Trip tab.
+  void _onStore() {
+    if (!mounted) return;
+    final id = _store.currentTripId;
+    setState(() {
+      if (id != null && _shownTripId != null && id != _shownTripId) _tab = _trip;
+      _shownTripId = id;
+    });
+  }
 
   void _select(int index) {
     if (index == _add) {
@@ -37,7 +70,7 @@ class _HomeShellState extends State<HomeShell> {
     });
   }
 
-  /// Picks the trip (skipped when there's only one), then opens the form.
+  /// Adds to the current trip; asks which trip only if none is picked yet.
   Future<void> _addExpense() async {
     final store = TripStore.instance;
     if (store.trips == null) await store.refresh();
@@ -47,7 +80,7 @@ class _HomeShellState extends State<HomeShell> {
       await showNewTripMenu(context);
       return;
     }
-    Trip? trip = trips.length == 1 ? trips.first : null;
+    Trip? trip = store.currentTrip ?? (trips.length == 1 ? trips.first : null);
     trip ??= await showAppSheet<Trip>(
       context,
       title: 'Add an expense to…',
@@ -89,12 +122,69 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Widget _page(int index) => switch (index) {
-    _home => TripListScreen(onPayNow: () => _select(_balance)),
-    _balance => BalanceScreen(onOpenTrip: (id) => openTripById(context, id)),
+    _trip => _tripPage(),
+    _balance => BalanceScreen(onOpenTrip: _store.selectTrip),
     _stats => const StatsScreen(),
     _profile => const ProfileScreen(embedded: true),
     _ => const SizedBox.shrink(),
   };
+
+  Widget _tripPage() {
+    final trip = _store.currentTrip;
+    if (trip != null) {
+      return TripHomeScreen(key: ValueKey(trip.id), tripId: trip.id, tripName: trip.name, embedded: true);
+    }
+    if (_store.trips == null) {
+      return _store.error == null
+          ? const Center(child: CircularProgressIndicator(color: accent))
+          : _message(Icons.cloud_off_outlined, 'Can’t reach the server', _store.error!, retry: true);
+    }
+    return _message(
+      Icons.luggage_outlined,
+      'No trips yet',
+      'Start a trip, or join one with an invite code from a friend.',
+    );
+  }
+
+  Widget _message(IconData icon, String title, String body, {bool retry = false}) => SafeArea(
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconCircle(icon: icon, size: 64),
+            const SizedBox(height: 14),
+            Text(title, style: const TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text(body, textAlign: TextAlign.center, style: const TextStyle(color: muted, fontSize: 13)),
+            const SizedBox(height: 18),
+            if (retry)
+              FilledButton(onPressed: _store.refresh, style: primaryButton(), child: const Text('Retry'))
+            else
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => showJoinTrip(context),
+                    icon: const Icon(Icons.group_add_outlined, size: 18),
+                    label: const Text('Join trip'),
+                    style: secondaryButton(),
+                  ),
+                  const SizedBox(width: 10),
+                  FilledButton.icon(
+                    onPressed: () => showCreateTrip(context),
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('New trip'),
+                    style: primaryButton(),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +192,7 @@ class _HomeShellState extends State<HomeShell> {
       backgroundColor: paper,
       body: Stack(
         children: [
-          for (final index in [_home, _balance, _stats, _profile])
+          for (final index in [_trip, _balance, _stats, _profile])
             if (_visited.contains(index))
               Offstage(
                 offstage: _tab != index,
@@ -121,7 +211,7 @@ class _NavBar extends StatelessWidget {
   final ValueChanged<int> onSelect;
 
   static const _items = [
-    (Icons.home_outlined, Icons.home_rounded, 'Home'),
+    (Icons.luggage_outlined, Icons.luggage_rounded, 'Trip'),
     (Icons.add_circle_outline_rounded, Icons.add_circle_rounded, 'Add expense'),
     (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Balance'),
     (Icons.insights_outlined, Icons.insights_rounded, 'Statistics'),

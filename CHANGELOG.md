@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.6.1] - 2026-10-19 (build 22)
+
+### Changed
+- The app now opens straight on your current trip (the last one you opened),
+  with the bottom bar. The Home screen is gone: its first tab is now "Trip".
+- Switch between trips with "Switch trip" at the top of the trip, or from
+  Profile → Your trips.
+- Profile now has your trip list with "New trip" and "Join trip", and the
+  "UPI payment alerts" switch.
+- The notification bell moved to the top of the trip page. For what you owe
+  across all trips, use the Balance tab.
+
 ## [1.6.0] - 2026-10-19 (build 21)
 
 ### Changed

@@ -217,18 +217,28 @@ class SectionHeader extends StatelessWidget {
 
 /// A white outlined card that ripples when tapped.
 class AppCard extends StatelessWidget {
-  const AppCard({super.key, required this.child, this.onTap, this.onLongPress, this.padding = const EdgeInsets.all(14)});
+  const AppCard({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onLongPress,
+    this.padding = const EdgeInsets.all(14),
+    this.selected = false,
+  });
   final Widget child;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final EdgeInsetsGeometry padding;
+
+  /// Outlined in the accent colour (e.g. the trip currently shown).
+  final bool selected;
 
   @override
   Widget build(BuildContext context) => Material(
     color: Colors.white,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(cardRadius),
-      side: const BorderSide(color: line),
+      side: selected ? const BorderSide(color: accent, width: 1.5) : const BorderSide(color: line),
     ),
     clipBehavior: Clip.antiAlias,
     child: InkWell(

@@ -10,13 +10,18 @@ import '../receipt_scanner.dart';
 import '../theme.dart';
 import '../trip_store.dart';
 import '../widgets.dart';
+import 'activity_screen.dart';
 import 'location_picker_screen.dart';
 import 'stats_screen.dart';
+import 'trips_ui.dart';
 
 class TripHomeScreen extends StatefulWidget {
-  const TripHomeScreen({super.key, required this.tripId, required this.tripName});
+  const TripHomeScreen({super.key, required this.tripId, required this.tripName, this.embedded = false});
   final int tripId;
   final String tripName;
+
+  /// Shown as the Trip tab: a trip switcher and the bell instead of a back arrow.
+  final bool embedded;
 
   @override
   State<TripHomeScreen> createState() => _TripHomeScreenState();
@@ -31,14 +36,45 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   String? _error;
   bool _fabExtended = true;
 
+  final _store = TripStore.instance;
+  late int _seenRevision = _store.revision;
+  Future<void>? _inFlight;
+
   @override
   void initState() {
     super.initState();
     ApiClient.instance.rememberTrip(widget.tripId);
+    _store.addListener(_onStore);
     _loadAll();
   }
 
-  Future<void> _loadAll() async {
+  @override
+  void dispose() {
+    _store.removeListener(_onStore);
+    super.dispose();
+  }
+
+  /// Reload when the shared data was refreshed elsewhere (a payment from the
+  /// Balance tab, an expense added from the bottom bar); repaint for the bell.
+  void _onStore() {
+    if (!mounted) return;
+    if (_store.revision != _seenRevision) {
+      _seenRevision = _store.revision;
+      _loadAll();
+    } else {
+      setState(() {});
+    }
+  }
+
+  Future<void> _refreshEverything() async {
+    await _store.refresh();
+    await _loadAll();
+  }
+
+  /// One load at a time; callers arriving mid-load share it.
+  Future<void> _loadAll() => _inFlight ??= _load().whenComplete(() => _inFlight = null);
+
+  Future<void> _load() async {
     setState(() => _error = null);
     try {
       final results = await Future.wait([
@@ -327,7 +363,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         bottom: false,
         child: RefreshIndicator(
           color: accent,
-          onRefresh: _loadAll,
+          onRefresh: _refreshEverything,
           child: NotificationListener<UserScrollNotification>(
             onNotification: _onScroll,
             child: CustomScrollView(
@@ -377,12 +413,24 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
 
   Widget _topBar(Trip trip) => Row(
     children: [
-      IconButton(
-        tooltip: 'Back',
-        onPressed: () => Navigator.of(context).pop(),
-        icon: const Icon(Icons.arrow_back_rounded, color: ink),
-      ),
+      if (widget.embedded)
+        TextButton.icon(
+          onPressed: () => showTripSwitcher(context),
+          icon: const Icon(Icons.swap_horiz_rounded, size: 20),
+          label: const Text('Switch trip'),
+          style: TextButton.styleFrom(
+            foregroundColor: accent,
+            textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+        )
+      else
+        IconButton(
+          tooltip: 'Back',
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back_rounded, color: ink),
+        ),
       const Spacer(),
+      if (widget.embedded) _bell(),
       IconButton(
         tooltip: 'Copy invite code',
         onPressed: () => _copyInvite(trip),
@@ -390,6 +438,22 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       ),
     ],
   );
+
+  Widget _bell() {
+    final unread = _store.unreadCount;
+    return IconButton(
+      tooltip: 'Notifications',
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ActivityScreen(onOpenTrip: _store.selectTrip)),
+      ),
+      icon: Badge(
+        isLabelVisible: unread > 0,
+        label: Text(unread > 9 ? '9+' : '$unread'),
+        backgroundColor: negative,
+        child: const Icon(Icons.notifications_none_rounded, color: ink),
+      ),
+    );
+  }
 
   Widget _title(Trip trip) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
