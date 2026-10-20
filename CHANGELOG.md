@@ -4,7 +4,7 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
-## [1.7.0] - unreleased (build 23)
+## [1.7.0] - 2026-10-20 (build 23)
 
 ### Changed
 - TripSplit no longer runs on a home server. Your trips are kept by Google
