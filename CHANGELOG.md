@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.7.2] - unreleased (build 25)
+
+### Added
+- Invite by email: tap the invite icon at the top of a trip, type a friend's
+  email address and tap "Send invite". Your email app opens with a message
+  holding the download link, the trip's invite code and how to join; you tap
+  Send. Copying the code is still there too.
+
 ## [1.7.1] - 2026-10-20 (build 24)
 
 ### Changed

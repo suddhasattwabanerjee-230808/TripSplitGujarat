@@ -31,6 +31,9 @@ class UpdateService {
 
   static const _releases = 'https://github.com/suddhasattwabanerjee-230808/TripSplit-releases/releases/latest/download';
 
+  /// Always the newest APK; also the link invite emails send people to.
+  static const apkUrl = '$_releases/TripSplit.apk';
+
   // On a mobile connection a transfer can silently stall (no error, no more
   // bytes) instead of failing outright. Without a watchdog that looks
   // exactly like the app "hanging" at some percentage.
@@ -128,7 +131,7 @@ class UpdateService {
   ) async {
     final existing = await file.exists() ? await file.length() : 0;
 
-    final request = http.Request('GET', Uri.parse('$_releases/TripSplit.apk'));
+    final request = http.Request('GET', Uri.parse(apkUrl));
     if (existing > 0) {
       request.headers['Range'] = 'bytes=$existing-';
     }

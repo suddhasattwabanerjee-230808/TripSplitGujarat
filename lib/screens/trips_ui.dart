@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api_client.dart';
+import '../invite_email.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../trip_store.dart';
@@ -70,6 +72,14 @@ Future<void> _openTripSheet(BuildContext context, Widget sheet) async {
     TripStore.instance.selectTrip(trip.id);
   }
 }
+
+/// The trip's invite sheet: copy the code, or email someone an invite.
+Future<void> showInviteSheet(BuildContext context, Trip trip) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  backgroundColor: Colors.transparent,
+  builder: (_) => _InviteSheet(trip),
+);
 
 /// The "+" button's menu: start a trip or join one with a code.
 Future<void> showNewTripMenu(BuildContext context) async {
@@ -538,6 +548,164 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
                       : const Text('Join trip', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InviteSheet extends StatefulWidget {
+  const _InviteSheet(this.trip);
+
+  final Trip trip;
+
+  @override
+  State<_InviteSheet> createState() => _InviteSheetState();
+}
+
+class _InviteSheetState extends State<_InviteSheet> {
+  final _email = TextEditingController();
+  bool _busy = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    super.dispose();
+  }
+
+  void _copy() {
+    Clipboard.setData(ClipboardData(text: widget.trip.inviteCode));
+    final messenger = ScaffoldMessenger.of(context);
+    Navigator.pop(context);
+    messenger.showSnackBar(
+      SnackBar(content: Text('Invite code ${widget.trip.inviteCode} copied — share it with your crew.')),
+    );
+  }
+
+  Future<void> _send() async {
+    final to = _email.text.trim();
+    if (!InviteEmail.isValidAddress(to)) {
+      setState(() => _error = 'Enter an email address, like name@gmail.com.');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final opened = await InviteEmail.compose(
+        to: to,
+        trip: widget.trip,
+        inviter: ApiClient.instance.currentUser?.name ?? 'A friend',
+      );
+      if (!mounted) return;
+      if (!opened) {
+        setState(() => _error = 'No email app found. Copy the code and share it another way.');
+        return;
+      }
+      Navigator.pop(context);
+      messenger.showSnackBar(SnackBar(content: Text('Invite for $to is ready — tap Send in your email app.')));
+    } on PlatformException catch (e) {
+      if (mounted) setState(() => _error = 'Couldn’t open your email app (${e.message ?? e.code}).');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    return Container(
+      padding: EdgeInsets.fromLTRB(22, 12, 22, 24 + bottom),
+      decoration: const BoxDecoration(
+        color: paper,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SheetHandle(),
+              const SizedBox(height: 22),
+              Text(
+                'Invite to ${widget.trip.name}',
+                style: const TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
+              ),
+              const SizedBox(height: 5),
+              const Text(
+                'They install TripSplit, sign in with their own Google account and join with this code.',
+                style: TextStyle(color: muted, fontSize: 12),
+              ),
+              const SizedBox(height: 20),
+              fieldLabel('INVITE CODE'),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: line),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.trip.inviteCode,
+                        style: const TextStyle(color: ink, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 4),
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _copy,
+                      icon: const Icon(Icons.copy_rounded, size: 18),
+                      label: const Text('Copy'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: accent,
+                        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+              fieldLabel('INVITE BY EMAIL'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _email,
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                autofillHints: const [AutofillHints.email],
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _busy ? null : _send(),
+                decoration: appInputDecoration('name@gmail.com', Icons.mail_outline_rounded),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Opens your email app with the download link, this code and how to join. You tap Send.',
+                style: TextStyle(color: muted, fontSize: 11.5),
+              ),
+              const SizedBox(height: 16),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(_error!, style: const TextStyle(color: negative, fontSize: 12)),
+                ),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: FilledButton.icon(
+                  onPressed: _busy ? null : _send,
+                  style: primaryButton(radius: 16),
+                  icon: const Icon(Icons.send_rounded, size: 18),
+                  label: const Text('Send invite', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
             ],

@@ -76,6 +76,31 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tripsplit/email").setMethodCallHandler { call, result ->
+            when (call.method) {
+                // Opens the email app with a trip invite filled in; the user taps Send.
+                "compose" -> {
+                    val to = call.argument<String>("to") ?: ""
+                    val subject = call.argument<String>("subject") ?: ""
+                    val body = call.argument<String>("body") ?: ""
+                    // Some email apps read the mailto: query and others (Gmail
+                    // among them) the extras, so give both.
+                    val uri = Uri.parse("mailto:${Uri.encode(to, "@")}?subject=${Uri.encode(subject)}&body=${Uri.encode(body)}")
+                    val intent = Intent(Intent.ACTION_SENDTO, uri).apply {
+                        putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
+                        putExtra(Intent.EXTRA_SUBJECT, subject)
+                        putExtra(Intent.EXTRA_TEXT, body)
+                    }
+                    try {
+                        startActivity(intent)
+                        result.success(null)
+                    } catch (e: ActivityNotFoundException) {
+                        result.error("no_email_app", "No email app is installed", null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tripsplit/ocr").setMethodCallHandler { call, result ->
             when (call.method) {
                 "recognize" -> {

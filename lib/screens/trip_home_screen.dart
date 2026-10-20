@@ -334,13 +334,6 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     return false;
   }
 
-  void _copyInvite(Trip trip) {
-    Clipboard.setData(ClipboardData(text: trip.inviteCode));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Invite code ${trip.inviteCode} copied — share it with your crew.')),
-    );
-  }
-
   Future<void> _sheet(String title, List<Widget> children) =>
       showAppSheet<void>(context, title: title, children: (_) => children);
 
@@ -449,8 +442,8 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       const Spacer(),
       if (widget.embedded) _bell(),
       IconButton(
-        tooltip: 'Copy invite code',
-        onPressed: () => _copyInvite(trip),
+        tooltip: 'Invite people',
+        onPressed: () => showInviteSheet(context, trip),
         icon: const Icon(Icons.person_add_alt_outlined, color: ink),
       ),
     ],
