@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.7.3] - 2026-10-20 (build 26)
+
+### Changed
+- Invite by email now joins your friend to the trip by itself: once they
+  install TripSplit and sign in with the Gmail address you invited, they land
+  straight in the trip, with no code to type. The code is still in the email
+  in case they use a different Google account.
+
 ## [1.7.2] - 2026-10-20 (build 25)
 
 ### Added

@@ -27,6 +27,24 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/trips/$(request.resource.data.tripId)).data.createdBy == me();
     }
 
+    // Invite by email: a trip member leaves a note for an email address with
+    // the trip's code in it. Whoever signs in with that (verified) Google
+    // address joins with the code, then deletes the note. Only they, and the
+    // inviter, can see it.
+    match /emailInvites/{inviteId} {
+      function invitee() {
+        return signedIn() && request.auth.token.email_verified == true
+          && resource.data.email == request.auth.token.email.lower();
+      }
+      allow create, update: if isMember(request.resource.data.tripId)
+        && request.resource.data.invitedBy == me()
+        && request.resource.data.email is string
+        && request.resource.data.email == request.resource.data.email.lower()
+        && request.resource.data.inviteCode
+          == get(/databases/$(database)/documents/trips/$(request.resource.data.tripId)).data.inviteCode;
+      allow read, delete: if invitee() || (signedIn() && resource.data.invitedBy == me());
+    }
+
     match /trips/{tripId} {
       // Members only; queries must filter on memberIds array-contains uid.
       allow read: if signedIn() && me() in resource.data.memberIds;

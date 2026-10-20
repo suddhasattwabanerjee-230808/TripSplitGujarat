@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../api_client.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../trip_store.dart';
@@ -35,6 +36,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _store.addListener(_onStore);
     _store.refresh();
+    _acceptInvites();
   }
 
   @override
@@ -46,7 +48,29 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _store.refresh();
+    if (state == AppLifecycleState.resumed) {
+      _store.refresh();
+      _acceptInvites();
+    }
+  }
+
+  bool _acceptingInvites = false;
+
+  /// Someone invited this Gmail address by email: join their trip and open it.
+  Future<void> _acceptInvites() async {
+    if (_acceptingInvites) return;
+    _acceptingInvites = true;
+    try {
+      final joined = await ApiClient.instance.acceptEmailInvites();
+      if (!mounted || joined.isEmpty) return;
+      final last = joined.last;
+      _store.selectTrip(last.trip.id);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('You’ve joined ${last.trip.name}, invited by ${last.invitedBy}.')),
+      );
+    } finally {
+      _acceptingInvites = false;
+    }
   }
 
   /// Picking a trip anywhere (Profile, Balance, the bell) brings up the Trip tab.

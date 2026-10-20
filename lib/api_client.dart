@@ -281,6 +281,64 @@ class ApiClient {
     return getTrip(tripId);
   });
 
+  // --- Invite by email ------------------------------------------------------
+
+  CollectionReference<Map<String, dynamic>> get _emailInvites => _db.collection('emailInvites');
+
+  /// Leaves a note that [email] is invited to [trip]. When they sign in with
+  /// that Google account, [acceptEmailInvites] joins them: no code to type.
+  Future<void> inviteByEmail(Trip trip, String email) => _guard(() async {
+    final me = _user!;
+    final address = email.trim().toLowerCase();
+    await _commit(
+      _db.batch()..set(_emailInvites.doc('${trip.id}_$address'), {
+        'email': address,
+        'tripId': trip.id,
+        'tripName': trip.name,
+        'inviteCode': trip.inviteCode,
+        'invitedBy': me.id,
+        'invitedByName': me.name,
+        'createdAt': FieldValue.serverTimestamp(),
+      }),
+    );
+  });
+
+  /// Joins every trip this Google account's email was invited to, then clears
+  /// those invites. Returns the trips newly joined. Never throws: on failure
+  /// the code in the email still works.
+  Future<List<({Trip trip, String invitedBy})>> acceptEmailInvites() async {
+    final joined = <({Trip trip, String invitedBy})>[];
+    try {
+      final email = FirebaseAuth.instance.currentUser?.email?.toLowerCase();
+      if (email == null || _user == null) return joined;
+      final invites = await _emailInvites.where('email', isEqualTo: email).get(const GetOptions(source: Source.server));
+      for (final doc in invites.docs) {
+        final data = doc.data();
+        try {
+          if (!await _isMemberOf(data['tripId'] as String? ?? '')) {
+            final trip = await joinTrip(data['inviteCode'] as String? ?? '');
+            joined.add((trip: trip, invitedBy: data['invitedByName'] as String? ?? 'a friend'));
+          }
+        } on ApiException {
+          // The trip or its code is gone; the invite is useless either way.
+        }
+        await doc.reference.delete().catchError((_) {});
+      }
+    } catch (_) {}
+    return joined;
+  }
+
+  /// Non-members can't read a trip, so a refused read means "not a member".
+  Future<bool> _isMemberOf(String tripId) async {
+    if (tripId.isEmpty) return false;
+    try {
+      final snap = await _tripRef(tripId).get(const GetOptions(source: Source.server));
+      return ((snap.data()?['memberIds'] as List<dynamic>?) ?? const []).contains(_user?.id);
+    } on FirebaseException {
+      return false;
+    }
+  }
+
   // --- Expenses -----------------------------------------------------------------
 
   Future<List<TripExpense>> listExpenses(String tripId) => _guard(() async {

@@ -598,11 +598,20 @@ class _InviteSheetState extends State<_InviteSheet> {
       _error = null;
     });
     final messenger = ScaffoldMessenger.of(context);
+    // The note that joins them on sign-in. Without it the email still works,
+    // with the code to type.
+    var autoJoin = true;
+    try {
+      await ApiClient.instance.inviteByEmail(widget.trip, to);
+    } on ApiException {
+      autoJoin = false;
+    }
     try {
       final opened = await InviteEmail.compose(
         to: to,
         trip: widget.trip,
         inviter: ApiClient.instance.currentUser?.name ?? 'A friend',
+        autoJoin: autoJoin,
       );
       if (!mounted) return;
       if (!opened) {
@@ -610,7 +619,15 @@ class _InviteSheetState extends State<_InviteSheet> {
         return;
       }
       Navigator.pop(context);
-      messenger.showSnackBar(SnackBar(content: Text('Invite for $to is ready — tap Send in your email app.')));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            autoJoin
+                ? 'Tap Send in your email app. $to joins ${widget.trip.name} as soon as they sign in with that address.'
+                : 'Invite for $to is ready — tap Send in your email app.',
+          ),
+        ),
+      );
     } on PlatformException catch (e) {
       if (mounted) setState(() => _error = 'Couldn’t open your email app (${e.message ?? e.code}).');
     } finally {
@@ -642,7 +659,7 @@ class _InviteSheetState extends State<_InviteSheet> {
               ),
               const SizedBox(height: 5),
               const Text(
-                'They install TripSplit, sign in with their own Google account and join with this code.',
+                'Email them an invite: once they install TripSplit and sign in with that Gmail, they land straight in this trip.',
                 style: TextStyle(color: muted, fontSize: 12),
               ),
               const SizedBox(height: 20),
@@ -689,7 +706,7 @@ class _InviteSheetState extends State<_InviteSheet> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Opens your email app with the download link, this code and how to join. You tap Send.',
+                'Opens your email app with the download link and how to join. You tap Send.',
                 style: TextStyle(color: muted, fontSize: 11.5),
               ),
               const SizedBox(height: 16),

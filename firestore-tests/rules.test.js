@@ -104,3 +104,37 @@ test('creating a trip with its invite code in one batch', async () => {
   await assertFails(setDoc(doc(c, 'invites/HIJACK'), { tripId: 't1' }));
   await assertFails(setDoc(doc(c, 'trips/t3'), { name: 'Sneaky', createdBy: 'c', memberIds: ['c', 'a'] }));
 });
+
+// Invite by email.
+const asEmail = (uid, email) => env.authenticatedContext(uid, { email, email_verified: true }).firestore();
+const invite = (over = {}) => ({
+  email: 'friend@gmail.com', tripId: 't1', tripName: 'Gujarat', inviteCode: 'ABCDEF',
+  invitedBy: 'a', invitedByName: 'A', ...over,
+});
+
+test('only a member can invite by email, with the trip\'s real code', async () => {
+  await assertSucceeds(setDoc(doc(db('a'), 'emailInvites/t1_friend@gmail.com'), invite()));
+  await assertFails(setDoc(doc(db('x'), 'emailInvites/t1_friend@gmail.com'), invite({ invitedBy: 'x' })));
+  await assertFails(setDoc(doc(db('a'), 'emailInvites/t1_friend@gmail.com'), invite({ invitedBy: 'b' })));
+  await assertFails(setDoc(doc(db('a'), 'emailInvites/t1_friend@gmail.com'), invite({ inviteCode: 'ZZZZZZ' })));
+  await assertFails(setDoc(doc(db('a'), 'emailInvites/t1_friend@gmail.com'), invite({ email: 'Friend@Gmail.com' })));
+});
+
+test('only the invited Google account (and the inviter) can see and clear an invite', async () => {
+  await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'emailInvites/i1'), invite()));
+  const mine = (fs, email) => query(collection(fs, 'emailInvites'), where('email', '==', email));
+  await assertSucceeds(getDocs(mine(asEmail('f', 'friend@gmail.com'), 'friend@gmail.com')));
+  await assertSucceeds(getDocs(mine(asEmail('f', 'Friend@Gmail.com'), 'friend@gmail.com')));
+  await assertFails(getDocs(mine(asEmail('y', 'other@gmail.com'), 'friend@gmail.com')));
+  await assertFails(getDocs(collection(asEmail('y', 'other@gmail.com'), 'emailInvites')));
+  await assertFails(getDoc(doc(db('b'), 'emailInvites/i1')));
+  await assertSucceeds(getDoc(doc(db('a'), 'emailInvites/i1')));
+  await assertFails(deleteDoc(doc(asEmail('y', 'other@gmail.com'), 'emailInvites/i1')));
+  await assertSucceeds(deleteDoc(doc(asEmail('f', 'friend@gmail.com'), 'emailInvites/i1')));
+});
+
+test('an unverified email address gets nothing', async () => {
+  await env.withSecurityRulesDisabled((ctx) => setDoc(doc(ctx.firestore(), 'emailInvites/i1'), invite()));
+  const unverified = env.authenticatedContext('f', { email: 'friend@gmail.com', email_verified: false }).firestore();
+  await assertFails(getDocs(query(collection(unverified, 'emailInvites'), where('email', '==', 'friend@gmail.com'))));
+});
