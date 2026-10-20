@@ -20,6 +20,16 @@ Map<String, double> equalShares(double amount, List<String> memberIds) {
   return shares;
 }
 
+/// Who an expense is split between: the [chosen] ids that are on the trip, in
+/// [memberIds]' (join) order so the rounding remainder lands on the same
+/// person on every phone. Everyone when [chosen] is null or names nobody here.
+List<String> splitMembers(List<String> memberIds, Iterable<String>? chosen) {
+  if (chosen == null) return memberIds;
+  final picked = chosen.toSet();
+  final result = [for (final id in memberIds) if (picked.contains(id)) id];
+  return result.isEmpty ? memberIds : result;
+}
+
 /// The Firestore increments that keep a trip's running totals (`paid.<uid>`,
 /// `owed.<uid>`, `totalSpent`) in step when an expense goes from [before] to
 /// [after]. Pass null for [before] on create and for [after] on delete.

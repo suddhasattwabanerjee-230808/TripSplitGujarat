@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api_client.dart';
+import 'category_guess.dart';
 import 'location_service.dart';
 import 'models.dart';
 import 'screens/location_picker_screen.dart';
@@ -27,39 +28,6 @@ class UpiPopupApp extends StatelessWidget {
   );
 }
 
-/// Best-effort category from the description / payee so the totals stay useful.
-/// Matches at word starts, so "ola" doesn't fire on "cola" or "bus" on "business".
-String guessCategory(String text) {
-  final t = text.toLowerCase();
-  bool has(List<String> words) => RegExp('\\b(${words.join('|')})').hasMatch(t);
-  if (has([
-    'zomato', 'swiggy', 'restaurant', 'cafe', 'café', 'food', 'dhaba', 'pizza', 'bakery', 'chai', 'tea', 'coffee',
-    'kitchen', 'lunch', 'dinner', 'breakfast', 'snack', 'thali', 'dhokla', 'fafda', 'khaman', 'jalebi', 'juice',
-    'ice cream', 'icecream', 'sweets', 'mithai', 'water', 'meal', 'biryani', 'paan', 'kulfi', 'lassi', 'drinks',
-  ])) {
-    return 'Food';
-  }
-  if (has([
-    'uber', 'ola', 'rapido', 'irctc', 'railway', 'train', 'redbus', 'bus', 'metro', 'petrol', 'diesel', 'fuel',
-    'indigo', 'airline', 'flight', 'cab', 'taxi', 'auto', 'rickshaw', 'toll', 'fastag', 'parking', 'ferry',
-  ])) {
-    return 'Transport';
-  }
-  if (has([
-    'oyo', 'airbnb', 'hotel', 'resort', 'stay', 'lodge', 'room', 'hostel', 'dharamshala', 'guest house',
-    'guesthouse', 'homestay', 'makemytrip', 'goibibo', 'booking', 'check-in', 'checkin',
-  ])) {
-    return 'Stay';
-  }
-  if (has([
-    'ticket', 'bookmyshow', 'museum', 'safari', 'entry', 'park', 'temple', 'darshan', 'boat', 'ropeway', 'tour',
-    'guide', 'garba', 'show', 'fort', 'zoo', 'camel', 'ride', 'statue', 'beach',
-  ])) {
-    return 'Activities';
-  }
-  return 'Other';
-}
-
 class _UpiPopup extends StatefulWidget {
   const _UpiPopup();
 
@@ -75,8 +43,10 @@ class _UpiPopupState extends State<_UpiPopup> {
   DateTime _time = DateTime.now();
   Trip? _trip;
   String _category = 'Other';
-  // Once the user taps a category chip, stop re-guessing it as they type.
+  // True after the user taps a chip; the description can still take it back
+  // (see followDescription).
   bool _categoryPicked = false;
+  String _lastDescription = '';
   bool _locationEdited = false;
   bool _locating = true;
   bool _loading = true;
@@ -101,8 +71,18 @@ class _UpiPopupState extends State<_UpiPopup> {
   }
 
   void _onDescriptionChanged() {
+    // The controller also fires on cursor moves; only re-guess on new text.
+    if (_description.text == _lastDescription) return;
+    _lastDescription = _description.text;
+    final next = followDescription(
+      current: _category,
+      auto: !_categoryPicked,
+      description: _description.text,
+      payee: _payee,
+    );
     setState(() {
-      if (!_categoryPicked) _category = guessCategory('${_description.text} ${_payee ?? ''}');
+      _category = next.category;
+      _categoryPicked = !next.auto;
     });
   }
 

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
+import '../category_guess.dart';
 import '../ledger.dart';
 import '../location_service.dart';
 import '../models.dart';
@@ -1029,7 +1030,14 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
   late final _amount = TextEditingController(
     text: widget.existing != null ? widget.existing!.amount.toStringAsFixed(0) : '',
   );
-  late String _category = widget.existing?.category ?? 'Food';
+  late String _category = widget.existing?.category ?? 'Other';
+  // A new expense's category follows the description until a chip is tapped
+  // (see followDescription); an edit starts from its saved category.
+  late bool _categoryAuto = !widget.isEditing;
+  late String _lastTitle = _title.text;
+  // Who it's split between; null until changed, meaning everyone (new) or
+  // whoever the expense was already split between (edit).
+  Set<String>? _splitWith;
   late DateTime _dateTime = widget.existing?.dateTime ?? DateTime.now();
   List<String> _custom = [];
   String? _location;
@@ -1042,6 +1050,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
   @override
   void initState() {
     super.initState();
+    _title.addListener(_onTitleChanged);
     _location = widget.existing?.location;
     _loadCustomCategories();
     if (widget.isEditing) {
@@ -1051,6 +1060,34 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     } else {
       _refreshLocation();
     }
+  }
+
+  void _onTitleChanged() {
+    // The controller also fires on cursor moves; only re-guess on new text.
+    if (_title.text == _lastTitle) return;
+    _lastTitle = _title.text;
+    final next = followDescription(current: _category, auto: _categoryAuto, description: _title.text);
+    if (next.category == _category && next.auto == _categoryAuto) return;
+    setState(() {
+      _category = next.category;
+      _categoryAuto = next.auto;
+    });
+  }
+
+  List<TripMember> get _members => _tripForSheet?.members ?? const [];
+
+  Set<String> _chosen(List<TripMember> members) =>
+      _splitWith ??
+      {
+        for (final m in members)
+          if (widget.existing == null || widget.existing!.shares.any((s) => s.userId == m.id)) m.id,
+      };
+
+  void _toggleSplit(TripMember member) {
+    final chosen = {..._chosen(_members)};
+    if (!chosen.remove(member.id)) chosen.add(member.id);
+    if (chosen.isEmpty) return; // someone has to owe it
+    setState(() => _splitWith = chosen);
   }
 
   Future<void> _loadCustomCategories() async {
@@ -1097,12 +1134,16 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
       orElse: () => '',
     );
     if (existing.isNotEmpty) {
-      setState(() => _category = existing);
+      setState(() {
+        _category = existing;
+        _categoryAuto = false;
+      });
       return;
     }
     setState(() {
       _custom = [..._custom, name];
       _category = name;
+      _categoryAuto = false;
     });
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(_customKey, [...(prefs.getStringList(_customKey) ?? []), name]);
@@ -1139,7 +1180,10 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
         if (result.title != null && _title.text.trim().isEmpty) _title.text = result.title!;
         if (result.amount != null) _amount.text = _plainAmount(result.amount!);
         if (result.date != null) _dateTime = result.date!;
-        if (result.category != null && result.category != 'Other') _category = result.category!;
+        if (result.category != null && result.category != 'Other') {
+          _category = result.category!;
+          _categoryAuto = true;
+        }
         _scanNote = result.amount == null
             ? 'Read the bill, but couldn’t find the total — enter it below.'
             : 'Filled in from the bill — check the amount before saving.';
@@ -1186,6 +1230,71 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     super.dispose();
   }
 
+  Widget _splitSection() {
+    final members = _members;
+    if (members.length < 2 || (widget.existing?.isSettlement ?? false)) return const SizedBox.shrink();
+    final chosen = _chosen(members);
+    final everyone = chosen.length == members.length;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            fieldLabel('SPLIT BETWEEN'),
+            const Spacer(),
+            if (!everyone)
+              GestureDetector(
+                onTap: () => setState(() => _splitWith = {for (final m in members) m.id}),
+                child: const Text('Everyone', style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+          ],
+        ),
+        const SizedBox(height: 9),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: [for (final m in members) _memberChip(m, chosen.contains(m.id))],
+        ),
+        const SizedBox(height: 8),
+        Text(_splitSummary(members, chosen), style: const TextStyle(color: muted, fontSize: 12)),
+      ],
+    );
+  }
+
+  Widget _memberChip(TripMember member, bool selected) {
+    final isMe = member.id == ApiClient.instance.currentUser?.id;
+    return FilterChip(
+      avatar: MemberAvatar.of(member, size: 22),
+      label: Text(isMe ? 'You' : member.name.trim().split(RegExp(r'\s+')).first),
+      selected: selected,
+      onSelected: (_) => _toggleSplit(member),
+      showCheckmark: false,
+      selectedColor: accentSoft,
+      backgroundColor: Colors.white,
+      side: BorderSide(color: selected ? accent.withValues(alpha: .55) : line),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: selected ? ink : muted),
+    );
+  }
+
+  /// "₹600 each · 2 of 3 people", or who alone owes it.
+  String _splitSummary(List<TripMember> members, Set<String> chosen) {
+    final me = ApiClient.instance.currentUser?.id;
+    if (chosen.length == 1) {
+      final only = members.firstWhere((m) => m.id == chosen.first);
+      return only.id == me
+          ? 'Only you — this won’t change anyone’s balance.'
+          : 'Only ${only.name.trim().split(RegExp(r'\s+')).first} owes this — you’re paying on their behalf.';
+    }
+    final who = chosen.length == members.length ? 'everyone' : '${chosen.length} of ${members.length} people';
+    final notMe = me != null && !chosen.contains(me) ? ' (not you)' : '';
+    final amount = double.tryParse(_amount.text.trim().replaceAll(',', ''));
+    return amount == null || amount <= 0
+        ? 'Split equally between $who$notMe.'
+        : '${money(amount / chosen.length)} each · $who$notMe';
+  }
+
   Future<void> _pickDateTime() async {
     final now = DateTime.now();
     final date = await showDatePicker(
@@ -1214,7 +1323,10 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
         label: Text(c),
         avatar: Icon(iconForCategory(c), size: 16, color: selected ? color : muted),
         selected: selected,
-        onSelected: (_) => setState(() => _category = c),
+        onSelected: (_) => setState(() {
+          _category = c;
+          _categoryAuto = false;
+        }),
         showCheckmark: false,
         selectedColor: color.withValues(alpha: .12),
         backgroundColor: Colors.white,
@@ -1296,7 +1408,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                           style: const TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
                         ),
                         const SizedBox(height: 3),
-                        const Text('Split equally across everyone on the trip.', style: TextStyle(color: muted, fontSize: 12)),
+                        const Text('Split equally between the people you pick.', style: TextStyle(color: muted, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -1362,10 +1474,22 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
               TextField(
                 controller: _amount,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}), // keeps "₹… each" current
                 decoration: appInputDecoration('₹  0', Icons.currency_rupee_rounded),
               ),
+              _splitSection(),
               const SizedBox(height: 16),
-              fieldLabel('CATEGORY'),
+              Row(
+                children: [
+                  fieldLabel('CATEGORY'),
+                  if (_categoryAuto) ...[
+                    const SizedBox(width: 6),
+                    const Icon(Icons.auto_awesome_outlined, size: 11, color: accent),
+                    const SizedBox(width: 3),
+                    const Text('auto', style: TextStyle(color: accent, fontSize: 9, fontWeight: FontWeight.w800)),
+                  ],
+                ],
+              ),
               const SizedBox(height: 9),
               Wrap(
                 spacing: 7,
@@ -1454,6 +1578,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
           category: _category,
           date: _dateTime.toIso8601String(),
           location: _location,
+          splitWith: _splitWith?.toList(),
         );
       } else {
         await ApiClient.instance.createExpense(
@@ -1464,6 +1589,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
           category: _category,
           date: _dateTime.toIso8601String(),
           location: _location,
+          splitWith: _splitWith?.toList(),
         );
       }
       TripStore.instance.refresh();

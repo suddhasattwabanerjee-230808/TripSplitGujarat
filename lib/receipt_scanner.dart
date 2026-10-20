@@ -1,7 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
-import 'upi_popup.dart' show guessCategory;
+import 'category_guess.dart';
 
 /// What could be read off a bill photo; any field may be missing.
 class ReceiptScan {

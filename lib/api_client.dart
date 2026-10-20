@@ -288,8 +288,8 @@ class ApiClient {
     return snap.docs.map(TripExpense.fromDoc).toList();
   });
 
-  /// Split equally across everyone on [trip] (fetched when not passed, e.g.
-  /// from the UPI pop-up).
+  /// Split equally across [splitWith] (member ids), or everyone on [trip]
+  /// when null. [trip] is fetched when not passed, e.g. from the UPI pop-up.
   Future<TripExpense> createExpense({
     required String tripId,
     Trip? trip,
@@ -298,9 +298,10 @@ class ApiClient {
     String? category,
     required String date,
     String? location,
+    List<String>? splitWith,
   }) async {
     trip ??= await getTrip(tripId);
-    final shares = equalShares(amount, [for (final m in trip.members) m.id]);
+    final shares = equalShares(amount, splitMembers([for (final m in trip.members) m.id], splitWith));
     return _addExpense(trip, description, amount, category, date, location, shares, 'equal');
   }
 
@@ -362,9 +363,9 @@ class ApiClient {
     return expense;
   });
 
-  /// Edits keep the payer. A normal expense is re-split equally across the
-  /// trip's current members (as the old server did); a settle-up payment
-  /// keeps its single recipient.
+  /// Edits keep the payer. A normal expense is re-split equally across
+  /// [splitWith], or the people it was already split between when null; a
+  /// settle-up payment keeps its single recipient.
   Future<TripExpense> updateExpense({
     required TripExpense existing,
     Trip? trip,
@@ -373,11 +374,15 @@ class ApiClient {
     String? category,
     required String date,
     String? location,
+    List<String>? splitWith,
   }) => _guard(() async {
     trip ??= await getTrip(existing.tripId);
     final shares = existing.isSettlement && existing.shares.isNotEmpty
         ? {existing.shares.first.userId: amount}
-        : equalShares(amount, [for (final m in trip!.members) m.id]);
+        : equalShares(
+            amount,
+            splitMembers([for (final m in trip!.members) m.id], splitWith ?? [for (final s in existing.shares) s.userId]),
+          );
     final after = TripExpense(
       id: existing.id,
       tripId: existing.tripId,

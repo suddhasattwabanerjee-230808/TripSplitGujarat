@@ -20,6 +20,7 @@ class UpiPopupActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        AppSignature.register(flutterEngine, this)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tripsplit/upi").setMethodCallHandler { call, result ->
             when (call.method) {
                 "getTransaction" -> result.success(

@@ -22,6 +22,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        AppSignature.register(flutterEngine, this)
         val channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tripsplit/updater")
         channel.setMethodCallHandler { call, result ->
             when (call.method) {
