@@ -2,12 +2,13 @@ package com.example.trip_split_gujarat
 
 import android.content.Context
 import android.net.Uri
+import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import java.io.File
 
-/** On-device text recognition for "Scan receipt" (ML Kit, bundled Latin model). */
+/** On-device text recognition for "Scan receipt" (ML Kit Latin model from Play services). */
 object ReceiptOcr {
     /** Reads the photo at [path] and returns its text one line per row, top to bottom. */
     fun recognize(context: Context, path: String, done: (String?, String?) -> Unit) {
@@ -26,7 +27,12 @@ object ReceiptOcr {
                     .joinToString("\n") { it.text }
                 done(lines, null)
             }
-            .addOnFailureListener { done(null, it.message ?: "Text recognition failed") }
+            .addOnFailureListener {
+                // Play services fetches the model after install; a scan before
+                // that finishes fails with UNAVAILABLE.
+                val unavailable = it is MlKitException && it.errorCode == MlKitException.UNAVAILABLE
+                done(null, if (unavailable) "the bill reader is still downloading, try again in a minute" else it.message ?: "Text recognition failed")
+            }
             .addOnCompleteListener { recognizer.close() }
     }
 }

@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.7.1] - 2026-10-20 (build 24)
+
+### Changed
+- A much smaller download: about 11 MB instead of 53 MB.
+- "Scan receipt" now uses Google Play services' text reader, which your phone
+  downloads by itself after installing. If you scan a bill in the first minute
+  or so, it may ask you to try again shortly.
+
 ## [1.7.0] - 2026-10-20 (build 23)
 
 ### Changed

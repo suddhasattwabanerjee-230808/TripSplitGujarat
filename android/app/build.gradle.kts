@@ -84,7 +84,20 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
+            // Release builds ship the Flutter engine for arm64 only (see
+            // release.yml), so drop the other ABIs' copies of plugin libraries
+            // too: they can never load, and cost ~18 MB of download.
+            ndk { abiFilters.add("arm64-v8a") }
         }
+    }
+
+    packaging {
+        // The APK is downloaded and sideloaded, so download size beats the
+        // small cost of Android extracting compressed libraries at install
+        // (libflutter.so + libapp.so shrink from ~19 MB to ~8 MB).
+        jniLibs { useLegacyPackaging = true }
+        // Protobuf source files bundled by Google libraries; never read at runtime.
+        resources { excludes += "google/**/*.proto" }
     }
 }
 
@@ -100,6 +113,8 @@ flutter {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
-    // On-device OCR for "Scan receipt" (bundled model, works offline).
-    implementation("com.google.mlkit:text-recognition:16.0.1")
+    // On-device OCR for "Scan receipt". The model comes from Google Play
+    // services (downloaded at install, see the manifest) instead of being
+    // bundled, which keeps ~12 MB out of the APK. Works offline once present.
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
 }
