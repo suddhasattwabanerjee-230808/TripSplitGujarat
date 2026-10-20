@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.7.5] - 2026-10-21 (build 28)
+
+### Changed
+- Adding an expense from a UPI notification now ends with a simple animated
+  green tick instead of the roaring lion (no sound).
+- Invite emails no longer contain a code. Your friend taps the link,
+  installs TripSplit, signs in with Google using the address you invited, and
+  is added straight to that trip.
+
 ## [1.7.4] - 2026-10-21 (build 27)
 
 ### Changed

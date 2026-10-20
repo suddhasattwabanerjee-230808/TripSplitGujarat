@@ -598,20 +598,24 @@ class _InviteSheetState extends State<_InviteSheet> {
       _error = null;
     });
     final messenger = ScaffoldMessenger.of(context);
-    // The note that joins them on sign-in. Without it the email still works,
-    // with the code to type.
-    var autoJoin = true;
     try {
+      // The note that adds them to this trip when they sign in. The email is
+      // only sent once it's saved, so it never needs a code.
       await ApiClient.instance.inviteByEmail(widget.trip, to);
-    } on ApiException {
-      autoJoin = false;
+    } on ApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = 'Couldn’t set up the invite (${e.message}). Check your connection and try again.';
+        });
+      }
+      return;
     }
     try {
       final opened = await InviteEmail.compose(
         to: to,
         trip: widget.trip,
         inviter: ApiClient.instance.currentUser?.name ?? 'A friend',
-        autoJoin: autoJoin,
       );
       if (!mounted) return;
       if (!opened) {
@@ -621,11 +625,7 @@ class _InviteSheetState extends State<_InviteSheet> {
       Navigator.pop(context);
       messenger.showSnackBar(
         SnackBar(
-          content: Text(
-            autoJoin
-                ? 'Tap Send in your email app. $to joins ${widget.trip.name} as soon as they sign in with that address.'
-                : 'Invite for $to is ready — tap Send in your email app.',
-          ),
+          content: Text('Tap Send in your email app. $to joins ${widget.trip.name} as soon as they sign in with that address.'),
         ),
       );
     } on PlatformException catch (e) {

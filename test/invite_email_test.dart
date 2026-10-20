@@ -17,12 +17,11 @@ void main() {
     expect(InviteEmail.isValidAddress('a b@gmail.com'), isFalse);
   });
 
-  test('the email carries the download link, the code and the inviter', () {
+  test('the email carries the download link and the inviter, and no code', () {
     final body = InviteEmail.body(_trip, 'Bittu', to: 'friend@gmail.com');
-    expect(body, contains('sign in with Google using this address: friend@gmail.com'));
-    expect(InviteEmail.body(_trip, 'Bittu', to: 'friend@gmail.com', autoJoin: false), isNot(contains('this address')));
+    expect(body, contains('sign in with Google using friend@gmail.com'));
     expect(body, contains(UpdateService.apkUrl));
-    expect(body, contains('HVHKBJ'));
+    expect(body, isNot(contains('HVHKBJ'))); // no code to type: signing in adds them
     expect(body, contains('Bittu'));
     expect(body, contains('Gir & Somnath'));
     expect(InviteEmail.subject(_trip, 'Bittu'), contains('Gir & Somnath'));
