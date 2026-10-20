@@ -15,8 +15,11 @@ number after `+` in `pubspec.yaml` increments on every release.
 - Updates now download from GitHub.
 
 ### Note
-- Sign in with the same Google account as before. All your trips, expenses and
-  balances have been moved across.
+- **A fresh start.** Trips from the old server weren't carried over: create
+  your trip again, or join one with its new invite code.
+- If you're on 1.6.1 or older, this update won't show up in the app. Install it
+  once from https://github.com/suddhasattwabanerjee-230808/TripSplit-releases/releases/latest/download/TripSplit.apk
+  and later updates arrive in the app as usual.
 
 ## [1.6.1] - 2026-10-19 (build 22)
 
