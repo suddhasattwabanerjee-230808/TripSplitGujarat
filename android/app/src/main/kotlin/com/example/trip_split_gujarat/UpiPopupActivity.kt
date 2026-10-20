@@ -1,5 +1,8 @@
 package com.example.trip_split_gujarat
 
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
 import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterActivityLaunchConfigs.BackgroundMode
@@ -8,6 +11,8 @@ import io.flutter.plugin.common.MethodChannel
 
 /** Transparent window running only the `upiPopupMain` Dart entrypoint — the quick-add popup. */
 class UpiPopupActivity : FlutterActivity() {
+    private var roar: MediaPlayer? = null
+
     override fun getDartEntrypointFunctionName(): String = "upiPopupMain"
 
     override fun getBackgroundMode(): BackgroundMode = BackgroundMode.transparent
@@ -30,6 +35,11 @@ class UpiPopupActivity : FlutterActivity() {
                         "time" to intent.getLongExtra("time", System.currentTimeMillis()),
                     ),
                 )
+                // The lion on the "Expense added" screen.
+                "roar" -> {
+                    playRoar()
+                    result.success(null)
+                }
                 "close" -> {
                     result.success(null)
                     finish()
@@ -37,5 +47,28 @@ class UpiPopupActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    /** Plays as a notification sound, so it follows that volume and stays quiet on silent/vibrate. */
+    private fun playRoar() {
+        roar?.release()
+        val attributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        val session = (getSystemService(AUDIO_SERVICE) as AudioManager).generateAudioSessionId()
+        roar = MediaPlayer.create(this, R.raw.lion_roar, attributes, session)?.apply {
+            setOnCompletionListener { player ->
+                player.release()
+                if (roar === player) roar = null
+            }
+            start()
+        }
+    }
+
+    override fun onDestroy() {
+        roar?.release()
+        roar = null
+        super.onDestroy()
     }
 }

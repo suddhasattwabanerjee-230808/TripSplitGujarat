@@ -1265,7 +1265,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
   Widget _memberChip(TripMember member, bool selected) {
     final isMe = member.id == ApiClient.instance.currentUser?.id;
     return FilterChip(
-      avatar: MemberAvatar.of(member, size: 22),
+      avatar: Opacity(opacity: selected ? 1 : .35, child: MemberAvatar.of(member, size: 22)),
       label: Text(isMe ? 'You' : member.name.trim().split(RegExp(r'\s+')).first),
       selected: selected,
       onSelected: (_) => _toggleSplit(member),

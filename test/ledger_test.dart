@@ -96,4 +96,36 @@ void main() {
     expect(upiIdPattern.hasMatch('nope'), isFalse);
     expect(upiIdPattern.hasMatch('a@b'), isFalse);
   });
+
+  test('split between some members: only the chosen people owe, in join order', () {
+    final all = ['a', 'b', 'c'];
+    expect(splitMembers(all, null), all);
+    expect(splitMembers(all, ['c', 'a']), ['a', 'c']); // join order, not tap order
+    expect(splitMembers(all, ['b']), ['b']);
+    expect(splitMembers(all, ['x']), all); // nobody on the trip → everyone
+    expect(splitMembers(all, []), all);
+
+    // A pays 300 for A and C only: C owes A 150, B is untouched.
+    final shares = equalShares(300, splitMembers(all, ['a', 'c']));
+    expect(shares, {'a': 150, 'c': 150});
+    final t = totalsFromExpenses([expense('dinner', 'a', 300, shares)]);
+    final balances = balancesFor(members, t.paid, t.owed);
+    expect([for (final b in balances) b.netBalance], [150, 0, -150]);
+    final settle = settlementsFor(balances);
+    expect(settle.single.fromUserId, 'c');
+    expect(settle.single.toUserId, 'a');
+    expect(settle.single.amount, 150);
+  });
+
+  test('paying on behalf of one person: they owe the whole amount', () {
+    final t = totalsFromExpenses([expense('cab', 'a', 240, equalShares(240, splitMembers(['a', 'b', 'c'], ['b'])))]);
+    expect([for (final b in balancesFor(members, t.paid, t.owed)) b.netBalance], [240, -240, 0]);
+    expect(t.totalSpent, 240);
+  });
+
+  test('editing who an expense is split between moves the running totals exactly', () {
+    final before = expense('dinner', 'a', 300, {'a': 100, 'b': 100, 'c': 100});
+    final after = expense('dinner', 'a', 300, {'a': 150, 'c': 150});
+    expect(moneyDelta(before, after), {'owed.a': 50, 'owed.b': -100, 'owed.c': 50});
+  });
 }

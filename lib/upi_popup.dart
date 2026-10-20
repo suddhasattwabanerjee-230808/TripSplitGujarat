@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'api_client.dart';
 import 'category_guess.dart';
+import 'lion_roar.dart';
 import 'location_service.dart';
 import 'models.dart';
 import 'screens/location_picker_screen.dart';
@@ -191,7 +192,9 @@ class _UpiPopupState extends State<_UpiPopup> {
         location: location.isEmpty ? null : location,
       );
       setState(() => _done = true);
-      await Future<void>.delayed(const Duration(seconds: 2));
+      _channel.invokeMethod<void>('roar').catchError((_) {}); // the sound is a bonus
+      // Close when the roar ends, so the lion and the message go together.
+      await Future<void>.delayed(LionRoar.duration);
       await _close();
     } on ApiException catch (e) {
       setState(() {
@@ -238,17 +241,31 @@ class _UpiPopupState extends State<_UpiPopup> {
   }
 
   Widget _doneView() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 28),
+    padding: const EdgeInsets.only(top: 16, bottom: 28),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Container(
-          width: 56,
-          height: 56,
-          decoration: BoxDecoration(color: accent.withValues(alpha: .14), shape: BoxShape.circle),
-          child: const Icon(Icons.check_rounded, color: accent, size: 30),
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const LionRoar(size: 150),
+            Positioned(
+              right: 14,
+              bottom: 10,
+              child: Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: paper, width: 3),
+                ),
+                child: const Icon(Icons.check_rounded, color: Colors.white, size: 17),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         const Text(
           'Expense added',
           style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),

@@ -38,6 +38,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   // clobber the more specific label we already set with a plain reverse-geocode.
   bool _ignoreNextCameraIdle = false;
   List<PlaceSuggestion> _searchResults = [];
+  // Shown under the search box when a search fails or finds nothing.
+  String? _searchMessage;
   Timer? _searchDebounce;
 
   @override
@@ -101,7 +103,11 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _searchDebounce?.cancel();
     final trimmed = query.trim();
     if (trimmed.length < 3) {
-      setState(() => _searchResults = []);
+      setState(() {
+        _searching = false;
+        _searchResults = [];
+        _searchMessage = null;
+      });
       return;
     }
     _searchDebounce = Timer(const Duration(milliseconds: 450), () => _runSearch(trimmed));
@@ -109,15 +115,23 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
 
   Future<void> _runSearch(String query) async {
     setState(() => _searching = true);
-    final results = await autocompletePlaces(
-      query,
-      originLat: _center.latitude,
-      originLng: _center.longitude,
-    );
-    if (!mounted) return;
+    List<PlaceSuggestion> results = [];
+    String? message;
+    try {
+      results = await autocompletePlaces(
+        query,
+        originLat: _center.latitude,
+        originLng: _center.longitude,
+      );
+      if (results.isEmpty) message = 'No places found for “$query”.';
+    } on PlacesException catch (e) {
+      message = e.message;
+    }
+    if (!mounted || _searchController.text.trim() != query) return; // a newer search is on its way
     setState(() {
       _searching = false;
       _searchResults = results;
+      _searchMessage = message;
     });
   }
 
@@ -125,6 +139,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     _searchFocus.unfocus();
     setState(() {
       _searchResults = [];
+      _searchMessage = null;
       _searchController.text = suggestion.mainText;
     });
     final place = await fetchPlaceLocation(suggestion.placeId);
@@ -212,7 +227,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                                           icon: const Icon(Icons.close_rounded, size: 17, color: muted),
                                           onPressed: () {
                                             _searchController.clear();
-                                            setState(() => _searchResults = []);
+                                            setState(() {
+                                              _searchResults = [];
+                                              _searchMessage = null;
+                                            });
                                           },
                                         )
                                       : null),
@@ -231,6 +249,29 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                       _roundButton(Icons.my_location_outlined, _recenterOnCurrentLocation),
                     ],
                   ),
+                  if (_searchResults.isEmpty && _searchMessage != null)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black.withValues(alpha: .1), blurRadius: 14, offset: const Offset(0, 6)),
+                        ],
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline_rounded, color: muted, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(_searchMessage!, style: const TextStyle(fontSize: 12.5, color: ink)),
+                          ),
+                        ],
+                      ),
+                    ),
                   if (_searchResults.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 8),

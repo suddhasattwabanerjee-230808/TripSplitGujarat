@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'env.dart';
@@ -8,16 +9,38 @@ import 'env.dart';
 /// (places.googleapis.com/v1), called directly instead of through a native
 /// SDK plugin. The X-Android-Package/X-Android-Cert headers are what let an
 /// Android-app-restricted API key work over plain REST — Google checks them
-/// against the key's restriction instead of requiring the native SDK.
+/// against the key's restriction instead of requiring the native SDK. The
+/// cert must be the one this build is really signed with (asked from
+/// AppSignature.kt): a hard-coded debug SHA-1 broke search in release builds.
 const _androidPackageName = 'com.example.trip_split_gujarat';
-const _androidCertSha1 = '89FF0CCFFCE83A87EF315F28ACB3DAB12F6F8696';
+// The release certificate, in case the platform can't be asked.
+const _releaseCertSha1 = 'CCF17ADDB45DEA725C2049FF53010A4C4E19C96F';
+const _signature = MethodChannel('tripsplit/signature');
+String? _certSha1;
 
-Map<String, String> get _headers => {
-  'Content-Type': 'application/json',
-  'X-Goog-Api-Key': googleMapsApiKey,
-  'X-Android-Package': _androidPackageName,
-  'X-Android-Cert': _androidCertSha1,
-};
+Future<Map<String, String>> _headers() async {
+  if (_certSha1 == null) {
+    try {
+      _certSha1 = await _signature.invokeMethod<String>('sha1');
+    } catch (_) {}
+    _certSha1 ??= _releaseCertSha1;
+  }
+  return {
+    'Content-Type': 'application/json',
+    'X-Goog-Api-Key': googleMapsApiKey,
+    'X-Android-Package': _androidPackageName,
+    'X-Android-Cert': _certSha1!,
+  };
+}
+
+/// Why a search failed, worded for the user.
+class PlacesException implements Exception {
+  const PlacesException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
+}
 
 class PlaceSuggestion {
   const PlaceSuggestion({
@@ -42,17 +65,20 @@ class PlaceLocation {
 }
 
 /// Autocomplete suggestions for [query], biased towards [originLat]/[originLng]
-/// if given. Returns an empty list on any failure.
+/// if given. Throws [PlacesException] when Google can't be reached or refuses
+/// (e.g. the API key's restrictions), instead of quietly showing nothing.
 Future<List<PlaceSuggestion>> autocompletePlaces(
   String query, {
   double? originLat,
   double? originLng,
 }) async {
+  if (googleMapsApiKey.isEmpty) throw const PlacesException('Place search isn’t set up in this build.');
+  final http.Response response;
   try {
-    final response = await http
+    response = await http
         .post(
           Uri.https('places.googleapis.com', '/v1/places:autocomplete'),
-          headers: _headers,
+          headers: await _headers(),
           body: jsonEncode({
             'input': query,
             if (originLat != null && originLng != null)
@@ -65,7 +91,13 @@ Future<List<PlaceSuggestion>> autocompletePlaces(
           }),
         )
         .timeout(const Duration(seconds: 10));
-    if (response.statusCode != 200) return [];
+  } catch (_) {
+    throw const PlacesException('Couldn’t reach Google. Check your connection and try again.');
+  }
+  if (response.statusCode != 200) {
+    throw PlacesException('Google refused the search: ${_googleError(response)}');
+  }
+  try {
     final body = jsonDecode(response.body) as Map<String, dynamic>;
     final suggestions = body['suggestions'] as List<dynamic>? ?? [];
     return suggestions
@@ -84,8 +116,19 @@ Future<List<PlaceSuggestion>> autocompletePlaces(
         })
         .toList();
   } catch (_) {
-    return [];
+    throw const PlacesException('Google sent back something unexpected. Try again.');
   }
+}
+
+/// Google's own error message (e.g. "Requests from this Android client
+/// application <empty> are blocked."), or the HTTP status.
+String _googleError(http.Response response) {
+  try {
+    final error = (jsonDecode(response.body) as Map<String, dynamic>)['error'] as Map<String, dynamic>?;
+    final message = error?['message'] as String?;
+    if (message != null && message.isNotEmpty) return message;
+  } catch (_) {}
+  return 'HTTP ${response.statusCode}';
 }
 
 /// Fetches a place's coordinates and builds a short "name, city" label.
@@ -96,7 +139,7 @@ Future<PlaceLocation?> fetchPlaceLocation(String placeId) async {
         .get(
           Uri.https('places.googleapis.com', '/v1/places/$placeId'),
           headers: {
-            ..._headers,
+            ...await _headers(),
             'X-Goog-FieldMask': 'location,formattedAddress,displayName,addressComponents',
           },
         )

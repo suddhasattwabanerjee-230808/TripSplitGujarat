@@ -4,13 +4,27 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
-## [1.7.2] - unreleased (build 25)
+## [1.7.2] - 2026-10-20 (build 25)
 
 ### Added
 - Invite by email: tap the invite icon at the top of a trip, type a friend's
   email address and tap "Send invite". Your email app opens with a message
   holding the download link, the trip's invite code and how to join; you tap
   Send. Copying the code is still there too.
+- Split an expense between some people, not always everyone: under "Split
+  between", untick whoever wasn't part of it. Pick just one person to record
+  that you paid on their behalf. Balances follow who was actually included.
+- A roaring lion (with sound) when you add an expense from a UPI
+  notification. The roar follows your notification volume and stays quiet
+  when the phone is on silent.
+
+### Fixed
+- Place search on the map picker works again. If it ever fails, it now says
+  why instead of showing nothing.
+- The category now follows what you type: "Taxi" switches it to Transport
+  even after you picked one yourself, and every category (Groceries, Rent,
+  Fuel, Shopping, Utilities too) can be picked automatically. In the UPI
+  pop-up, your description now counts more than the payee's name.
 
 ## [1.7.1] - 2026-10-20 (build 24)
 
