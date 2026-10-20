@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 
 import 'api_client.dart';
 import 'category_guess.dart';
-import 'lion_roar.dart';
+import 'lion_charge.dart';
 import 'location_service.dart';
 import 'models.dart';
 import 'screens/location_picker_screen.dart';
@@ -57,9 +57,18 @@ class _UpiPopupState extends State<_UpiPopup> {
 
   bool get _hasDescription => _description.text.trim().isNotEmpty;
 
+  // The tick on "Expense added", where the lion bursts out from.
+  final _tickKey = GlobalKey();
+
+  Offset? _tickCenter() {
+    final box = _tickKey.currentContext?.findRenderObject() as RenderBox?;
+    return box != null && box.hasSize ? box.localToGlobal(box.size.center(Offset.zero)) : null;
+  }
+
   @override
   void initState() {
     super.initState();
+    LionCharge.preload(); // decode the photo now, not when it's needed
     _description.addListener(_onDescriptionChanged);
     _init();
   }
@@ -192,9 +201,8 @@ class _UpiPopupState extends State<_UpiPopup> {
         location: location.isEmpty ? null : location,
       );
       setState(() => _done = true);
-      _channel.invokeMethod<void>('roar').catchError((_) {}); // the sound is a bonus
-      // Close when the roar ends, so the lion and the message go together.
-      await Future<void>.delayed(LionRoar.duration);
+      // Close once the lion has blown away, so it and the message go together.
+      await Future<void>.delayed(LionCharge.duration);
       await _close();
     } on ApiException catch (e) {
       setState(() {
@@ -208,64 +216,65 @@ class _UpiPopupState extends State<_UpiPopup> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black.withValues(alpha: .4),
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _busy ? null : _close,
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: GestureDetector(
-            onTap: () {},
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-              decoration: const BoxDecoration(
-                color: paper,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-              ),
-              child: SafeArea(
-                top: false,
-                child: SingleChildScrollView(
-                  child: AnimatedSize(
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOutCubic,
-                    alignment: Alignment.topCenter,
-                    child: _done ? _doneView() : _formView(),
+      body: Stack(
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: _busy ? null : _close,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: GestureDetector(
+                onTap: () {},
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+                  decoration: const BoxDecoration(
+                    color: paper,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    child: SingleChildScrollView(
+                      child: AnimatedSize(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: _done ? _doneView() : _formView(),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
+          // Bursts out of the tick and over the whole screen.
+          if (_done)
+            Positioned.fill(
+              child: IgnorePointer(
+                child: LionCharge(
+                  origin: _tickCenter,
+                  onRoar: () => _channel.invokeMethod<void>('roar').catchError((_) {}), // the sound is a bonus
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
   Widget _doneView() => Padding(
-    padding: const EdgeInsets.only(top: 16, bottom: 28),
+    padding: const EdgeInsets.symmetric(vertical: 28),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            const LionRoar(size: 150),
-            Positioned(
-              right: 14,
-              bottom: 10,
-              child: Container(
-                width: 30,
-                height: 30,
-                decoration: BoxDecoration(
-                  color: accent,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: paper, width: 3),
-                ),
-                child: const Icon(Icons.check_rounded, color: Colors.white, size: 17),
-              ),
-            ),
-          ],
+        Container(
+          key: _tickKey,
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(color: accent.withValues(alpha: .14), shape: BoxShape.circle),
+          child: const Icon(Icons.check_rounded, color: accent, size: 30),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         const Text(
           'Expense added',
           style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),

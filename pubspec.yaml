@@ -1,7 +1,7 @@
 name: trip_split_gujarat
 description: Multi-user, multi-trip expense splitter with Google sign-in and Google Maps location picking.
 publish_to: 'none'
-version: 1.7.3+26
+version: 1.7.4+27
 
 environment:
   sdk: '>=3.11.0 <4.0.0'
@@ -33,3 +33,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/splash_logo.png
+    - assets/lion.webp

@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.7.4] - 2026-10-21 (build 27)
+
+### Changed
+- The lion is real now. After you add an expense from a UPI notification, a
+  real lion bursts out of the pop-up, charges at the screen and roars, then
+  blows away like dust as the pop-up closes. (Photo: "Hear me roar" by Adam
+  King, CC0.)
+
 ## [1.7.3] - 2026-10-20 (build 26)
 
 ### Changed
