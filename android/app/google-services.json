@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "442536622738",
+    "project_id": "tripsplit-237a5",
+    "storage_bucket": "tripsplit-237a5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:442536622738:android:0e62458caea8ad16ff044b",
+        "android_client_info": {
+          "package_name": "com.example.trip_split_gujarat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "442536622738-q17cm7jj8fqlb40os36qc2n722hbmmlv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7ydT9vajpdOFohX6gO_0YwTMjGrEKp5M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "442536622738-q17cm7jj8fqlb40os36qc2n722hbmmlv.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

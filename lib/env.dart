@@ -5,9 +5,9 @@
 /// the Dart side to talk to the native Places SDK layer.
 const googleMapsApiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 
-/// The *Web application* OAuth client ID from Google Cloud Console (APIs &
-/// Services → Credentials), ending in `.apps.googleusercontent.com`. Android's
-/// Credential Manager needs it to mint an ID token the backend can verify; it
-/// is a public identifier, not a secret. The Android OAuth client (package +
-/// signing SHA-1) must exist in the same Cloud project, but isn't referenced here.
-const googleWebClientId = '482908381478-kof6tms8k9r787fqnktmu5td6hpr1gnc.apps.googleusercontent.com';
+/// The *Web application* OAuth client ID of the `tripsplit-237a5` Firebase
+/// project (the `client_type: 3` entry in android/app/google-services.json).
+/// Android's Credential Manager needs it to mint the Google ID token that
+/// Firebase Auth signs in with; it is a public identifier, not a secret. The
+/// app's release SHA-1 must be registered on the Firebase Android app.
+const googleWebClientId = '442536622738-q17cm7jj8fqlb40os36qc2n722hbmmlv.apps.googleusercontent.com';
