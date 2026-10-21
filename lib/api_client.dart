@@ -180,6 +180,84 @@ class ApiClient {
     await _commit(batch);
   }
 
+  /// Deletes the signed-in user's TripSplit account. [googleIdToken] is a
+  /// fresh Google sign-in for the same account: Firebase only deletes
+  /// accounts that signed in recently.
+  ///
+  /// Personal data goes: the profile, invites to or from them, and their
+  /// name, photo and UPI ID on every trip. Their expenses stay so tripmates'
+  /// balances still add up, shown as [deletedUserName]. The Firebase login is
+  /// deleted last, once everything it's needed for is done.
+  Future<void> deleteAccount(String googleIdToken) => _guard(() async {
+    final account = FirebaseAuth.instance.currentUser;
+    final me = _user;
+    if (account == null || me == null) throw ApiException('You’re signed out.');
+    try {
+      await account.reauthenticateWithCredential(GoogleAuthProvider.credential(idToken: googleIdToken));
+    } on FirebaseAuthException catch (e) {
+      throw ApiException(
+        e.code == 'user-mismatch'
+            ? 'That’s a different Google account. Pick ${me.email ?? 'the one you signed in with'}.'
+            : (e.message ?? 'Google couldn’t confirm it’s you (${e.code}).'),
+      );
+    }
+
+    // Never leave tripmates with a debt nobody can settle: checked again here
+    // against the server's latest totals (Profile checks before asking).
+    final trips = await _db.collection('trips').where('memberIds', arrayContains: me.id).get(
+      const GetOptions(source: Source.server),
+    );
+    final unsettled = [
+      for (final t in trips.docs.map(Trip.fromDoc))
+        if (unsettledAmount(t.paid[me.id] ?? 0, t.owed[me.id] ?? 0) != 0) t.name,
+    ];
+    if (unsettled.isNotEmpty) {
+      throw ApiException('Settle up on ${unsettled.join(', ')} first: your account can’t be deleted while money is owed.');
+    }
+
+    const gone = {'name': deletedUserName, 'photoUrl': null, 'upiId': null};
+    var batch = _db.batch();
+    var writes = 0;
+    Future<void> add(void Function(WriteBatch b) write) async {
+      write(batch);
+      if (++writes == 400) {
+        await batch.commit(); // a batch holds at most 500 writes
+        batch = _db.batch();
+        writes = 0;
+      }
+    }
+
+    for (final trip in trips.docs) {
+      await add((b) => b.update(trip.reference, {'members.${me.id}': gone}));
+      final mine = await _expenses(trip.id).where('paidBy', isEqualTo: me.id).get();
+      for (final e in mine.docs) {
+        await add((b) => b.update(e.reference, {'paidByName': deletedUserName}));
+      }
+    }
+    // No personal data left in the profile (set without merge replaces it all).
+    await add((b) => b.set(_db.collection('users').doc(me.id), {'deleted': true}));
+    await batch.commit();
+
+    // Invites to or from them. Best effort: these need the email-invite rules.
+    final email = account.email?.toLowerCase();
+    for (final query in [
+      if (email != null) _emailInvites.where('email', isEqualTo: email),
+      _emailInvites.where('invitedBy', isEqualTo: me.id),
+    ]) {
+      try {
+        for (final doc in (await query.get()).docs) {
+          await doc.reference.delete();
+        }
+      } on FirebaseException {
+        // Without those rules there are no invites to clean up anyway.
+      }
+    }
+
+    await account.delete();
+    _user = null;
+    await _preferences.remove(_lastTripKey);
+  });
+
   Future<void> logOut() async {
     _user = null;
     if (Firebase.apps.isNotEmpty) await FirebaseAuth.instance.signOut();

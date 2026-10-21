@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.7.7] - 2026-10-21 (build 30)
+
+### Added
+- Delete your account from Profile (at the bottom). After you type DELETE
+  and confirm with Google, it removes your TripSplit login, profile,
+  nickname, photo and UPI ID, invites, and TripSplit's access to your Google
+  account. Expenses you shared stay so everyone's balances still add up,
+  shown as "Deleted user". Your Google account itself isn't touched.
+  It only works once every trip is settled: while you owe money, or are
+  owed money, it lists those trips and asks you to settle up first.
+- Tap your name at the top of Profile to change your nickname.
+
 ## [1.7.6] - 2026-10-21 (build 29)
 
 ### Added

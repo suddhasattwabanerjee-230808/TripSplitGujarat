@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../api_client.dart';
 import '../google_auth.dart';
+import '../ledger.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../trip_store.dart';
@@ -79,6 +80,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
 
   bool _upiDetection = true;
   bool _upiAlertsOn = true;
+  bool _deleting = false;
   AppUser? _user = ApiClient.instance.currentUser;
   PackageInfo? _packageInfo;
   bool _linking = false;
@@ -324,6 +326,43 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     );
   }
 
+  /// Deletes the account after a typed confirmation and a fresh Google
+  /// sign-in (Firebase only deletes accounts that signed in recently).
+  Future<void> _deleteAccount() async {
+    // Debts first: deleting would leave tripmates with nobody to settle with.
+    final me = _user?.id;
+    final open = [
+      for (final t in TripStore.instance.trips ?? const <Trip>[])
+        if (me != null && unsettledAmount(t.paid[me] ?? 0, t.owed[me] ?? 0) != 0)
+          (trip: t, amount: unsettledAmount(t.paid[me] ?? 0, t.owed[me] ?? 0)),
+    ];
+    if (open.isNotEmpty) {
+      await showDialog<void>(context: context, builder: (_) => _SettleFirstDialog(open));
+      return;
+    }
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(context: context, builder: (_) => const _DeleteAccountDialog());
+    if (confirmed != true || !mounted) return;
+    setState(() => _deleting = true);
+    try {
+      final idToken = await GoogleAuth.signIn();
+      await ApiClient.instance.deleteAccount(idToken);
+      await GoogleAuth.disconnect();
+      TripStore.instance.clear();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } on GoogleAuthException catch (e) {
+      if (!e.canceled) _toast(e.message);
+    } on ApiException catch (e) {
+      _toast(e.message);
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = _user;
@@ -428,6 +467,24 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                               ),
                             ),
                           ),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: _deleting ? null : _deleteAccount,
+                              icon: _deleting
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: _owe),
+                                    )
+                                  : const Icon(Icons.delete_forever_outlined, size: 18),
+                              label: Text(
+                                _deleting ? 'Deleting your account…' : 'Delete account',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              style: TextButton.styleFrom(foregroundColor: _owe),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -483,18 +540,35 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
             child: UserAvatar(user: user, size: 88),
           ),
           const SizedBox(height: 14),
+          // The nickname: tap it (or the pencil) to change it.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(
-              user.name,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -.5,
+            child: InkWell(
+              onTap: _editName,
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        user.name,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.edit_outlined, size: 18, color: Colors.white.withValues(alpha: .75)),
+                  ],
+                ),
               ),
             ),
           ),
@@ -887,4 +961,121 @@ class _EditFieldSheetState extends State<_EditFieldSheet> {
       ),
     );
   }
+}
+
+/// "Delete your account?" with a typed confirmation, since it can't be undone.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _typed = TextEditingController();
+
+  bool get _confirmed => _typed.text.trim().toUpperCase() == 'DELETE';
+
+  @override
+  void dispose() {
+    _typed.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    backgroundColor: paper,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    title: const Text('Delete your account?', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+    content: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'This can’t be undone. It permanently removes:\n'
+            '• your TripSplit login, profile and nickname\n'
+            '• your photo and UPI ID on every trip\n'
+            '• invites sent to you or by you\n'
+            '• TripSplit’s access to your Google account\n\n'
+            'Expenses you shared stay on your trips, so your tripmates’ balances still add up; '
+            'they’ll show you as “$deletedUserName”. Your Google account itself isn’t touched.\n\n'
+            'Google will ask you to confirm it’s you.',
+            style: TextStyle(color: muted, height: 1.45, fontSize: 13.5),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _typed,
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
+            onChanged: (_) => setState(() {}),
+            decoration: appInputDecoration('Type DELETE to confirm', Icons.warning_amber_rounded),
+          ),
+        ],
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context, false),
+        child: const Text('Cancel', style: TextStyle(color: muted)),
+      ),
+      FilledButton(
+        onPressed: _confirmed ? () => Navigator.pop(context, true) : null,
+        style: FilledButton.styleFrom(backgroundColor: _owe),
+        child: const Text('Delete'),
+      ),
+    ],
+  );
+}
+
+/// Shown instead of deleting while any trip still has money open for the user.
+class _SettleFirstDialog extends StatelessWidget {
+  const _SettleFirstDialog(this.open);
+
+  final List<({Trip trip, double amount})> open;
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    backgroundColor: paper,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+    title: const Text('Settle up first', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Your account can’t be deleted while money is still owed on a trip. Clear these on the Balance tab, then try again:',
+          style: TextStyle(color: muted, height: 1.45, fontSize: 13.5),
+        ),
+        const SizedBox(height: 14),
+        for (final o in open)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    o.trip.name,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: ink, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  o.amount < 0 ? 'you owe ${money(-o.amount)}' : 'owed to you ${money(o.amount)}',
+                  style: TextStyle(color: o.amount < 0 ? _owe : positive, fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+      ],
+    ),
+    actions: [
+      FilledButton(
+        onPressed: () => Navigator.pop(context),
+        style: primaryButton(radius: 12),
+        child: const Text('OK'),
+      ),
+    ],
+  );
 }

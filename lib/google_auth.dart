@@ -69,6 +69,18 @@ abstract final class GoogleAuth {
     }
   }
 
+  /// Removes TripSplit's access from the user's Google account (it drops
+  /// off "Apps with access" in their Google settings) and signs out.
+  static Future<void> disconnect() async {
+    if (!isConfigured) return;
+    try {
+      await _ensureInitialized();
+      await GoogleSignIn.instance.disconnect();
+    } on Exception {
+      await signOut();
+    }
+  }
+
   static Future<void> signOut() async {
     if (!isConfigured) return;
     try {

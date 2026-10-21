@@ -137,4 +137,11 @@ void main() {
     expect(e.payerName(left), 'a'); // saved paidByName
     expect(e.payerName(null), 'a');
   });
+
+  test('an account counts as settled only when nothing is open, to the paisa', () {
+    expect(unsettledAmount(300, 300), 0);
+    expect(unsettledAmount(100.004, 100), 0); // rounding dust
+    expect(unsettledAmount(300, 150), 150); // owed to them
+    expect(unsettledAmount(100, 340), -240); // they owe
+  });
 }

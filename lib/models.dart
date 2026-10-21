@@ -26,6 +26,9 @@ Map<String, double> _amounts(Object? value) => {
   for (final e in (value as Map<String, dynamic>? ?? const {}).entries) e.key: (e.value as num).toDouble(),
 };
 
+/// How someone who deleted their account appears on trips and expenses.
+const deletedUserName = 'Deleted user';
+
 class AppUser {
   const AppUser({
     required this.id,

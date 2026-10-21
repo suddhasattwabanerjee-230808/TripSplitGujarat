@@ -120,6 +120,13 @@ List<Settlement> settlementsFor(List<Balance> balances) {
   return result;
 }
 
+/// What's still open between someone and their trip: positive = owed to
+/// them, negative = they owe, 0 = settled (to the paisa, as settlementsFor).
+double unsettledAmount(double paid, double owed) {
+  final net = round2(paid - owed);
+  return net.abs() < 0.01 ? 0 : net;
+}
+
 // --- Invite codes & UPI IDs --------------------------------------------------
 
 /// Letters and digits without the look-alikes 0/O/1/I.
