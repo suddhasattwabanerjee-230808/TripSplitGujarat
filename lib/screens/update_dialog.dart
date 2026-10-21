@@ -87,10 +87,10 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
                 Icon(Icons.system_update_outlined, color: accent),
-                SizedBox(width: 10),
+                const SizedBox(width: 10),
                 Text(
                   'Update available',
                   style: TextStyle(
@@ -104,7 +104,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             const SizedBox(height: 10),
             Text(
               'Version ${widget.info.versionName} is ready to install.',
-              style: const TextStyle(color: muted, fontSize: 13),
+              style: TextStyle(color: muted, fontSize: 13),
             ),
             if (widget.info.notes.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -112,7 +112,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 child: SingleChildScrollView(
                   child: Text(
                     _cleanNotes(widget.info.notes),
-                    style: const TextStyle(color: ink, fontSize: 13, height: 1.4),
+                    style: TextStyle(color: ink, fontSize: 13, height: 1.4),
                   ),
                 ),
               ),
@@ -134,7 +134,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                         value: value > 0 ? value : null,
                         minHeight: 8,
                         color: accent,
-                        backgroundColor: const Color(0xFFE4E8DF),
+                        backgroundColor: line,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -145,17 +145,17 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                           child: Text(
                             _installing ? 'Installing… the app will reopen' : 'Downloading…',
                             key: ValueKey(_installing),
-                            style: const TextStyle(color: muted, fontSize: 12),
+                            style: TextStyle(color: muted, fontSize: 12),
                           ),
                         ),
                         const Spacer(),
                         Text(
                           '${(value * 100).floor()}%',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: ink,
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
-                            fontFeatures: [FontFeature.tabularFigures()],
+                            fontFeatures: const [FontFeature.tabularFigures()],
                           ),
                         ),
                       ],
@@ -166,7 +166,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             ],
             if (_error != null) ...[
               const SizedBox(height: 14),
-              Text(_error!, style: const TextStyle(color: Color(0xFFB3261E), fontSize: 12)),
+              Text(_error!, style: TextStyle(color: negative, fontSize: 12)),
             ],
             const SizedBox(height: 18),
             Row(
@@ -175,14 +175,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 if (!downloading)
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Later', style: TextStyle(color: muted)),
+                    child: Text('Later', style: TextStyle(color: muted)),
                   ),
                 const SizedBox(width: 4),
                 FilledButton(
                   onPressed: downloading ? null : _update,
                   style: FilledButton.styleFrom(
                     backgroundColor: ink,
-                    foregroundColor: Colors.white,
+                    foregroundColor: paper,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   child: Text(downloading ? 'Updating…' : 'Update now'),

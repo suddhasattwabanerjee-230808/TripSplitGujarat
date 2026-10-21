@@ -30,6 +30,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Required by flutter_local_notifications (expense notifications).
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -117,4 +119,9 @@ dependencies {
     // services (downloaded at install, see the manifest) instead of being
     // bundled, which keeps ~12 MB out of the APK. Works offline once present.
     implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
+    // flutter_local_notifications needs desugaring; the WindowManager libraries
+    // avoid a crash its README reports with desugaring on Android 12L+.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    implementation("androidx.window:window:1.0.0")
+    implementation("androidx.window:window-java:1.0.0")
 }

@@ -4,6 +4,35 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.9.0] - 2026-10-21 (build 31)
+
+### Added
+- Dark theme: a deep, classy dark look for the whole app. Flip it any time
+  with the sun / moon at the top of every screen; it remembers your choice.
+- Paying a tripmate: pick your UPI app (Google Pay, PhonePe, Paytm…). With
+  their UPI ID it opens on the payment, filled in; without one it opens so
+  you can scan their QR. "I paid in cash" is still there.
+- Remind me to settle later: choose a date and time; the reminder opens that
+  exact balance with the same ways to pay. For money owed to you, the alarm
+  button on the row sets a follow-up reminder.
+- Change your profile photo (tap it in Profile), or go back to your Google one.
+- Give tripmates your own nicknames from their page: only you see them, and
+  they're used everywhere in the app.
+- Tap anyone's photo or name to open their page.
+- The Google logo next to your email in Profile.
+- Phone notifications when someone on your trips adds an expense: their
+  photo, name and the amount, plus what it was for, the category, trip,
+  place, time and your share. Tap one to see the expense. They show straight
+  away while TripSplit is open or in the background, and within about 15
+  minutes when it's closed.
+- Trip details (the ⓘ at the top of a trip, or tap the faces under its
+  name): everyone's paid, share and balance side by side, and the settle-up
+  payments.
+- Tap anyone (in Trip details, Balance or an expense) to see their page:
+  photo, UPI ID, totals, who they settle with and their expenses.
+- A read-only page for any expense, with the payer's photo, the split and
+  the place.
+
 ## [1.7.7] - 2026-10-21 (build 30)
 
 ### Added

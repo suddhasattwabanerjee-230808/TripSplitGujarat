@@ -132,13 +132,13 @@ Widget _menuRow(BuildContext ctx, IconData icon, String title, String subtitle, 
             children: [
               Text(
                 title,
-                style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
+                style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
               ),
-              Text(subtitle, style: const TextStyle(color: muted, fontSize: 12)),
+              Text(subtitle, style: TextStyle(color: muted, fontSize: 12)),
             ],
           ),
         ),
-        const Icon(Icons.chevron_right_rounded, color: muted),
+        Icon(Icons.chevron_right_rounded, color: muted),
       ],
     ),
   ),
@@ -181,7 +181,7 @@ class TripCard extends StatelessWidget {
                         trip.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700),
+                        style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -192,7 +192,7 @@ class TripCard extends StatelessWidget {
                         ].join(' · '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: muted, fontSize: 12),
+                        style: TextStyle(color: muted, fontSize: 12),
                       ),
                     ],
                   ),
@@ -203,20 +203,20 @@ class TripCard extends StatelessWidget {
                   children: [
                     Text(
                       money(trip.totalSpent),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: ink,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        fontFeatures: [FontFeature.tabularFigures()],
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                    const Text('spent', style: TextStyle(color: muted, fontSize: 11)),
+                    Text('spent', style: TextStyle(color: muted, fontSize: 11)),
                   ],
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: line),
+          Divider(height: 1, color: line),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
             child: Row(
@@ -229,7 +229,7 @@ class TripCard extends StatelessWidget {
                       Text.rich(
                         TextSpan(
                           text: 'Balance: ',
-                          style: const TextStyle(color: muted, fontSize: 11.5),
+                          style: TextStyle(color: muted, fontSize: 11.5),
                           children: [
                             TextSpan(
                               text: net == null
@@ -237,7 +237,7 @@ class TripCard extends StatelessWidget {
                                   : net.abs() < 0.5
                                   ? 'Settled'
                                   : (net > 0 ? 'You’re owed' : 'You owe'),
-                              style: const TextStyle(color: ink, fontWeight: FontWeight.w600),
+                              style: TextStyle(color: ink, fontWeight: FontWeight.w600),
                             ),
                           ],
                         ),
@@ -254,7 +254,7 @@ class TripCard extends StatelessWidget {
                   children: [
                     Text(
                       'Sharing: ${trip.memberCount} ${trip.memberCount == 1 ? 'person' : 'persons'}',
-                      style: const TextStyle(color: muted, fontSize: 11.5),
+                      style: TextStyle(color: muted, fontSize: 11.5),
                     ),
                     const SizedBox(height: 4),
                     AvatarStack(members: trip.members, size: 22, max: 4),
@@ -323,9 +323,9 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(22, 12, 22, 24 + bottom),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: paper,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SafeArea(
         top: false,
@@ -338,11 +338,11 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
                 child: Container(
                   width: 38,
                   height: 4,
-                  decoration: BoxDecoration(color: const Color(0xFFD5D8E2), borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(color: muted.withValues(alpha: .35), borderRadius: BorderRadius.circular(4)),
                 ),
               ),
               const SizedBox(height: 22),
-              const Text(
+              Text(
                 'Start a new split',
                 style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
               ),
@@ -368,7 +368,7 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
                       selected: _kind == k.id,
                       onSelected: (_) => setState(() => _kind = k.id),
                       showCheckmark: false,
-                      backgroundColor: Colors.white,
+                      backgroundColor: surface,
                       selectedColor: k.color.withValues(alpha: .12),
                       side: BorderSide(color: _kind == k.id ? k.color.withValues(alpha: .45) : line),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -401,14 +401,14 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
                   decoration: cardDecoration(radius: 14),
                   child: Row(
                     children: [
-                      const Icon(Icons.event_outlined, size: 18, color: muted),
+                      Icon(Icons.event_outlined, size: 18, color: muted),
                       const SizedBox(width: 10),
                       Text(
                         _start == null ? 'Today' : formatDate(_start!),
-                        style: const TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w600),
+                        style: TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w600),
                       ),
                       const Spacer(),
-                      const Icon(Icons.chevron_right_rounded, color: muted, size: 18),
+                      Icon(Icons.chevron_right_rounded, color: muted, size: 18),
                     ],
                   ),
                 ),
@@ -425,7 +425,7 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_error!, style: const TextStyle(color: negative, fontSize: 12)),
+                  child: Text(_error!, style: TextStyle(color: negative, fontSize: 12)),
                 ),
               SizedBox(
                 width: double.infinity,
@@ -434,10 +434,10 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
                   onPressed: _busy ? null : _create,
                   style: primaryButton(radius: 16),
                   child: _busy
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: onAccent),
                         )
                       : const Text('Create trip', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
@@ -493,9 +493,9 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(22, 12, 22, 24 + bottom),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: paper,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SafeArea(
         top: false,
@@ -508,16 +508,16 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
                 child: Container(
                   width: 38,
                   height: 4,
-                  decoration: BoxDecoration(color: const Color(0xFFD5D8E2), borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(color: muted.withValues(alpha: .35), borderRadius: BorderRadius.circular(4)),
                 ),
               ),
               const SizedBox(height: 22),
-              const Text(
+              Text(
                 'Join a trip',
                 style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
               ),
               const SizedBox(height: 5),
-              const Text(
+              Text(
                 'Ask whoever created the trip for their invite code.',
                 style: TextStyle(color: muted, fontSize: 12),
               ),
@@ -533,7 +533,7 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_error!, style: const TextStyle(color: negative, fontSize: 12)),
+                  child: Text(_error!, style: TextStyle(color: negative, fontSize: 12)),
                 ),
               SizedBox(
                 width: double.infinity,
@@ -542,10 +542,10 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
                   onPressed: _busy ? null : _join,
                   style: primaryButton(radius: 16),
                   child: _busy
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: onAccent),
                         )
                       : const Text('Join trip', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
@@ -640,9 +640,9 @@ class _InviteSheetState extends State<_InviteSheet> {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(22, 12, 22, 24 + bottom),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: paper,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SafeArea(
         top: false,
@@ -655,10 +655,10 @@ class _InviteSheetState extends State<_InviteSheet> {
               const SizedBox(height: 22),
               Text(
                 'Invite to ${widget.trip.name}',
-                style: const TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
+                style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
               ),
               const SizedBox(height: 5),
-              const Text(
+              Text(
                 'Email them an invite: once they install TripSplit and sign in with that Gmail, they land straight in this trip.',
                 style: TextStyle(color: muted, fontSize: 12),
               ),
@@ -668,7 +668,7 @@ class _InviteSheetState extends State<_InviteSheet> {
               Container(
                 padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: surface,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: line),
                 ),
@@ -677,7 +677,7 @@ class _InviteSheetState extends State<_InviteSheet> {
                     Expanded(
                       child: Text(
                         widget.trip.inviteCode,
-                        style: const TextStyle(color: ink, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 4),
+                        style: TextStyle(color: ink, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 4),
                       ),
                     ),
                     TextButton.icon(
@@ -705,7 +705,7 @@ class _InviteSheetState extends State<_InviteSheet> {
                 decoration: appInputDecoration('name@gmail.com', Icons.mail_outline_rounded),
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Opens your email app with the download link and how to join. You tap Send.',
                 style: TextStyle(color: muted, fontSize: 11.5),
               ),
@@ -713,7 +713,7 @@ class _InviteSheetState extends State<_InviteSheet> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_error!, style: const TextStyle(color: negative, fontSize: 12)),
+                  child: Text(_error!, style: TextStyle(color: negative, fontSize: 12)),
                 ),
               SizedBox(
                 width: double.infinity,

@@ -11,3 +11,8 @@ const googleMapsApiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 /// Firebase Auth signs in with; it is a public identifier, not a secret. The
 /// app's release SHA-1 must be registered on the Firebase Android app.
 const googleWebClientId = '442536622738-q17cm7jj8fqlb40os36qc2n722hbmmlv.apps.googleusercontent.com';
+
+/// The push relay (push-worker/worker.js, a free Cloudflare Worker) that sends
+/// tripmates an instant notification when someone adds an expense. Empty
+/// until it's deployed: then only the in-app and 15-minute checks notify.
+const pushRelayUrl = '';

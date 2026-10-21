@@ -1,10 +1,14 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api_client.dart';
+import 'expense_notifier.dart';
 import 'models.dart';
 import 'theme.dart';
 import 'trip_store.dart';
+import 'screens/trip_people.dart';
 import 'upi_pay.dart';
 
 /// Google serves profile photos at any size; ask for one sharp at [size].
@@ -12,6 +16,64 @@ String? sizedPhoto(String? url, double size) {
   if (url == null) return null;
   final px = (size * 3).round();
   return url.contains(RegExp(r'=s\d+-c$')) ? url.replaceFirst(RegExp(r'=s\d+-c$'), '=s$px-c') : url;
+}
+
+/// The light/dark switch at the top of every screen: a sun or a moon that
+/// turns as it flips.
+class ThemeToggle extends StatelessWidget {
+  const ThemeToggle({super.key, this.color});
+
+  /// Defaults to [ink]; white over the dark profile header.
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = AppTheme.instance.dark;
+    return IconButton(
+      tooltip: dark ? 'Light theme' : 'Dark theme',
+      onPressed: AppTheme.instance.toggle,
+      icon: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 350),
+        transitionBuilder: (child, animation) => RotationTransition(
+          turns: Tween(begin: .6, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
+          child: FadeTransition(opacity: animation, child: child),
+        ),
+        child: Icon(
+          dark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+          key: ValueKey(dark),
+          color: color ?? ink,
+          size: 22,
+        ),
+      ),
+    );
+  }
+}
+
+final _embedded = <String, Uint8List>{};
+
+/// A profile photo: a web address (Google's), or a `data:` URI for one the user
+/// picked themselves (stored in Firestore, as the free plan has no Storage).
+/// Shows [fallback] while it can't be drawn.
+Widget profilePhoto(String url, Widget fallback) {
+  Widget fade(BuildContext _, Widget child, int? frame, bool sync) => AnimatedOpacity(
+    opacity: sync || frame != null ? 1 : 0,
+    duration: const Duration(milliseconds: 250),
+    child: child,
+  );
+  if (url.startsWith('data:')) {
+    // Decoded once per photo, so every rebuild reuses the same bytes.
+    final bytes = _embedded[url] ??= () {
+      if (_embedded.length > 64) _embedded.clear();
+      try {
+        return base64Decode(url.substring(url.indexOf(',') + 1));
+      } catch (_) {
+        return Uint8List(0);
+      }
+    }();
+    if (bytes.isEmpty) return fallback;
+    return Image.memory(bytes, fit: BoxFit.cover, gaplessPlayback: true, errorBuilder: (_, _, _) => fallback);
+  }
+  return Image.network(url, fit: BoxFit.cover, errorBuilder: (_, _, _) => fallback, frameBuilder: fade);
 }
 
 /// Anyone's profile photo, or their initials on their member colour.
@@ -23,10 +85,14 @@ class MemberAvatar extends StatelessWidget {
     this.photoUrl,
     this.size = 32,
     this.ring = 0,
+    this.tripId,
   });
 
-  MemberAvatar.of(TripMember member, {Key? key, double size = 32, double ring = 0})
-    : this(key: key, id: member.id, name: member.name, photoUrl: member.photoUrl, size: size, ring: ring);
+  MemberAvatar.of(TripMember member, {Key? key, double size = 32, double ring = 0, String? tripId})
+    : this(key: key, id: member.id, name: member.name, photoUrl: member.photoUrl, size: size, ring: ring, tripId: tripId);
+
+  /// When set, tapping the face opens this person's page on that trip.
+  final String? tripId;
 
   final String id;
   final String name;
@@ -58,26 +124,19 @@ class MemberAvatar extends StatelessWidget {
     final avatar = ClipOval(
       child: SizedBox.square(
         dimension: size,
-        child: photo == null
-            ? fallback
-            : Image.network(
-                photo,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => fallback,
-                frameBuilder: (_, child, frame, sync) => AnimatedOpacity(
-                  opacity: sync || frame != null ? 1 : 0,
-                  duration: const Duration(milliseconds: 250),
-                  child: child,
-                ),
-              ),
+        child: photo == null ? fallback : profilePhoto(photo, fallback),
       ),
     );
-    if (ring == 0) return avatar;
-    return Container(
-      padding: EdgeInsets.all(ring),
-      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-      child: avatar,
-    );
+    final face = ring == 0
+        ? avatar
+        : Container(
+            padding: EdgeInsets.all(ring),
+            decoration: BoxDecoration(color: surface, shape: BoxShape.circle),
+            child: avatar,
+          );
+    final trip = tripId;
+    if (trip == null || id.isEmpty) return face;
+    return GestureDetector(onTap: () => openMember(context, trip, id), child: face);
   }
 }
 
@@ -113,7 +172,7 @@ class AvatarStack extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: accentSoft,
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
+                  border: Border.all(color: surface, width: 2),
                 ),
                 child: Text(
                   '+$extra',
@@ -161,25 +220,30 @@ class AmountPill extends StatelessWidget {
 
 /// A thin-outline icon inside a soft tinted circle.
 class IconCircle extends StatelessWidget {
-  const IconCircle({super.key, required this.icon, this.color = accent, this.size = 40, this.outlined = false});
+  const IconCircle({super.key, required this.icon, this.color, this.size = 40, this.outlined = false});
   final IconData icon;
-  final Color color;
+
+  /// Defaults to [accent].
+  final Color? color;
   final double size;
 
   /// An outlined ring instead of a tinted fill (used for expense categories).
   final bool outlined;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      color: outlined ? Colors.white : color.withValues(alpha: .12),
-      shape: BoxShape.circle,
-      border: outlined ? Border.all(color: color.withValues(alpha: .35), width: 1.2) : null,
-    ),
-    child: Icon(icon, color: color, size: size * .48),
-  );
+  Widget build(BuildContext context) {
+    final color = this.color ?? accent;
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: outlined ? surface : color.withValues(alpha: .12),
+        shape: BoxShape.circle,
+        border: outlined ? Border.all(color: color.withValues(alpha: .35), width: 1.2) : null,
+      ),
+      child: Icon(icon, color: color, size: size * .48),
+    );
+  }
 }
 
 /// "Your splits                  See all ↗"
@@ -193,7 +257,7 @@ class SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       Expanded(
-        child: Text(title, style: const TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700)),
+        child: Text(title, style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700)),
       ),
       if (action != null)
         InkWell(
@@ -204,9 +268,9 @@ class SectionHeader extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(action!, style: const TextStyle(color: accent, fontSize: 12.5, fontWeight: FontWeight.w600)),
+                Text(action!, style: TextStyle(color: accent, fontSize: 12.5, fontWeight: FontWeight.w600)),
                 const SizedBox(width: 2),
-                const Icon(Icons.north_east_rounded, color: accent, size: 14),
+                Icon(Icons.north_east_rounded, color: accent, size: 14),
               ],
             ),
           ),
@@ -235,10 +299,10 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Material(
-    color: Colors.white,
+    color: surface,
     shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(cardRadius),
-      side: selected ? const BorderSide(color: accent, width: 1.5) : const BorderSide(color: line),
+      side: selected ? BorderSide(color: accent, width: 1.5) : BorderSide(color: line),
     ),
     clipBehavior: Clip.antiAlias,
     child: InkWell(
@@ -261,9 +325,9 @@ Future<T?> showAppSheet<T>(
   backgroundColor: Colors.transparent,
   builder: (context) => Container(
     constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * .88),
-    decoration: const BoxDecoration(
+    decoration: BoxDecoration(
       color: paper,
-      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
     ),
     child: SafeArea(
       top: false,
@@ -275,10 +339,10 @@ Future<T?> showAppSheet<T>(
           children: [
             const SheetHandle(),
             const SizedBox(height: 16),
-            Text(title, style: const TextStyle(color: ink, fontSize: 19, fontWeight: FontWeight.w700, letterSpacing: -.3)),
+            Text(title, style: TextStyle(color: ink, fontSize: 19, fontWeight: FontWeight.w700, letterSpacing: -.3)),
             if (subtitle != null) ...[
               const SizedBox(height: 3),
-              Text(subtitle, style: const TextStyle(color: muted, fontSize: 12.5)),
+              Text(subtitle, style: TextStyle(color: muted, fontSize: 12.5)),
             ],
             const SizedBox(height: 14),
             ...children(context),
@@ -297,7 +361,7 @@ class SheetHandle extends StatelessWidget {
     child: Container(
       width: 38,
       height: 4,
-      decoration: BoxDecoration(color: const Color(0xFFD5D8E2), borderRadius: BorderRadius.circular(4)),
+      decoration: BoxDecoration(color: muted.withValues(alpha: .35), borderRadius: BorderRadius.circular(4)),
     ),
   );
 }
@@ -318,16 +382,16 @@ Widget groupedCard(List<Widget> rows, {double indent = 0}) => Container(
 
 ButtonStyle primaryButton({double radius = 14}) => FilledButton.styleFrom(
   backgroundColor: accent,
-  foregroundColor: Colors.white,
+  foregroundColor: onAccent,
   padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
   textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
 );
 
-ButtonStyle secondaryButton({Color color = ink, double radius = 14}) => OutlinedButton.styleFrom(
-  foregroundColor: color,
-  backgroundColor: Colors.white,
-  side: const BorderSide(color: line),
+ButtonStyle secondaryButton({Color? color, double radius = 14}) => OutlinedButton.styleFrom(
+  foregroundColor: color ?? ink,
+  backgroundColor: surface,
+  side: BorderSide(color: line),
   padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
   textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
@@ -338,84 +402,164 @@ ButtonStyle secondaryButton({Color color = ink, double radius = 14}) => Outlined
 /// Pays [debt] through a UPI app when the other person has a UPI ID, then
 /// records it as a settle-up payment so the balances update. Returns true if
 /// a payment was recorded.
+/// Pay what you owe: a sheet with the UPI apps on the phone, cash, another
+/// way, or a reminder for later. True once a payment was recorded.
 Future<bool> payDebt(BuildContext context, Debt debt) async {
-  final other = debt.other;
-  final upiId = other?.upiId;
-  final messenger = ScaffoldMessenger.of(context);
   if (debt.otherId == null) {
-    messenger.showSnackBar(const SnackBar(content: Text('Refresh and try again — the server is still updating.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Refresh and try again — the server is still updating.')),
+    );
     return false;
   }
+  final choice = await showAppSheet<String>(
+    context,
+    title: 'Pay ${debt.otherName}',
+    subtitle: debt.other?.upiId == null
+        ? '${debt.otherName} hasn’t added a UPI ID: pick your UPI app and scan their QR.'
+        : 'Pick your UPI app: it opens with ${debt.otherName}’s UPI ID and the amount filled in.',
+    children: (ctx) => [
+      _payAmountCard(debt),
+      const SizedBox(height: 16),
+      SettleOptions(debt: debt, onChoose: (c) => Navigator.pop(ctx, c)),
+    ],
+  );
+  if (choice == null || !context.mounted) return false;
+  return settleDebt(context, debt, choice);
+}
 
-  String method = 'UPI';
-  if (upiId == null) {
-    final choice = await showAppSheet<String>(
-      context,
-      title: 'Pay ${debt.otherName}',
-      subtitle: '${debt.otherName} hasn’t added a UPI ID yet. Pay another way, then mark it paid here.',
-      children: (ctx) => [
-        _payAmountCard(debt),
-        const SizedBox(height: 14),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () => Navigator.pop(ctx, 'Cash'),
-            icon: const Icon(Icons.payments_outlined, size: 18),
-            label: const Text('I paid in cash'),
-            style: primaryButton(),
-          ),
+/// The ways to settle [debt], as [onChoose] values: `app:<package>` (a UPI
+/// app), `cash`, `other` (paid by UPI another way) and `remind`. Shown in the
+/// Pay sheet and on a balance's settle-up page.
+class SettleOptions extends StatelessWidget {
+  const SettleOptions({super.key, required this.debt, required this.onChoose});
+  final Debt debt;
+  final ValueChanged<String> onChoose;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (debt.iOwe) ...[
+        fieldLabel('PAY WITH UPI'),
+        const SizedBox(height: 10),
+        FutureBuilder<List<UpiApp>>(
+          future: UpiPay.apps(),
+          builder: (context, snap) {
+            final apps = snap.data;
+            if (apps == null) {
+              return SizedBox(height: 76, child: Center(child: CircularProgressIndicator(color: accent)));
+            }
+            if (apps.isEmpty) {
+              return Text('No UPI app found on this phone.', style: TextStyle(color: muted, fontSize: 12.5));
+            }
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [for (final app in apps.take(8)) _UpiAppButton(app: app, onTap: () => onChoose('app:${app.package}'))],
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: () => onChoose('cash'),
+          icon: const Icon(Icons.payments_outlined, size: 18),
+          label: const Text('I paid in cash'),
+          style: primaryButton(),
         ),
         const SizedBox(height: 8),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.pop(ctx, 'UPI'),
-            icon: const Icon(Icons.qr_code_2_outlined, size: 18),
-            label: const Text('I paid by UPI another way'),
-            style: secondaryButton(),
-          ),
+        OutlinedButton.icon(
+          onPressed: () => onChoose('other'),
+          icon: const Icon(Icons.qr_code_2_outlined, size: 18),
+          label: const Text('I paid by UPI another way'),
+          style: secondaryButton(),
         ),
+        const SizedBox(height: 8),
       ],
-    );
-    if (choice == null) return false;
-    method = choice;
-  } else {
-    final status = await UpiPay.pay(
-      upiId: upiId,
-      name: debt.otherName,
-      amount: debt.amount,
-      note: 'TripSplit · ${debt.trip.name}',
-    );
-    if (!context.mounted) return false;
-    switch (status) {
-      case UpiPayStatus.noApp:
-        await Clipboard.setData(ClipboardData(text: upiId));
-        messenger.showSnackBar(SnackBar(content: Text('No UPI app found. $upiId copied — pay from any app.')));
-        return false;
-      case UpiPayStatus.failed:
-        messenger.showSnackBar(const SnackBar(content: Text('The payment didn’t go through.')));
-        return false;
-      case UpiPayStatus.unknown:
-        final paid = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: Colors.white,
-            title: const Text('Did the payment go through?', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-            content: Text(
-              'If you paid ${money(debt.amount)} to ${debt.otherName}, mark it paid so everyone’s balance updates.',
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not yet')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), style: primaryButton(radius: 12), child: const Text('Mark paid')),
-            ],
+      OutlinedButton.icon(
+        onPressed: () => onChoose('remind'),
+        icon: const Icon(Icons.alarm_add_outlined, size: 18),
+        label: Text(debt.iOwe ? 'Remind me to settle later' : 'Remind me to follow up'),
+        style: secondaryButton(),
+      ),
+    ],
+  );
+}
+
+class _UpiAppButton extends StatelessWidget {
+  const _UpiAppButton({required this.app, required this.onTap});
+  final UpiApp app;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(16),
+    child: Container(
+      width: 76,
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+      decoration: cardDecoration(radius: 16),
+      child: Column(
+        children: [
+          Image.memory(app.icon, width: 36, height: 36, gaplessPlayback: true),
+          const SizedBox(height: 6),
+          Text(
+            app.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600),
           ),
-        );
-        if (paid != true) return false;
-      case UpiPayStatus.success:
-        break;
+        ],
+      ),
+    ),
+  );
+}
+
+/// Carries out a [SettleOptions] choice for [debt]. True once a payment was
+/// recorded (a reminder isn't one).
+Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
+  final messenger = ScaffoldMessenger.of(context);
+  if (choice == 'remind') {
+    await pickSettleReminder(context, debt);
+    return false;
+  }
+  String method = choice == 'cash' ? 'Cash' : 'UPI';
+  if (choice.startsWith('app:')) {
+    final package = choice.substring(4);
+    final upiId = debt.other?.upiId;
+    if (upiId != null) {
+      // Their UPI ID is known: the app opens on the payment, filled in.
+      final status = await UpiPay.pay(
+        upiId: upiId,
+        name: debt.otherName,
+        amount: debt.amount,
+        note: 'TripSplit · ${debt.trip.name}',
+        package: package,
+      );
+      if (!context.mounted) return false;
+      switch (status) {
+        case UpiPayStatus.noApp:
+          await Clipboard.setData(ClipboardData(text: upiId));
+          messenger.showSnackBar(SnackBar(content: Text('Couldn’t open that app. $upiId copied — pay from any app.')));
+          return false;
+        case UpiPayStatus.failed:
+          messenger.showSnackBar(const SnackBar(content: Text('The payment didn’t go through.')));
+          return false;
+        case UpiPayStatus.unknown:
+          if (!await _askPaid(context, debt)) return false;
+        case UpiPayStatus.success:
+          break;
+      }
+    } else {
+      // No UPI ID to fill in: open the app to scan their QR, then confirm.
+      if (!await UpiPay.open(package)) {
+        messenger.showSnackBar(const SnackBar(content: Text('Couldn’t open that app.')));
+        return false;
+      }
+      if (!context.mounted || !await _askPaid(context, debt, scanned: true)) return false;
     }
   }
-
+  if (!context.mounted) return false;
   try {
     await ApiClient.instance.recordPayment(
       tripId: debt.trip.id,
@@ -433,6 +577,62 @@ Future<bool> payDebt(BuildContext context, Debt debt) async {
   }
 }
 
+Future<bool> _askPaid(BuildContext context, Debt debt, {bool scanned = false}) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: paper,
+        title: const Text('Did the payment go through?', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        content: Text(
+          scanned
+              ? 'Scan ${debt.otherName}’s UPI QR in the app you opened and pay ${money(debt.amount)}. Then mark it paid here so everyone’s balance updates.'
+              : 'If you paid ${money(debt.amount)} to ${debt.otherName}, mark it paid so everyone’s balance updates.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not yet')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), style: primaryButton(radius: 12), child: const Text('Mark paid')),
+        ],
+      ),
+    ) ==
+    true;
+
+/// Asks when to be reminded about [debt] and sets the reminder. True if set.
+Future<bool> pickSettleReminder(BuildContext context, Debt debt) async {
+  final other = debt.other;
+  if (other == null) return false;
+  final now = DateTime.now();
+  final day = await showDatePicker(
+    context: context,
+    helpText: 'Remind me on',
+    initialDate: now.add(const Duration(days: 1)),
+    firstDate: now,
+    lastDate: now.add(const Duration(days: 365)),
+  );
+  if (day == null || !context.mounted) return false;
+  final time = await showTimePicker(
+    context: context,
+    helpText: 'At',
+    initialTime: const TimeOfDay(hour: 10, minute: 0),
+  );
+  if (time == null || !context.mounted) return false;
+  final when = DateTime(day.year, day.month, day.day, time.hour, time.minute);
+  final messenger = ScaffoldMessenger.of(context);
+  if (!when.isAfter(DateTime.now())) {
+    messenger.showSnackBar(const SnackBar(content: Text('Pick a time that’s still to come.')));
+    return false;
+  }
+  try {
+    await ExpenseNotifier.remindToSettle(trip: debt.trip, other: other, amount: debt.amount, iOwe: debt.iOwe, when: when);
+  } catch (_) {
+    messenger.showSnackBar(const SnackBar(content: Text('Couldn’t set the reminder. Allow notifications for TripSplit.')));
+    return false;
+  }
+  messenger.showSnackBar(
+    SnackBar(content: Text('Reminder set for ${formatDateAndTime(when)}. Tapping it opens this balance.')),
+  );
+  return true;
+}
+
 Widget _payAmountCard(Debt debt) => Container(
   padding: const EdgeInsets.all(14),
   decoration: cardDecoration(),
@@ -444,12 +644,12 @@ Widget _payAmountCard(Debt debt) => Container(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(debt.otherName, style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
-            Text(debt.trip.name, style: const TextStyle(color: muted, fontSize: 12)),
+            Text(debt.otherName, style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
+            Text(debt.trip.name, style: TextStyle(color: muted, fontSize: 12)),
           ],
         ),
       ),
-      Text(money(debt.amount), style: const TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w700)),
+      Text(money(debt.amount), style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w700)),
     ],
   ),
 );
@@ -469,19 +669,23 @@ class DebtRow extends StatelessWidget {
       child: Row(
         children: [
           if (other != null)
-            MemberAvatar.of(other, size: 34)
+            MemberAvatar.of(other, size: 34, tripId: debt.trip.id)
           else
             MemberAvatar(id: debt.otherId ?? '', name: debt.otherName, size: 34),
           const SizedBox(width: 12),
           Expanded(
-            child: Column(
+            // The name opens their page too.
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: debt.otherId == null ? null : () => openMember(context, debt.trip.id, debt.otherId!),
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   debt.iOwe ? 'You owe ${debt.otherName}' : '${debt.otherName} owes you',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: ink, fontSize: 13.5, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: ink, fontSize: 13.5, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 3),
                 Row(
@@ -494,13 +698,14 @@ class DebtRow extends StatelessWidget {
                           debt.trip.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: muted, fontSize: 11.5),
+                          style: TextStyle(color: muted, fontSize: 11.5),
                         ),
                       ),
                     ],
                   ],
                 ),
               ],
+              ),
             ),
           ),
           if (debt.iOwe)
@@ -510,12 +715,19 @@ class DebtRow extends StatelessWidget {
               },
               style: FilledButton.styleFrom(
                 backgroundColor: accent,
-                foregroundColor: Colors.white,
+                foregroundColor: onAccent,
                 visualDensity: VisualDensity.compact,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               child: const Text('Pay', style: TextStyle(fontWeight: FontWeight.w700)),
+            )
+          else
+            // They owe you: set a reminder to follow it up.
+            IconButton(
+              tooltip: 'Remind me',
+              onPressed: () => pickSettleReminder(context, debt),
+              icon: Icon(Icons.alarm_add_outlined, color: accent, size: 22),
             ),
         ],
       ),

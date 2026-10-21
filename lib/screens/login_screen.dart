@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../google_auth.dart';
 import '../theme.dart';
+import '../widgets.dart';
 import 'home_shell.dart';
 import 'nickname_screen.dart';
 
@@ -81,11 +82,16 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _reveal(0, const _Emblem()),
+                      Row(
+                        children: [
+                          Expanded(child: _reveal(0, const _Emblem())),
+                          const ThemeToggle(),
+                        ],
+                      ),
                       const SizedBox(height: 30),
                       _reveal(
                         1,
-                        const Text(
+                        Text(
                           'Split trips,\nnot friendships.',
                           style: TextStyle(
                             color: ink,
@@ -99,7 +105,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       const SizedBox(height: 12),
                       _reveal(
                         2,
-                        const Text(
+                        Text(
                           'One shared ledger for everyone on the trip — who paid, who owes, and the fewest payments to settle up.',
                           style: TextStyle(color: muted, fontSize: 14, height: 1.45),
                         ),
@@ -107,7 +113,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       const SizedBox(height: 26),
                       _reveal(
                         3,
-                        const Column(
+                        Column(
                           children: [
                             _Feature(
                               icon: Icons.groups_outlined,
@@ -115,13 +121,13 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               title: 'Shared with your group',
                               subtitle: 'Join with an invite code; everyone sees the same expenses.',
                             ),
-                            _Feature(
+                            const _Feature(
                               icon: Icons.bolt_outlined,
                               color: Color(0xFFE0A96D),
                               title: 'UPI payments, auto-added',
                               subtitle: 'Pay with any UPI app and add it to the trip in one tap.',
                             ),
-                            _Feature(
+                            const _Feature(
                               icon: Icons.handshake_outlined,
                               color: Color(0xFF7FA8D1),
                               title: 'Settle up simply',
@@ -142,18 +148,18 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                                 margin: const EdgeInsets.only(bottom: 12),
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFFCE8EA),
+                                  color: negative.withValues(alpha: .1),
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(Icons.error_outline_rounded, size: 18, color: negative),
+                                    Icon(Icons.error_outline_rounded, size: 18, color: negative),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: Text(
                                         _error!,
-                                        style: const TextStyle(color: ink, fontSize: 12.5, height: 1.35),
+                                        style: TextStyle(color: ink, fontSize: 12.5, height: 1.35),
                                       ),
                                     ),
                                   ],
@@ -164,11 +170,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       const SizedBox(height: 14),
                       _reveal(
                         5,
-                        const Row(
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.lock_outline_rounded, size: 13, color: muted),
-                            SizedBox(width: 6),
+                            const SizedBox(width: 6),
                             Flexible(
                               child: Text(
                                 'No OTP. You stay signed in until you sign out.',
@@ -213,9 +219,9 @@ class _Emblem extends StatelessWidget {
           child: Image.asset('assets/splash_logo.png', fit: BoxFit.contain),
         ),
         const SizedBox(width: 14),
-        const Text.rich(
+        Text.rich(
           TextSpan(
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 2.4),
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 2.4),
             children: [
               TextSpan(text: 'TRIP', style: TextStyle(color: ink)),
               TextSpan(text: 'SPLIT', style: TextStyle(color: accent)),
@@ -255,9 +261,9 @@ class _Feature extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
+                Text(title, style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(color: muted, fontSize: 12.5, height: 1.35)),
+                Text(subtitle, style: TextStyle(color: muted, fontSize: 12.5, height: 1.35)),
               ],
             ),
           ),
@@ -290,14 +296,14 @@ class _GoogleButton extends StatelessWidget {
             foregroundColor: ink,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
-              side: const BorderSide(color: line),
+              side: BorderSide(color: line),
             ),
           ),
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 180),
             child: busy
-                ? const SizedBox(
-                    key: ValueKey('busy'),
+                ? SizedBox(
+                    key: const ValueKey('busy'),
                     width: 22,
                     height: 22,
                     child: CircularProgressIndicator(strokeWidth: 2.4, color: accent),

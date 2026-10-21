@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
+import 'expense_notifier.dart';
 import 'ledger.dart';
 import 'models.dart';
 
@@ -115,6 +116,9 @@ class TripStore extends ChangeNotifier {
           activityError = null;
           _buildActivity();
           notifyListeners();
+          // New expenses from tripmates become phone notifications too.
+          final trip = trips?.where((t) => t.id == id).firstOrNull;
+          if (trip != null) unawaited(ExpenseNotifier.fromLive(trip, expenses).catchError((Object _) {}));
         },
         onError: (Object e) {
           activityError = 'Couldn’t load notifications ($e).';
@@ -197,6 +201,15 @@ class TripStore extends ChangeNotifier {
     _activitySeenAt = newest;
     notifyListeners();
     await (await SharedPreferences.getInstance()).setString(_seenKey, newest.toIso8601String());
+  }
+
+  /// Re-applies the user's private names for tripmates everywhere, after one
+  /// changes.
+  void applyPrivateNames() {
+    trips = trips?.map((t) => t.withPrivateNames()).toList();
+    revision++;
+    _buildActivity();
+    notifyListeners();
   }
 
   /// Stops listening and forgets everything (on sign-out).

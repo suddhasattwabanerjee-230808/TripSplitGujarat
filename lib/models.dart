@@ -38,6 +38,7 @@ class AppUser {
     this.photoUrl,
     this.upiId,
     this.nicknameSet = false,
+    this.customPhoto = false,
   });
   final String id;
 
@@ -56,6 +57,10 @@ class AppUser {
   /// Profile; until then that screen opens first.
   final bool nicknameSet;
 
+  /// True when they picked their own photo ([photoUrl] is then a `data:` URI);
+  /// otherwise it follows their Google photo.
+  final bool customPhoto;
+
   bool get hasGoogle => email != null;
 
   String get initials => _initials(name);
@@ -68,6 +73,7 @@ class AppUser {
     photoUrl: data['photoUrl'] as String?,
     upiId: data['upiId'] as String?,
     nicknameSet: data['nicknameSet'] == true,
+    customPhoto: data['customPhoto'] == true,
   );
 
   /// The copy kept on each trip, so faces and "Pay" need no extra reads.
@@ -75,20 +81,42 @@ class AppUser {
 }
 
 class TripMember {
-  const TripMember({required this.id, required this.name, this.photoUrl, this.upiId});
+  const TripMember({required this.id, required this.name, String? ownName, this.photoUrl, this.upiId})
+    : ownName = ownName ?? name;
   final String id;
+
+  /// The name shown in the app: the signed-in user's private name for them
+  /// if they set one (see [privateNames]), otherwise [ownName].
   final String name;
+
+  /// The nickname they chose for themselves.
+  final String ownName;
   final String? photoUrl;
   final String? upiId;
 
   String get initials => _initials(name);
 
-  factory TripMember.fromMap(String id, Map<String, dynamic>? data) => TripMember(
-    id: id,
-    name: data?['name'] as String? ?? 'Someone',
-    photoUrl: data?['photoUrl'] as String?,
-    upiId: data?['upiId'] as String?,
-  );
+  /// Whether [name] is the signed-in user's own name for them.
+  bool get renamed => name != ownName;
+
+  /// The signed-in user's private names for tripmates (id → name), kept in
+  /// their own profile; applied wherever members are read.
+  static Map<String, String> privateNames = const {};
+
+  factory TripMember.fromMap(String id, Map<String, dynamic>? data) {
+    final own = data?['name'] as String? ?? 'Someone';
+    return TripMember(
+      id: id,
+      name: privateNames[id] ?? own,
+      ownName: own,
+      photoUrl: data?['photoUrl'] as String?,
+      upiId: data?['upiId'] as String?,
+    );
+  }
+
+  /// This member with the current [privateNames] applied.
+  TripMember renamedNow() =>
+      TripMember(id: id, name: privateNames[id] ?? ownName, ownName: ownName, photoUrl: photoUrl, upiId: upiId);
 }
 
 class Trip {
@@ -126,6 +154,21 @@ class Trip {
   final Map<String, double> owed;
 
   int get memberCount => members.length;
+
+  /// This trip with the current [TripMember.privateNames] applied.
+  Trip withPrivateNames() => Trip(
+    id: id,
+    name: name,
+    destination: destination,
+    inviteCode: inviteCode,
+    members: [for (final m in members) m.renamedNow()],
+    kind: kind,
+    startDate: startDate,
+    createdAt: createdAt,
+    totalSpent: totalSpent,
+    paid: paid,
+    owed: owed,
+  );
 
   TripKind get tripKind => tripKindFor(kind);
 

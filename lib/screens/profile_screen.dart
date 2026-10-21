@@ -1,9 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../api_client.dart';
+import '../expense_notifier.dart';
 import '../google_auth.dart';
 import '../ledger.dart';
 import '../models.dart';
@@ -15,8 +19,8 @@ import 'login_screen.dart';
 import 'trips_ui.dart';
 import 'update_dialog.dart';
 
-const _owe = negative;
-const _hairline = line;
+final _owe = negative;
+final _hairline = line;
 
 /// The signed-in user's Google photo, or their initials on a member colour.
 /// Wrapped in a [Hero] so it flies between the home header and the profile.
@@ -47,18 +51,7 @@ class UserAvatar extends StatelessWidget {
     final avatar = SizedBox.square(
       dimension: size,
       child: ClipOval(
-        child: _photo == null
-            ? fallback
-            : Image.network(
-                _photo!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => fallback,
-                frameBuilder: (_, child, frame, sync) => AnimatedOpacity(
-                  opacity: sync || frame != null ? 1 : 0,
-                  duration: const Duration(milliseconds: 250),
-                  child: child,
-                ),
-              ),
+        child: _photo == null ? fallback : profilePhoto(_photo!, fallback),
       ),
     );
     return hero ? Hero(tag: 'profile-avatar', child: avatar) : avatar;
@@ -81,6 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   bool _upiDetection = true;
   bool _upiAlertsOn = true;
   bool _deleting = false;
+  bool _savingPhoto = false;
   AppUser? _user = ApiClient.instance.currentUser;
   PackageInfo? _packageInfo;
   bool _linking = false;
@@ -159,11 +153,11 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     builder: (ctx) => AlertDialog(
       backgroundColor: paper,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text(
+      title: Text(
         'Allow SMS access',
         style: TextStyle(color: ink, fontWeight: FontWeight.w800, fontSize: 18),
       ),
-      content: const Text(
+      content: Text(
         'Because TripSplit is installed outside the Play Store, Android keeps '
         'SMS access switched off and greys out the toggle. Turn it on by hand:\n\n'
         '1.  Tap “Open settings” below.\n'
@@ -176,7 +170,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('Not now', style: TextStyle(color: muted)),
+          child: Text('Not now', style: TextStyle(color: muted)),
         ),
         FilledButton(
           onPressed: () {
@@ -185,7 +179,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
           },
           style: FilledButton.styleFrom(
             backgroundColor: ink,
-            foregroundColor: Colors.white,
+            foregroundColor: paper,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           child: const Text('Open settings'),
@@ -217,6 +211,66 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
 
   void _toast(String message) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+
+  /// Pick a new photo (gallery or camera), or go back to the Google one.
+  Future<void> _editPhoto() async {
+    final user = _user;
+    if (user == null) return;
+    final choice = await showAppSheet<String>(
+      context,
+      title: 'Profile photo',
+      subtitle: 'What your tripmates see next to your name.',
+      children: (ctx) => [
+        groupedCard([
+          ListTile(
+            leading: Icon(Icons.photo_library_outlined, color: accent),
+            title: const Text('Choose from gallery'),
+            onTap: () => Navigator.pop(ctx, 'gallery'),
+          ),
+          ListTile(
+            leading: Icon(Icons.photo_camera_outlined, color: accent),
+            title: const Text('Take a photo'),
+            onTap: () => Navigator.pop(ctx, 'camera'),
+          ),
+          if (user.customPhoto && user.hasGoogle)
+            ListTile(
+              leading: const GoogleLogo(size: 20),
+              title: const Text('Use my Google photo'),
+              onTap: () => Navigator.pop(ctx, 'google'),
+            ),
+        ]),
+      ],
+    );
+    if (choice == null || !mounted) return;
+    String? dataUri;
+    if (choice != 'google') {
+      // Small and square-ish: it's stored in Firestore and copied onto trips.
+      final picked = await ImagePicker().pickImage(
+        source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        maxWidth: 320,
+        maxHeight: 320,
+        imageQuality: 72,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (bytes.length > 150 * 1024) {
+        _toast('That photo is too large. Try another one.');
+        return;
+      }
+      final type = picked.path.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
+      dataUri = 'data:image/$type;base64,${base64Encode(bytes)}';
+    }
+    setState(() => _savingPhoto = true);
+    try {
+      final updated = await ApiClient.instance.updatePhoto(dataUri);
+      if (mounted) setState(() => _user = updated);
+      TripStore.instance.refresh();
+    } on ApiException catch (e) {
+      _toast(e.message);
+    } finally {
+      if (mounted) setState(() => _savingPhoto = false);
+    }
+  }
 
   Future<void> _editName() async {
     final user = await showModalBottomSheet<AppUser>(
@@ -295,17 +349,17 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       builder: (context) => AlertDialog(
         backgroundColor: paper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text('Sign out?', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+        title: Text('Sign out?', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
         content: Text(
           _user?.hasGoogle == true
               ? 'Your trips stay safe on the server. Sign back in with the same Google account to see them again.'
               : 'This account has no Google account connected, so you would need the old phone login to get back in. Connect Google first to keep your trips.',
-          style: const TextStyle(color: muted, height: 1.4),
+          style: TextStyle(color: muted, height: 1.4),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel', style: TextStyle(color: muted)),
+            child: Text('Cancel', style: TextStyle(color: muted)),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
@@ -316,6 +370,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       ),
     );
     if (confirmed != true) return;
+    await ExpenseNotifier.stop();
     await GoogleAuth.signOut();
     await ApiClient.instance.logOut();
     TripStore.instance.clear();
@@ -347,6 +402,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     try {
       final idToken = await GoogleAuth.signIn();
       await ApiClient.instance.deleteAccount(idToken);
+      await ExpenseNotifier.stop();
       await GoogleAuth.disconnect();
       TripStore.instance.clear();
       if (!mounted) return;
@@ -393,21 +449,33 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                           _sectionLabel('ACCOUNT'),
                           _card([
                             _row(
+                              icon: Icons.account_circle_outlined,
+                              label: 'Profile photo',
+                              value: user.customPhoto ? 'Your own photo' : 'From your Google account',
+                              trailing: Icon(Icons.edit_outlined, size: 17, color: muted),
+                              onTap: _editPhoto,
+                            ),
+                            _row(
                               icon: Icons.badge_outlined,
                               label: 'Nickname',
                               value: user.name,
-                              trailing: const Icon(Icons.edit_outlined, size: 17, color: muted),
+                              trailing: Icon(Icons.edit_outlined, size: 17, color: muted),
                               onTap: _editName,
                             ),
                             _row(
                               icon: Icons.qr_code_2_outlined,
                               label: 'UPI ID',
                               value: user.upiId ?? 'Add one so friends can pay you',
-                              trailing: const Icon(Icons.edit_outlined, size: 17, color: muted),
+                              trailing: Icon(Icons.edit_outlined, size: 17, color: muted),
                               onTap: _editUpiId,
                             ),
                             if (user.email != null)
-                              _row(icon: Icons.alternate_email_rounded, label: 'Email', value: user.email!),
+                              _row(
+                                icon: Icons.alternate_email_rounded,
+                                label: 'Email',
+                                value: user.email!,
+                                trailing: const GoogleLogo(size: 16),
+                              ),
                             if (user.phone != null)
                               _row(icon: Icons.phone_outlined, label: 'Phone', value: user.phone!),
                             _row(
@@ -448,7 +516,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                               icon: Icons.system_update_outlined,
                               label: 'Updates',
                               value: 'Check for a new version',
-                              trailing: const Icon(Icons.chevron_right_rounded, color: muted),
+                              trailing: Icon(Icons.chevron_right_rounded, color: muted),
                               onTap: _checkForUpdate,
                             ),
                           ]),
@@ -461,8 +529,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                               label: const Text('Sign out', style: TextStyle(fontWeight: FontWeight.w700)),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: _owe,
-                                backgroundColor: Colors.white,
-                                side: const BorderSide(color: Color(0xFFF3CDD2)),
+                                backgroundColor: surface,
+                                side: BorderSide(color: negative.withValues(alpha: .3)),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
                             ),
@@ -472,7 +540,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                             child: TextButton.icon(
                               onPressed: _deleting ? null : _deleteAccount,
                               icon: _deleting
-                                  ? const SizedBox(
+                                  ? SizedBox(
                                       width: 16,
                                       height: 16,
                                       child: CircularProgressIndicator(strokeWidth: 2, color: _owe),
@@ -500,13 +568,13 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: EdgeInsets.fromLTRB(8, top + 4, 8, 26),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [ink, Color(0xFF2A3480), accent],
+          colors: [Palette.light.ink, const Color(0xFF2A3480), Palette.light.accent],
         ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
       ),
       child: Column(
         children: [
@@ -526,18 +594,46 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                   style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ),
-              const SizedBox(width: 48),
+              const ThemeToggle(color: Colors.white),
             ],
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: accentGlow,
-              boxShadow: [BoxShadow(color: accentGlow.withValues(alpha: .35), blurRadius: 22)],
+          // Tap the photo to change it.
+          GestureDetector(
+            onTap: _savingPhoto ? null : _editPhoto,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: accentGlow,
+                    boxShadow: [BoxShadow(color: accentGlow.withValues(alpha: .35), blurRadius: 22)],
+                  ),
+                  child: UserAvatar(user: user, size: 88),
+                ),
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .18), blurRadius: 8)],
+                    ),
+                    child: _savingPhoto
+                        ? Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                          )
+                        : Icon(Icons.photo_camera_outlined, size: 17, color: accent),
+                  ),
+                ),
+              ],
             ),
-            child: UserAvatar(user: user, size: 88),
           ),
           const SizedBox(height: 14),
           // The nickname: tap it (or the pencil) to change it.
@@ -573,9 +669,26 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            user.email ?? user.phone ?? '',
-            style: TextStyle(color: Colors.white.withValues(alpha: .72), fontSize: 13),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // The email comes from Google: say so with its logo.
+              if (user.email != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: const GoogleLogo(size: 12),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: Text(
+                  user.email ?? user.phone ?? '',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.white.withValues(alpha: .72), fontSize: 13),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           DecoratedBox(
@@ -661,7 +774,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                     style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -.3),
                   ),
                 ),
-                Text(label, style: const TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
+                Text(label, style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -681,12 +794,12 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Connect your Google account',
             style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Phone codes are gone. Connect Google once to keep this account and all its trips, and stay signed in.',
             style: TextStyle(color: muted, fontSize: 12.5, height: 1.4),
           ),
@@ -702,11 +815,11 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                 foregroundColor: ink,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
-                  side: const BorderSide(color: line),
+                  side: BorderSide(color: line),
                 ),
               ),
               child: _linking
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2.2, color: accent),
@@ -732,8 +845,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     final trips = store.trips;
     return [
       if (trips == null)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
           child: Center(child: CircularProgressIndicator(color: accent)),
         )
       else
@@ -770,7 +883,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
     child: Text(
       text,
-      style: const TextStyle(color: muted, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w800),
+      style: TextStyle(color: muted, fontSize: 11, letterSpacing: 1.2, fontWeight: FontWeight.w800),
     ),
   );
 
@@ -780,7 +893,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     child: Column(
       children: [
         for (var i = 0; i < rows.length; i++) ...[
-          if (i > 0) const Divider(height: 1, indent: 58, color: _hairline),
+          if (i > 0) Divider(height: 1, indent: 58, color: _hairline),
           rows[i],
         ],
       ],
@@ -806,13 +919,13 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: const TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
+                  Text(label, style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Text(
                     value,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -892,9 +1005,9 @@ class _EditFieldSheetState extends State<_EditFieldSheet> {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(22, 12, 22, 24 + bottom),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: paper,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SafeArea(
         top: false,
@@ -907,7 +1020,7 @@ class _EditFieldSheetState extends State<_EditFieldSheet> {
                 width: 38,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFD5D8E2),
+                  color: muted.withValues(alpha: .35),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -915,10 +1028,10 @@ class _EditFieldSheetState extends State<_EditFieldSheet> {
             const SizedBox(height: 22),
             Text(
               widget.title,
-              style: const TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
+              style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
             ),
             const SizedBox(height: 6),
-            Text(widget.subtitle, style: const TextStyle(color: muted, fontSize: 13)),
+            Text(widget.subtitle, style: TextStyle(color: muted, fontSize: 13)),
             const SizedBox(height: 20),
             fieldLabel(widget.label),
             const SizedBox(height: 8),
@@ -935,7 +1048,7 @@ class _EditFieldSheetState extends State<_EditFieldSheet> {
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: Text(_error!, style: const TextStyle(color: _owe, fontSize: 12)),
+                child: Text(_error!, style: TextStyle(color: _owe, fontSize: 12)),
               ),
             SizedBox(
               width: double.infinity,
@@ -944,14 +1057,14 @@ class _EditFieldSheetState extends State<_EditFieldSheet> {
                 onPressed: _busy ? null : _save,
                 style: FilledButton.styleFrom(
                   backgroundColor: accent,
-                  foregroundColor: Colors.white,
+                  foregroundColor: onAccent,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 child: _busy
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: onAccent),
                       )
                     : const Text('Save', style: TextStyle(fontWeight: FontWeight.w700)),
               ),
@@ -986,13 +1099,13 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   Widget build(BuildContext context) => AlertDialog(
     backgroundColor: paper,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-    title: const Text('Delete your account?', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+    title: Text('Delete your account?', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
     content: SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'This can’t be undone. It permanently removes:\n'
             '• your TripSplit login, profile and nickname\n'
             '• your photo and UPI ID on every trip\n'
@@ -1017,7 +1130,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.pop(context, false),
-        child: const Text('Cancel', style: TextStyle(color: muted)),
+        child: Text('Cancel', style: TextStyle(color: muted)),
       ),
       FilledButton(
         onPressed: _confirmed ? () => Navigator.pop(context, true) : null,
@@ -1038,12 +1151,12 @@ class _SettleFirstDialog extends StatelessWidget {
   Widget build(BuildContext context) => AlertDialog(
     backgroundColor: paper,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-    title: const Text('Settle up first', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+    title: Text('Settle up first', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Your account can’t be deleted while money is still owed on a trip. Clear these on the Balance tab, then try again:',
           style: TextStyle(color: muted, height: 1.45, fontSize: 13.5),
         ),
@@ -1057,7 +1170,7 @@ class _SettleFirstDialog extends StatelessWidget {
                   child: Text(
                     o.trip.name,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: ink, fontWeight: FontWeight.w600),
+                    style: TextStyle(color: ink, fontWeight: FontWeight.w600),
                   ),
                 ),
                 const SizedBox(width: 10),

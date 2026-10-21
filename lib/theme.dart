@@ -1,17 +1,126 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // --- Palette ------------------------------------------------------------------
-// A bright, airy look: light grey page, white outlined cards, one blue accent,
-// and green / red kept for money only.
+// Light: a bright, airy look (light grey page, white outlined cards, one blue
+// accent, green / red kept for money only). Dark: the same layout on deep
+// blue-black, cards lifted a step, a brighter accent and softer money colours.
+// The names below always give the current theme's colour (see AppTheme).
 
-const paper = Color(0xFFF5F6FA); // page background
-const ink = Color(0xFF171A26); // primary text
-const muted = Color(0xFF7B8193); // secondary text, inactive icons
-const line = Color(0xFFE6E8EF); // card outlines and dividers
-const accent = Color(0xFF4C5FE0); // links, selection, primary actions
-const accentSoft = Color(0xFFECEEFD); // tinted backgrounds behind accent icons
-const positive = Color(0xFF168A4A); // you are owed / you lent
-const negative = Color(0xFFD93848); // you owe / you borrowed
+class Palette {
+  const Palette({
+    required this.paper,
+    required this.surface,
+    required this.ink,
+    required this.muted,
+    required this.line,
+    required this.accent,
+    required this.accentSoft,
+    required this.positive,
+    required this.negative,
+  });
+  final Color paper, surface, ink, muted, line, accent, accentSoft, positive, negative;
+
+  static const light = Palette(
+    paper: Color(0xFFF5F6FA),
+    surface: Colors.white,
+    ink: Color(0xFF171A26),
+    muted: Color(0xFF7B8193),
+    line: Color(0xFFE6E8EF),
+    accent: Color(0xFF4C5FE0),
+    accentSoft: Color(0xFFECEEFD),
+    positive: Color(0xFF168A4A),
+    negative: Color(0xFFD93848),
+  );
+
+  static const dark = Palette(
+    paper: Color(0xFF0D0F14),
+    surface: Color(0xFF171A22),
+    ink: Color(0xFFEDEFF5),
+    muted: Color(0xFF959BAD),
+    line: Color(0xFF272B36),
+    accent: Color(0xFF8C9BFF),
+    accentSoft: Color(0xFF1F2442),
+    positive: Color(0xFF3CCB82),
+    negative: Color(0xFFFF6E7B),
+  );
+}
+
+/// Light or dark, remembered on the phone. The first time it follows the
+/// phone's own setting. Flipping it redraws every screen in place.
+class AppTheme extends ChangeNotifier {
+  AppTheme._();
+  static final instance = AppTheme._();
+  static const _key = 'trip_split.dark_theme.v1';
+
+  bool dark = false;
+  Palette get palette => dark ? Palette.dark : Palette.light;
+
+  Future<void> load() async {
+    final saved = await SharedPreferencesAsync().getBool(_key).catchError((Object _) => null);
+    dark = saved ?? WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark;
+  }
+
+  Future<void> toggle() async {
+    dark = !dark;
+    notifyListeners();
+    await SharedPreferencesAsync().setBool(_key, dark).catchError((Object _) {});
+  }
+}
+
+/// Material's own theme for the current palette, so dialogs, date pickers,
+/// snack bars and switches match the app's colours.
+ThemeData appThemeData() {
+  final dark = AppTheme.instance.dark;
+  final brightness = dark ? Brightness.dark : Brightness.light;
+  final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: brightness).copyWith(
+    primary: accent,
+    surface: surface,
+    onSurface: ink,
+    outline: line,
+    outlineVariant: line,
+  );
+  return ThemeData(
+    useMaterial3: true,
+    brightness: brightness,
+    colorScheme: scheme,
+    scaffoldBackgroundColor: paper,
+    canvasColor: paper,
+    fontFamily: 'Roboto',
+    dividerColor: line,
+    appBarTheme: AppBarTheme(backgroundColor: paper, foregroundColor: ink, surfaceTintColor: paper),
+    dialogTheme: DialogThemeData(backgroundColor: surface, surfaceTintColor: Colors.transparent),
+    bottomSheetTheme: BottomSheetThemeData(backgroundColor: surface, surfaceTintColor: Colors.transparent),
+    popupMenuTheme: PopupMenuThemeData(color: surface, surfaceTintColor: Colors.transparent),
+    datePickerTheme: DatePickerThemeData(backgroundColor: surface, surfaceTintColor: Colors.transparent),
+    timePickerTheme: TimePickerThemeData(backgroundColor: surface),
+    listTileTheme: ListTileThemeData(textColor: ink, iconColor: muted),
+  );
+}
+
+/// Marks every widget under [context] for rebuilding, so colours read from
+/// the palette update in place (no restart, screens and input kept).
+void rebuildEverything(BuildContext context) {
+  void mark(Element e) {
+    e.markNeedsBuild();
+    e.visitChildren(mark);
+  }
+
+  (context as Element).visitChildren(mark);
+}
+
+Palette get _p => AppTheme.instance.palette;
+Color get paper => _p.paper; // page background
+Color get surface => _p.surface; // cards, sheets, inputs
+Color get ink => _p.ink; // primary text
+Color get muted => _p.muted; // secondary text, inactive icons
+Color get line => _p.line; // card outlines and dividers
+Color get accent => _p.accent; // links, selection, primary actions
+Color get accentSoft => _p.accentSoft; // tinted backgrounds behind accent icons
+Color get positive => _p.positive; // you are owed / you lent
+Color get negative => _p.negative; // you owe / you borrowed
+// Text and icons on an [accent] fill: white, or near-black on the brighter dark accent.
+Color get onAccent => AppTheme.instance.dark ? Palette.dark.paper : Colors.white;
 const accentGlow = Color(0xFFB4BEFF); // highlights on dark surfaces (splash, profile header)
 
 const cardRadius = 16.0;
@@ -31,13 +140,13 @@ Color colorForMember(int index) => memberPalette[index % memberPalette.length];
 
 /// A soft shadow for the few surfaces that float (FAB, nav bar, pop-ups);
 /// cards use a 1px [line] outline instead.
-List<BoxShadow> softShadow([Color tint = ink, double opacity = .07]) => [
-  BoxShadow(color: tint.withValues(alpha: opacity), blurRadius: 16, offset: const Offset(0, 5)),
+List<BoxShadow> softShadow([Color? tint, double opacity = .07]) => [
+  BoxShadow(color: (tint ?? ink).withValues(alpha: opacity), blurRadius: 16, offset: const Offset(0, 5)),
 ];
 
-/// The standard white card: outlined, no shadow.
-BoxDecoration cardDecoration({Color color = Colors.white, double radius = cardRadius}) => BoxDecoration(
-  color: color,
+/// The standard card ([surface]: white, or lifted dark): outlined, no shadow.
+BoxDecoration cardDecoration({Color? color, double radius = cardRadius}) => BoxDecoration(
+  color: color ?? surface,
   borderRadius: BorderRadius.circular(radius),
   border: Border.all(color: line),
 );
@@ -76,16 +185,16 @@ const _categoryIcons = {
   settlementCategory: Icons.handshake_outlined,
 };
 
-const _categoryColors = {
-  'Food': Color(0xFFD9692E),
-  'Groceries': Color(0xFF2E9465),
-  'Stay': Color(0xFF4F74CC),
-  'Rent': Color(0xFF7F5BC8),
-  'Transport': Color(0xFF2585AE),
-  'Fuel': Color(0xFFBA6A1E),
-  'Shopping': Color(0xFFC94F80),
-  'Utilities': Color(0xFFA88A10),
-  'Activities': Color(0xFF6E55CF),
+final _categoryColors = {
+  'Food': const Color(0xFFD9692E),
+  'Groceries': const Color(0xFF2E9465),
+  'Stay': const Color(0xFF4F74CC),
+  'Rent': const Color(0xFF7F5BC8),
+  'Transport': const Color(0xFF2585AE),
+  'Fuel': const Color(0xFFBA6A1E),
+  'Shopping': const Color(0xFFC94F80),
+  'Utilities': const Color(0xFFA88A10),
+  'Activities': const Color(0xFF6E55CF),
   'Other': muted,
   settlementCategory: positive,
 };
@@ -193,26 +302,26 @@ InputDecoration appInputDecoration(String hint, IconData icon) =>
       hintText: hint,
       prefixIcon: Icon(icon, size: 18, color: muted),
       filled: true,
-      fillColor: Colors.white,
+      fillColor: surface,
       hintStyle: const TextStyle(color: Color(0xFFA9AEBC), fontSize: 13),
       contentPadding: const EdgeInsets.symmetric(vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: line),
+        borderSide: BorderSide(color: line),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: line),
+        borderSide: BorderSide(color: line),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: accent, width: 1.3),
+        borderSide: BorderSide(color: accent, width: 1.3),
       ),
     );
 
 Widget fieldLabel(String text) => Text(
   text,
-  style: const TextStyle(
+  style: TextStyle(
     color: muted,
     fontSize: 10,
     letterSpacing: 1,

@@ -48,6 +48,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
     return Scaffold(
       backgroundColor: paper,
       appBar: AppBar(
+        actions: const [ThemeToggle()],
         backgroundColor: paper,
         surfaceTintColor: paper,
         title: const Text('Notifications', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
@@ -72,7 +73,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   Center(
                     child: Text(
                       _store.activityError == null ? 'No activity yet' : 'Couldn’t load notifications',
-                      style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
+                      style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -81,7 +82,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                     child: Text(
                       _store.activityError ?? 'When someone adds an expense, it shows up here.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: muted, fontSize: 13),
+                      style: TextStyle(color: muted, fontSize: 13),
                     ),
                   ),
                 ],
@@ -123,13 +124,15 @@ class _ActivityScreenState extends State<ActivityScreen> {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              payer != null ? MemberAvatar.of(payer, size: 38) : MemberAvatar(id: a.paidBy, name: a.paidByName, size: 38),
+              payer != null
+                  ? MemberAvatar.of(payer, size: 38, tripId: a.tripId)
+                  : MemberAvatar(id: a.paidBy, name: a.paidByName, size: 38),
               Positioned(
                 right: -4,
                 bottom: -4,
                 child: Container(
                   padding: const EdgeInsets.all(2),
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: surface, shape: BoxShape.circle),
                   child: IconCircle(icon: iconForCategory(a.category), color: colorForCategory(a.category), size: 20),
                 ),
               ),
@@ -144,14 +147,14 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   text,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: ink, fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.3),
+                  style: TextStyle(color: ink, fontSize: 13.5, fontWeight: FontWeight.w500, height: 1.3),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   '${a.tripName} · ${timeAgo(a.createdAt)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: muted, fontSize: 11.5),
+                  style: TextStyle(color: muted, fontSize: 11.5),
                 ),
               ],
             ),
@@ -160,11 +163,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (impact.abs() >= 0.5) AmountPill(value: impact, fontSize: 11.5) else Text(money(a.amount), style: const TextStyle(color: muted, fontSize: 12)),
+              if (impact.abs() >= 0.5) AmountPill(value: impact, fontSize: 11.5) else Text(money(a.amount), style: TextStyle(color: muted, fontSize: 12)),
               if (_fresh.contains(a.expenseId))
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
-                  child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: accent, shape: BoxShape.circle)),
+                  child: Container(width: 8, height: 8, decoration: BoxDecoration(color: accent, shape: BoxShape.circle)),
                 ),
             ],
           ),

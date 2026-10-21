@@ -50,9 +50,16 @@ class _BalanceScreenState extends State<BalanceScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(4, 8, 4, 12),
-              child: Text('Balance', style: TextStyle(color: ink, fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -.5)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 0, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Balance', style: TextStyle(color: ink, fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -.5)),
+                  ),
+                  const ThemeToggle(),
+                ],
+              ),
             ),
             Container(
               padding: const EdgeInsets.all(16),
@@ -64,7 +71,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                     children: [
                       const IconCircle(icon: Icons.account_balance_outlined, size: 40),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Text('Net balance', style: TextStyle(color: muted, fontSize: 13, fontWeight: FontWeight.w500)),
                       ),
                       AmountPill(value: net, fontSize: 15),
@@ -84,8 +91,8 @@ class _BalanceScreenState extends State<BalanceScreen> {
             ),
             const SizedBox(height: 20),
             if (_store.trips == null)
-              const Padding(
-                padding: EdgeInsets.only(top: 40),
+              Padding(
+                padding: const EdgeInsets.only(top: 40),
                 child: Center(child: CircularProgressIndicator(color: accent)),
               )
             else if (debts.isEmpty)
@@ -122,7 +129,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                               t.name,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
+                              style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
                             ),
                           ),
                           if (_store.myNet(t.id) != null) AmountPill(value: _store.myNet(t.id)!, fontSize: 12),
@@ -141,7 +148,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
   Widget _stat(String label, double value, Color color) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(label, style: const TextStyle(color: muted, fontSize: 12)),
+      Text(label, style: TextStyle(color: muted, fontSize: 12)),
       const SizedBox(height: 2),
       Text(
         money(value),
@@ -159,10 +166,10 @@ class _BalanceScreenState extends State<BalanceScreen> {
     padding: const EdgeInsets.all(16),
     margin: const EdgeInsets.only(bottom: 20),
     decoration: cardDecoration(),
-    child: const Row(
+    child: Row(
       children: [
         IconCircle(icon: Icons.check_circle_outline_rounded, color: positive, size: 40),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: Text(
             'You’re all settled up on every trip.',

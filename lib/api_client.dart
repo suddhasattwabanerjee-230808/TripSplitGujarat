@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'expense_notifier.dart';
 import 'ledger.dart';
 import 'models.dart';
 import 'theme.dart';
@@ -110,15 +111,22 @@ class ApiClient {
         return fallback;
       }
       final user = AppUser.fromMap(account.uid, snap.data()!);
-      if (account.photoURL != null && (user.photoUrl != account.photoURL || user.email != account.email)) {
+      TripMember.privateNames = {
+        for (final e in (snap.data()!['privateNames'] as Map<String, dynamic>? ?? const {}).entries)
+          if (e.value is String && (e.value as String).isNotEmpty) e.key: e.value as String,
+      };
+      // Follow Google's photo and email, unless they picked their own photo.
+      final googlePhoto = user.customPhoto ? user.photoUrl : account.photoURL;
+      if (googlePhoto != null && (user.photoUrl != googlePhoto || user.email != account.email)) {
         final updated = AppUser(
           id: user.id,
           name: user.name,
           phone: user.phone,
           email: account.email ?? user.email,
-          photoUrl: account.photoURL,
+          photoUrl: googlePhoto,
           upiId: user.upiId,
           nicknameSet: user.nicknameSet,
+          customPhoto: user.customPhoto,
         );
         unawaited(_saveProfile(updated, {'email': updated.email, 'photoUrl': updated.photoUrl}).catchError((_) {}));
         return updated;
@@ -147,8 +155,47 @@ class ApiClient {
       photoUrl: user.photoUrl,
       upiId: user.upiId,
       nicknameSet: true,
+      customPhoto: user.customPhoto,
     );
     return _saveProfile(updated, {'name': name, 'nicknameSet': true}).then((_) => _user = updated);
+  }
+
+  /// Your own name for a tripmate, seen only by you (null or empty removes it).
+  /// Kept in your profile, which only you can read.
+  Future<void> setPrivateName(String memberId, String? name) => _guard(() async {
+    final me = _user!;
+    final value = name?.trim() ?? '';
+    final names = {...TripMember.privateNames};
+    if (value.isEmpty) {
+      names.remove(memberId);
+    } else {
+      names[memberId] = value;
+    }
+    TripMember.privateNames = names;
+    await _commit(
+      _db.batch()..set(_db.collection('users').doc(me.id), {
+        'privateNames': {memberId: value.isEmpty ? FieldValue.delete() : value},
+      }, SetOptions(merge: true)),
+    );
+  });
+
+  /// Sets the photo tripmates see: [dataUri] is a small picked image
+  /// (`data:image/...;base64,...`; the free plan has no Storage, so it lives
+  /// in Firestore), or null to go back to the Google photo.
+  Future<AppUser> updatePhoto(String? dataUri) {
+    final user = _user!;
+    final photo = dataUri ?? FirebaseAuth.instance.currentUser?.photoURL;
+    final updated = AppUser(
+      id: user.id,
+      name: user.name,
+      phone: user.phone,
+      email: user.email,
+      photoUrl: photo,
+      upiId: user.upiId,
+      nicknameSet: user.nicknameSet,
+      customPhoto: dataUri != null,
+    );
+    return _saveProfile(updated, {'photoUrl': photo, 'customPhoto': dataUri != null}).then((_) => _user = updated);
   }
 
   /// An empty [upiId] removes it.
@@ -166,6 +213,7 @@ class ApiClient {
       photoUrl: user.photoUrl,
       upiId: value,
       nicknameSet: user.nicknameSet,
+      customPhoto: user.customPhoto,
     );
     return _saveProfile(updated, {'upiId': value}).then((_) => _user = updated);
   }
@@ -260,6 +308,7 @@ class ApiClient {
 
   Future<void> logOut() async {
     _user = null;
+    TripMember.privateNames = const {};
     if (Firebase.apps.isNotEmpty) await FirebaseAuth.instance.signOut();
   }
 
@@ -280,7 +329,13 @@ class ApiClient {
   Stream<QuerySnapshot<Map<String, dynamic>>> watchExpenseSnapshots(String tripId) =>
       _expenses(tripId).orderBy('date', descending: true).snapshots(includeMetadataChanges: true);
 
-  /// The 50 newest expenses across all the user's trips (the bell's feed).
+  /// One expense, live (the read-only page a notification opens). Emits null
+  /// once it's deleted.
+  Stream<TripExpense?> watchExpense(String tripId, String expenseId) => _expenses(tripId)
+      .doc(expenseId)
+      .snapshots()
+      .map((doc) => doc.exists ? TripExpense.fromDoc(doc) : null);
+
   /// One trip's newest expenses, for the bell. Listened to per trip rather
   /// than with one collection-group query, which silently needed a composite
   /// index and left the feed empty without it; this needs none.
@@ -502,6 +557,8 @@ class ApiClient {
       })
       ..update(_tripRef(trip.id), _increments(moneyDelta(null, expense)));
     await _commit(batch);
+    // Tripmates get an instant phone notification (see ExpenseNotifier).
+    unawaited(ExpenseNotifier.tellTripmates(trip.id, ref.id));
     return expense;
   });
 

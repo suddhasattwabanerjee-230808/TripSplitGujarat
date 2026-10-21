@@ -1,8 +1,12 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'api_client.dart';
+import 'expense_notifier.dart';
+import 'screens/expense_screen.dart';
+import 'screens/settle_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/home_shell.dart';
@@ -14,6 +18,9 @@ import 'upi_popup.dart';
 
 Future<void> main() async {
   await _initFirebase();
+  await AppTheme.instance.load();
+  // Instant expense pushes while the app is closed (see ExpenseNotifier).
+  if (Firebase.apps.isNotEmpty) FirebaseMessaging.onBackgroundMessage(expensePushHandler);
   runApp(const TripSplitApp());
 }
 
@@ -22,6 +29,7 @@ Future<void> main() async {
 @pragma('vm:entry-point')
 Future<void> upiPopupMain() async {
   await _initFirebase();
+  await AppTheme.instance.load();
   runApp(const UpiPopupApp());
 }
 
@@ -63,10 +71,35 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
     // A change saved offline that the server later refused.
     ApiClient.instance.onWriteError = (error) =>
         _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('Not saved: ${error.message}')));
+    // Light/dark: redraw every screen in place with the new colours.
+    AppTheme.instance.addListener(_onTheme);
+    // A tapped expense notification, while the app is running: open it.
+    ExpenseNotifier.appVisible = true;
+    ExpenseNotifier.onOpen = (tripId, expenseId) {
+      if (ApiClient.instance.currentUser == null) return;
+      _navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => ExpenseScreen(tripId: tripId, expenseId: expenseId)),
+      );
+    };
+    // A settle-up reminder: open that balance with the ways to settle it.
+    ExpenseNotifier.onSettle = (tripId, otherId) {
+      if (ApiClient.instance.currentUser == null) return;
+      _navigatorKey.currentState?.push(
+        MaterialPageRoute(builder: (_) => SettleScreen(tripId: tripId, otherId: otherId)),
+      );
+    };
+  }
+
+  void _onTheme() {
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) rebuildEverything(context);
+    });
   }
 
   @override
   void dispose() {
+    AppTheme.instance.removeListener(_onTheme);
     WidgetsBinding.instance.removeObserver(this);
     ApiClient.instance.onSessionExpired = null;
     super.dispose();
@@ -74,6 +107,8 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // System notifications only while the app isn't on screen.
+    ExpenseNotifier.appVisible = state == AppLifecycleState.resumed;
     // Re-arm the intro whenever the app leaves the screen, so it plays on every
     // return. Arming it while hidden means the first frame back is already the intro.
     if (state == AppLifecycleState.hidden || state == AppLifecycleState.paused) {
@@ -87,19 +122,13 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(seedColor: accent, brightness: Brightness.light);
+    final dark = AppTheme.instance.dark;
     return MaterialApp(
       title: 'TripSplit',
       navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _messengerKey,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: scheme,
-        scaffoldBackgroundColor: paper,
-        fontFamily: 'Roboto',
-        appBarTheme: const AppBarTheme(backgroundColor: paper, foregroundColor: ink),
-      ),
+      theme: appThemeData(),
       home: const _AppRoot(),
       // The intro sits above the navigator, so it can replay over whatever screen
       // is open without disturbing it.
@@ -108,11 +137,12 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
         alignment: Alignment.topLeft,
         children: [
           AnnotatedRegion<SystemUiOverlayStyle>(
-            value: const SystemUiOverlayStyle(
+            value: SystemUiOverlayStyle(
               statusBarColor: Colors.transparent,
-              statusBarIconBrightness: Brightness.dark,
-              statusBarBrightness: Brightness.light,
-              systemNavigationBarIconBrightness: Brightness.dark,
+              statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+              statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+              systemNavigationBarColor: paper,
+              systemNavigationBarIconBrightness: dark ? Brightness.light : Brightness.dark,
             ),
             child: child!,
           ),
@@ -163,8 +193,8 @@ class _AppRootState extends State<_AppRoot> {
   @override
   Widget build(BuildContext context) {
     final Widget child = _loggedIn == null
-        ? const Scaffold(
-            key: ValueKey('loading'),
+        ? Scaffold(
+            key: const ValueKey('loading'),
             backgroundColor: paper,
             body: Center(child: CircularProgressIndicator(color: accent)),
           )

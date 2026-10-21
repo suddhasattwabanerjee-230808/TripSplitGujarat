@@ -18,6 +18,7 @@ import '../widgets.dart';
 import 'activity_screen.dart';
 import 'location_picker_screen.dart';
 import 'stats_screen.dart';
+import 'trip_people.dart';
 import 'trips_ui.dart';
 
 class TripHomeScreen extends StatefulWidget {
@@ -160,7 +161,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: negative)),
+            child: Text('Delete', style: TextStyle(color: negative)),
           ),
         ],
       ),
@@ -248,9 +249,9 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: paper,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: SafeArea(
           top: false,
@@ -260,13 +261,13 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               const SheetHandle(),
               const SizedBox(height: 10),
               ListTile(
-                leading: const Icon(Icons.edit_outlined, color: ink),
-                title: const Text('Edit expense', style: TextStyle(fontWeight: FontWeight.w700, color: ink)),
+                leading: Icon(Icons.edit_outlined, color: ink),
+                title: Text('Edit expense', style: TextStyle(fontWeight: FontWeight.w700, color: ink)),
                 onTap: () => Navigator.pop(context, 'edit'),
               ),
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded, color: negative),
-                title: const Text(
+                leading: Icon(Icons.delete_outline_rounded, color: negative),
+                title: Text(
                   'Delete expense',
                   style: TextStyle(fontWeight: FontWeight.w700, color: negative),
                 ),
@@ -284,7 +285,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     }
   }
 
-  static const _owe = negative;
+  static final _owe = negative;
   static const _monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December',
@@ -307,7 +308,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   Widget _avatarFor(String userId, {double size = 30, double ring = 0}) {
     final member = _trip?.member(userId);
     return member != null
-        ? MemberAvatar.of(member, size: size, ring: ring)
+        ? MemberAvatar.of(member, size: size, ring: ring, tripId: widget.tripId)
         : MemberAvatar(id: userId, name: _memberName(userId), size: size, ring: ring);
   }
 
@@ -343,7 +344,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: paper,
         body: Center(child: CircularProgressIndicator(color: accent)),
       );
@@ -351,7 +352,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     if (_error != null || _trip == null) {
       return Scaffold(
         backgroundColor: paper,
-        appBar: AppBar(backgroundColor: paper),
+        appBar: AppBar(backgroundColor: paper, actions: const [ThemeToggle()]),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -413,7 +414,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         onPressed: _addExpense,
         isExtended: _fabExtended,
         backgroundColor: ink,
-        foregroundColor: Colors.white,
+        foregroundColor: paper,
         elevation: 3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         icon: const Icon(Icons.add_rounded),
@@ -438,14 +439,20 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         IconButton(
           tooltip: 'Back',
           onPressed: () => Navigator.of(context).pop(),
-          icon: const Icon(Icons.arrow_back_rounded, color: ink),
+          icon: Icon(Icons.arrow_back_rounded, color: ink),
         ),
       const Spacer(),
+      const ThemeToggle(),
       if (widget.embedded) _bell(),
+      IconButton(
+        tooltip: 'Trip details',
+        onPressed: () => _openDetails(trip),
+        icon: Icon(Icons.info_outline_rounded, color: ink),
+      ),
       IconButton(
         tooltip: 'Invite people',
         onPressed: () => showInviteSheet(context, trip),
-        icon: const Icon(Icons.person_add_alt_outlined, color: ink),
+        icon: Icon(Icons.person_add_alt_outlined, color: ink),
       ),
     ],
   );
@@ -461,7 +468,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         isLabelVisible: unread > 0,
         label: Text(unread > 9 ? '9+' : '$unread'),
         backgroundColor: negative,
-        child: const Icon(Icons.notifications_none_rounded, color: ink),
+        child: Icon(Icons.notifications_none_rounded, color: ink),
       ),
     );
   }
@@ -473,7 +480,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         trip.name,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: ink, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -.6, height: 1.15),
+        style: TextStyle(color: ink, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -.6, height: 1.15),
       ),
       const SizedBox(height: 6),
       Row(
@@ -489,15 +496,22 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               ].join(' · '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: muted, fontSize: 12.5),
+              style: TextStyle(color: muted, fontSize: 12.5),
             ),
           ),
           const SizedBox(width: 8),
-          AvatarStack(members: trip.members, size: 20, max: 5),
+          // Everyone on the trip: tap for the trip details page.
+          GestureDetector(
+            onTap: () => _openDetails(trip),
+            child: AvatarStack(members: trip.members, size: 20, max: 5),
+          ),
         ],
       ),
     ],
   );
+
+  void _openDetails(Trip trip) =>
+      Navigator.of(context).push(MaterialPageRoute(builder: (_) => TripDetailsScreen(tripId: trip.id)));
 
   Widget _balanceCard() {
     final mine = _myBalance;
@@ -523,10 +537,10 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Balance summary', style: TextStyle(color: ink, fontSize: 14.5, fontWeight: FontWeight.w700)),
+                      Text('Balance summary', style: TextStyle(color: ink, fontSize: 14.5, fontWeight: FontWeight.w700)),
                       Text(
                         settled ? 'You’re all settled up' : (net > 0 ? 'You are owed' : 'You owe'),
-                        style: const TextStyle(color: muted, fontSize: 12),
+                        style: TextStyle(color: muted, fontSize: 12),
                       ),
                     ],
                   ),
@@ -539,8 +553,8 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
             const SizedBox(height: 8),
             for (final d in debts) DebtRow(debt: d, onPaid: _loadAll),
           ],
-          const Padding(
-            padding: EdgeInsets.fromLTRB(14, 6, 14, 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
             child: Divider(height: 1, color: line),
           ),
           Padding(
@@ -561,17 +575,17 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   Widget _miniStat(String label, String value) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(label, style: const TextStyle(color: muted, fontSize: 11)),
+      Text(label, style: TextStyle(color: muted, fontSize: 11)),
       const SizedBox(height: 2),
       Text(
         value,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
+        style: TextStyle(
           color: ink,
           fontSize: 14,
           fontWeight: FontWeight.w700,
-          fontFeatures: [FontFeature.tabularFigures()],
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
       ),
     ],
@@ -612,7 +626,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               width: 54,
               height: 54,
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: surface,
                 shape: BoxShape.circle,
                 border: Border.all(color: line),
               ),
@@ -624,7 +638,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: ink, fontSize: 11.5, fontWeight: FontWeight.w500),
+              style: TextStyle(color: ink, fontSize: 11.5, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -632,12 +646,12 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     ),
   );
 
-  Widget _emptyExpenses() => const Column(
+  Widget _emptyExpenses() => Column(
     children: [
-      IconCircle(icon: Icons.receipt_long_outlined, size: 64),
-      SizedBox(height: 14),
+      const IconCircle(icon: Icons.receipt_long_outlined, size: 64),
+      const SizedBox(height: 14),
       Text('No expenses yet', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
-      SizedBox(height: 4),
+      const SizedBox(height: 4),
       Text(
         'Add the first one — or scan a bill — and it’s split with everyone on the trip.',
         textAlign: TextAlign.center,
@@ -662,12 +676,12 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               children: [
                 Text(
                   index == 0 ? 'Expenses · ${entry.key}' : entry.key,
-                  style: const TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700),
                 ),
                 const Spacer(),
                 Text(
                   money(entry.value.where((e) => !e.isSettlement).fold<double>(0, (acc, e) => acc + e.amount)),
-                  style: const TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -723,12 +737,12 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   formatDateAndTime(expense.dateTime),
-                  style: const TextStyle(color: muted, fontSize: 11.5, fontFeatures: [FontFeature.tabularFigures()]),
+                  style: TextStyle(color: muted, fontSize: 11.5, fontFeatures: const [FontFeature.tabularFigures()]),
                 ),
                 const SizedBox(height: 6),
                 Row(
@@ -738,7 +752,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                         detail,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: muted, fontSize: 11.5),
+                        style: TextStyle(color: muted, fontSize: 11.5),
                       ),
                     ),
                     if (involved && !expense.isSettlement) ...[
@@ -763,11 +777,11 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
             children: [
               Text(
                 money(expense.amount),
-                style: const TextStyle(
+                style: TextStyle(
                   color: ink,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  fontFeatures: [FontFeature.tabularFigures()],
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
               const SizedBox(height: 10),
@@ -791,7 +805,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     _sheet('Balance', [
       if (_settlements.isEmpty)
         _sheetCard([
-          const ListTile(
+          ListTile(
             leading: Icon(Icons.check_circle_outline_rounded, color: positive),
             title: Text('Everyone’s settled up', style: TextStyle(fontWeight: FontWeight.w700, color: ink)),
           ),
@@ -810,8 +824,8 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               child: Row(
                 children: [
                   s.fromUserId != null ? _avatarFor(s.fromUserId!, size: 28) : MemberAvatar(id: s.fromUser, name: s.fromUser, size: 28),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: Icon(Icons.arrow_forward_rounded, size: 16, color: muted),
                   ),
                   s.toUserId != null ? _avatarFor(s.toUserId!, size: 28) : MemberAvatar(id: s.toUser, name: s.toUser, size: 28),
@@ -821,16 +835,16 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                       '${s.fromUser} → ${s.toUser}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: ink, fontSize: 13.5, fontWeight: FontWeight.w500),
+                      style: TextStyle(color: ink, fontSize: 13.5, fontWeight: FontWeight.w500),
                     ),
                   ),
-                  Text(money(s.amount), style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
+                  Text(money(s.amount), style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
                 ],
               ),
             ),
         ]),
         const SizedBox(height: 8),
-        const Text(
+        Text(
           'The fewest payments that settle the whole trip. “Pay” opens your UPI app; the payment is recorded so balances update.',
           style: TextStyle(color: muted, fontSize: 12),
         ),
@@ -848,7 +862,9 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       orElse: () => Balance(userId: member.id, name: member.name, totalPaid: 0, totalOwed: 0, netBalance: 0),
     );
     final isMe = member.id == _me?.id;
-    return Padding(
+    return InkWell(
+      onTap: () => openMember(context, widget.tripId, member.id),
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       child: Row(
         children: [
@@ -860,17 +876,18 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               children: [
                 Text(
                   isMe ? '${member.name} (you)' : member.name,
-                  style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 Text(
                   'paid ${money(b.totalPaid)} · share ${money(b.totalOwed)}',
-                  style: const TextStyle(color: muted, fontSize: 12),
+                  style: TextStyle(color: muted, fontSize: 12),
                 ),
               ],
             ),
           ),
           AmountPill(value: b.netBalance, fontSize: 12),
         ],
+      ),
       ),
     );
   }
@@ -890,11 +907,11 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               children: [
                 Text(
                   money(expense.amount),
-                  style: const TextStyle(color: ink, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -.6),
+                  style: TextStyle(color: ink, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -.6),
                 ),
                 Text(
                   '${isOwn ? 'You' : expense.payerName(_trip)} paid · ${expense.category ?? 'Other'}',
-                  style: const TextStyle(color: muted, fontSize: 12),
+                  style: TextStyle(color: muted, fontSize: 12),
                 ),
               ],
             ),
@@ -921,7 +938,9 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       const SizedBox(height: 8),
       _sheetCard([
         for (final s in shares)
-          Padding(
+          InkWell(
+            onTap: () => openMember(context, widget.tripId, s.userId),
+            child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
             child: Row(
               children: [
@@ -941,6 +960,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                 ),
               ],
             ),
+            ),
           ),
       ]),
       if (isOwn) ...[
@@ -957,8 +977,8 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                 label: const Text('Delete'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _owe,
-                  side: const BorderSide(color: Color(0xFFF3CDD2)),
-                  backgroundColor: Colors.white,
+                  side: BorderSide(color: negative.withValues(alpha: .3)),
+                  backgroundColor: surface,
                   padding: const EdgeInsets.symmetric(vertical: 13),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
@@ -999,10 +1019,10 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               text,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w600),
+              style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w600),
             ),
           ),
-          if (onTap != null) const Icon(Icons.edit_outlined, size: 15, color: muted),
+          if (onTap != null) Icon(Icons.edit_outlined, size: 15, color: muted),
         ],
       ),
     ),
@@ -1107,7 +1127,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: surface,
         title: const Text('New category', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         content: TextField(
           controller: controller,
@@ -1246,7 +1266,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
             if (!everyone)
               GestureDetector(
                 onTap: () => setState(() => _splitWith = {for (final m in members) m.id}),
-                child: const Text('Everyone', style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.w700)),
+                child: Text('Everyone', style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.w700)),
               ),
           ],
         ),
@@ -1257,7 +1277,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
           children: [for (final m in members) _memberChip(m, chosen.contains(m.id))],
         ),
         const SizedBox(height: 8),
-        Text(_splitSummary(members, chosen), style: const TextStyle(color: muted, fontSize: 12)),
+        Text(_splitSummary(members, chosen), style: TextStyle(color: muted, fontSize: 12)),
       ],
     );
   }
@@ -1271,7 +1291,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
       onSelected: (_) => _toggleSplit(member),
       showCheckmark: false,
       selectedColor: accentSoft,
-      backgroundColor: Colors.white,
+      backgroundColor: surface,
       side: BorderSide(color: selected ? accent.withValues(alpha: .55) : line),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: selected ? ink : muted),
@@ -1329,7 +1349,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
         }),
         showCheckmark: false,
         selectedColor: color.withValues(alpha: .12),
-        backgroundColor: Colors.white,
+        backgroundColor: surface,
         side: BorderSide(color: selected ? color.withValues(alpha: .45) : line),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: selected ? ink : muted),
@@ -1341,14 +1361,14 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     final remove = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
+        backgroundColor: surface,
         title: Text('Remove “$c”?', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         content: const Text('It disappears from this list. Expenses already saved with it keep it.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Remove', style: TextStyle(color: negative)),
+            child: Text('Remove', style: TextStyle(color: negative)),
           ),
         ],
       ),
@@ -1373,10 +1393,10 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                   text,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: 13, color: ink, fontWeight: FontWeight.w600),
                 ),
               ),
-              trailing ?? const Icon(Icons.chevron_right_rounded, color: muted, size: 18),
+              trailing ?? Icon(Icons.chevron_right_rounded, color: muted, size: 18),
             ],
           ),
         ),
@@ -1387,7 +1407,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return Container(
       padding: EdgeInsets.fromLTRB(20, 12, 20, 24 + bottom),
-      decoration: const BoxDecoration(color: paper, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      decoration: BoxDecoration(color: paper, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
@@ -1405,10 +1425,10 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                       children: [
                         Text(
                           widget.isEditing ? 'Edit expense' : 'Add an expense',
-                          style: const TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
+                          style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
                         ),
                         const SizedBox(height: 3),
-                        const Text('Split equally between the people you pick.', style: TextStyle(color: muted, fontSize: 12)),
+                        Text('Split equally between the people you pick.', style: TextStyle(color: muted, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -1416,7 +1436,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                     PopupMenuButton<bool>(
                       tooltip: 'Scan receipt',
                       enabled: !_scanning,
-                      color: Colors.white,
+                      color: surface,
                       onSelected: (fromCamera) => _scan(fromCamera: fromCamera),
                       itemBuilder: (_) => const [
                         PopupMenuItem(value: true, child: Text('Take a photo of the bill')),
@@ -1429,12 +1449,12 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             _scanning
-                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: accent))
-                                : const Icon(Icons.document_scanner_outlined, size: 17, color: accent),
+                                ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: accent))
+                                : Icon(Icons.document_scanner_outlined, size: 17, color: accent),
                             const SizedBox(width: 6),
                             Text(
                               _scanning ? 'Reading…' : 'Scan',
-                              style: const TextStyle(color: accent, fontSize: 12.5, fontWeight: FontWeight.w700),
+                              style: TextStyle(color: accent, fontSize: 12.5, fontWeight: FontWeight.w700),
                             ),
                           ],
                         ),
@@ -1453,9 +1473,9 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                         decoration: BoxDecoration(color: accentSoft, borderRadius: BorderRadius.circular(12)),
                         child: Row(
                           children: [
-                            const Icon(Icons.auto_awesome_outlined, size: 16, color: accent),
+                            Icon(Icons.auto_awesome_outlined, size: 16, color: accent),
                             const SizedBox(width: 8),
-                            Expanded(child: Text(_scanNote!, style: const TextStyle(color: ink, fontSize: 12.5))),
+                            Expanded(child: Text(_scanNote!, style: TextStyle(color: ink, fontSize: 12.5))),
                           ],
                         ),
                       ),
@@ -1484,9 +1504,9 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                   fieldLabel('CATEGORY'),
                   if (_categoryAuto) ...[
                     const SizedBox(width: 6),
-                    const Icon(Icons.auto_awesome_outlined, size: 11, color: accent),
+                    Icon(Icons.auto_awesome_outlined, size: 11, color: accent),
                     const SizedBox(width: 3),
-                    const Text('auto', style: TextStyle(color: accent, fontSize: 9, fontWeight: FontWeight.w800)),
+                    Text('auto', style: TextStyle(color: accent, fontSize: 9, fontWeight: FontWeight.w800)),
                   ],
                 ],
               ),
@@ -1499,12 +1519,12 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                   for (final c in _custom) _categoryChip(c, custom: true),
                   ActionChip(
                     label: const Text('New'),
-                    avatar: const Icon(Icons.add_rounded, size: 16, color: accent),
+                    avatar: Icon(Icons.add_rounded, size: 16, color: accent),
                     onPressed: _addCustomCategory,
-                    backgroundColor: Colors.white,
+                    backgroundColor: surface,
                     side: BorderSide(color: accent.withValues(alpha: .35)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: accent),
+                    labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: accent),
                   ),
                 ],
               ),
@@ -1526,14 +1546,14 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                 text: _locatingNow ? 'Finding your location…' : (_location ?? 'Tap to choose on map'),
                 onTap: _openLocationPicker,
                 trailing: _locatingNow
-                    ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: accent))
+                    ? SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: accent))
                     : null,
               ),
               const SizedBox(height: 18),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_error!, style: const TextStyle(color: negative, fontSize: 12)),
+                  child: Text(_error!, style: TextStyle(color: negative, fontSize: 12)),
                 ),
               SizedBox(
                 width: double.infinity,
@@ -1542,10 +1562,10 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                   onPressed: _busy || _scanning ? null : _save,
                   style: primaryButton(radius: 16),
                   child: _busy
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: onAccent),
                         )
                       : Text(widget.isEditing ? 'Save changes' : 'Save expense'),
                 ),

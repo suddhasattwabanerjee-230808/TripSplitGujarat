@@ -60,14 +60,21 @@ class _NicknameScreenState extends State<NicknameScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (user != null) MemberAvatar(id: user.id, name: googleName, photoUrl: user.photoUrl, size: 76, ring: 3),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (user != null) MemberAvatar(id: user.id, name: googleName, photoUrl: user.photoUrl, size: 76, ring: 3),
+                  const Spacer(),
+                  const ThemeToggle(),
+                ],
+              ),
               const SizedBox(height: 26),
-              const Text(
+              Text(
                 'What should your\ntripmates call you?',
                 style: TextStyle(color: ink, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1, height: 1.1),
               ),
               const SizedBox(height: 10),
-              const Text(
+              Text(
                 'This name appears on your trips, expenses and balances, instead of your Google name.',
                 style: TextStyle(color: muted, fontSize: 14, height: 1.45),
               ),
@@ -87,13 +94,13 @@ class _NicknameScreenState extends State<NicknameScreen> {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    const Icon(Icons.lock_outline_rounded, size: 14, color: muted),
+                    Icon(Icons.lock_outline_rounded, size: 14, color: muted),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         'Photo and email from Google · ${user!.email}',
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: muted, fontSize: 12),
+                        style: TextStyle(color: muted, fontSize: 12),
                       ),
                     ),
                   ],
@@ -103,7 +110,7 @@ class _NicknameScreenState extends State<NicknameScreen> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_error!, style: const TextStyle(color: negative, fontSize: 12.5)),
+                  child: Text(_error!, style: TextStyle(color: negative, fontSize: 12.5)),
                 ),
               SizedBox(
                 width: double.infinity,
@@ -112,16 +119,16 @@ class _NicknameScreenState extends State<NicknameScreen> {
                   onPressed: _busy ? null : _continue,
                   style: primaryButton(radius: 16),
                   child: _busy
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(strokeWidth: 2, color: onAccent),
                         )
                       : const Text('Continue', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
               const SizedBox(height: 12),
-              const Center(
+              Center(
                 child: Text('You can change it any time in Profile.', style: TextStyle(color: muted, fontSize: 12)),
               ),
             ],

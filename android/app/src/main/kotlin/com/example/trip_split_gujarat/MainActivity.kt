@@ -55,7 +55,8 @@ class MainActivity : FlutterActivity() {
         }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "tripsplit/upi_pay").setMethodCallHandler { call, result ->
             when (call.method) {
-                // Opens the UPI app chooser; answers with the app's response string
+                // Opens a UPI app on the payment (the one in "package", else the
+                // chooser); answers with the app's response string
                 // ("txnId=...&Status=SUCCESS&..."), "" if it returned nothing, or an error.
                 "pay" -> {
                     val uri = call.argument<String>("uri")
@@ -65,15 +66,24 @@ class MainActivity : FlutterActivity() {
                     }
                     pendingUpiResult?.error("cancelled", "Another payment was started", null)
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri))
+                    val pkg = call.argument<String>("package")
                     try {
                         pendingUpiResult = result
                         @Suppress("DEPRECATION")
-                        startActivityForResult(Intent.createChooser(intent, "Pay with"), UPI_REQUEST)
+                        if (pkg != null) {
+                            startActivityForResult(intent.setPackage(pkg), UPI_REQUEST)
+                        } else {
+                            startActivityForResult(Intent.createChooser(intent, "Pay with"), UPI_REQUEST)
+                        }
                     } catch (e: ActivityNotFoundException) {
                         pendingUpiResult = null
                         result.error("no_upi_app", "No UPI app is installed", null)
                     }
                 }
+                // The installed UPI apps: [{package, label, icon (PNG bytes)}].
+                "apps" -> result.success(UpiApps.list(this))
+                // Opens one on its home screen, to scan a QR there.
+                "open" -> result.success(UpiApps.open(this, call.argument<String>("package") ?: ""))
                 else -> result.notImplemented()
             }
         }

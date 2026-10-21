@@ -1,12 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../expense_notifier.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../trip_store.dart';
 import '../widgets.dart';
 import 'balance_screen.dart';
+import 'expense_screen.dart';
 import 'profile_screen.dart';
+import 'settle_screen.dart';
 import 'stats_screen.dart';
 import 'trip_home_screen.dart';
 import 'trips_ui.dart';
@@ -37,6 +42,27 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _store.addListener(_onStore);
     _store.refresh();
     _acceptInvites();
+    _startNotifications();
+  }
+
+  static bool _launchHandled = false;
+
+  /// Expense notifications on: permission, background check, and the
+  /// expense whose notification opened the app (once per launch).
+  Future<void> _startNotifications() async {
+    unawaited(ExpenseNotifier.start().catchError((Object _) {}));
+    if (_launchHandled) return;
+    _launchHandled = true;
+    final target = await ExpenseNotifier.launchTarget().catchError((Object _) => null);
+    if (target != null && mounted) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => target.settle
+              ? SettleScreen(tripId: target.tripId, otherId: target.id)
+              : ExpenseScreen(tripId: target.tripId, expenseId: target.id),
+        ),
+      );
+    }
   }
 
   @override
@@ -124,7 +150,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                         t.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
+                        style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
                       ),
                     ),
                     AvatarStack(members: t.members, size: 20, max: 3),
@@ -160,7 +186,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
     if (_store.trips == null) {
       return _store.error == null
-          ? const Center(child: CircularProgressIndicator(color: accent))
+          ? Center(child: CircularProgressIndicator(color: accent))
           : _message(Icons.cloud_off_outlined, 'Can’t reach the server', _store.error!, retry: true);
     }
     return _message(
@@ -179,9 +205,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           children: [
             IconCircle(icon: icon, size: 64),
             const SizedBox(height: 14),
-            Text(title, style: const TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700)),
+            Text(title, style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700)),
             const SizedBox(height: 4),
-            Text(body, textAlign: TextAlign.center, style: const TextStyle(color: muted, fontSize: 13)),
+            Text(body, textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 13)),
             const SizedBox(height: 18),
             if (retry)
               FilledButton(onPressed: _store.refresh, style: primaryButton(), child: const Text('Retry'))
@@ -246,8 +272,8 @@ class _NavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: const Border(top: BorderSide(color: line)),
+        color: surface,
+        border: Border(top: BorderSide(color: line)),
         boxShadow: softShadow(ink, .04),
       ),
       child: SafeArea(

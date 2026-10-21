@@ -77,15 +77,22 @@ class _StatsScreenState extends State<StatsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
         children: [
           if (!_single) ...[
-            const Padding(
-              padding: EdgeInsets.fromLTRB(4, 8, 4, 12),
-              child: Text('Statistics', style: TextStyle(color: ink, fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -.5)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 0, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Statistics', style: TextStyle(color: ink, fontSize: 24, fontWeight: FontWeight.w700, letterSpacing: -.5)),
+                  ),
+                  const ThemeToggle(),
+                ],
+              ),
             ),
             if (_trips.length > 1) _filterRow(),
           ],
           if (_loading && rows.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(top: 80),
+            Padding(
+              padding: const EdgeInsets.only(top: 80),
               child: Center(child: CircularProgressIndicator(color: accent)),
             )
           else if (rows.isEmpty)
@@ -127,6 +134,7 @@ class _StatsScreenState extends State<StatsScreen> {
     return Scaffold(
       backgroundColor: paper,
       appBar: AppBar(
+        actions: const [ThemeToggle()],
         backgroundColor: paper,
         surfaceTintColor: paper,
         title: Text('${widget.trip!.name} · stats', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
@@ -158,7 +166,7 @@ class _StatsScreenState extends State<StatsScreen> {
         selected: selected,
         onSelected: (_) => setState(() => _tripFilter = id),
         showCheckmark: false,
-        backgroundColor: Colors.white,
+        backgroundColor: surface,
         selectedColor: accentSoft,
         side: BorderSide(color: selected ? accent.withValues(alpha: .4) : line),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -183,23 +191,23 @@ class _StatsScreenState extends State<StatsScreen> {
       children: [
         IconCircle(icon: icon, size: 32),
         const SizedBox(height: 10),
-        Text(label, style: const TextStyle(color: muted, fontSize: 12)),
+        Text(label, style: TextStyle(color: muted, fontSize: 12)),
         const SizedBox(height: 2),
         FittedBox(
           fit: BoxFit.scaleDown,
           alignment: Alignment.centerLeft,
           child: Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               color: ink,
               fontSize: 22,
               fontWeight: FontWeight.w700,
               letterSpacing: -.5,
-              fontFeatures: [FontFeature.tabularFigures()],
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
         ),
-        Text(note, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 11.5)),
+        Text(note, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11.5)),
       ],
     ),
   );
@@ -210,21 +218,21 @@ class _StatsScreenState extends State<StatsScreen> {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
+        Text(title, style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
         const SizedBox(height: 10),
         chart,
       ],
     ),
   );
 
-  Widget _empty() => const Padding(
-    padding: EdgeInsets.only(top: 70),
+  Widget _empty() => Padding(
+    padding: const EdgeInsets.only(top: 70),
     child: Column(
       children: [
-        IconCircle(icon: Icons.insights_outlined, size: 64),
-        SizedBox(height: 14),
+        const IconCircle(icon: Icons.insights_outlined, size: 64),
+        const SizedBox(height: 14),
         Text('Nothing to chart yet', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
-        SizedBox(height: 4),
+        const SizedBox(height: 4),
         Text('Add a few expenses and your spending shows up here.', style: TextStyle(color: muted, fontSize: 13)),
       ],
     ),

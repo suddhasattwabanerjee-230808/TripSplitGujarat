@@ -24,11 +24,7 @@ class UpiPopupApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     color: Colors.transparent,
-    theme: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: accent),
-      fontFamily: 'Roboto',
-    ),
+    theme: appThemeData(),
     home: const _UpiPopup(),
   );
 }
@@ -220,9 +216,9 @@ class _UpiPopupState extends State<_UpiPopup> {
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: paper,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
               ),
               child: SafeArea(
                 top: false,
@@ -249,12 +245,12 @@ class _UpiPopupState extends State<_UpiPopup> {
       children: [
         Lottie.asset('assets/success_check.json', width: 140, height: 140, repeat: false),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Expense added',
           style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
-        Text('Added to ${_trip?.name ?? 'your trip'}', style: const TextStyle(color: muted, fontSize: 12)),
+        Text('Added to ${_trip?.name ?? 'your trip'}', style: TextStyle(color: muted, fontSize: 12)),
       ],
     ),
   );
@@ -267,7 +263,7 @@ class _UpiPopupState extends State<_UpiPopup> {
         child: Container(
           width: 38,
           height: 4,
-          decoration: BoxDecoration(color: const Color(0xFFD5D8E2), borderRadius: BorderRadius.circular(4)),
+          decoration: BoxDecoration(color: muted.withValues(alpha: .35), borderRadius: BorderRadius.circular(4)),
         ),
       ),
       const SizedBox(height: 14),
@@ -277,7 +273,7 @@ class _UpiPopupState extends State<_UpiPopup> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(color: accent.withValues(alpha: .14), shape: BoxShape.circle),
-            child: const Icon(Icons.currency_rupee_rounded, color: accent, size: 22),
+            child: Icon(Icons.currency_rupee_rounded, color: accent, size: 22),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -288,22 +284,22 @@ class _UpiPopupState extends State<_UpiPopup> {
                   _payee == null ? 'UPI payment detected' : 'Paid to $_payee',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 Text(
                   money(_amount),
-                  style: const TextStyle(color: ink, fontSize: 26, height: 1.15, fontWeight: FontWeight.w800, letterSpacing: -.6),
+                  style: TextStyle(color: ink, fontSize: 26, height: 1.15, fontWeight: FontWeight.w800, letterSpacing: -.6),
                 ),
               ],
             ),
           ),
-          IconButton(onPressed: _busy ? null : _close, icon: const Icon(Icons.close_rounded, color: muted)),
+          IconButton(onPressed: _busy ? null : _close, icon: Icon(Icons.close_rounded, color: muted)),
         ],
       ),
       const SizedBox(height: 16),
       if (_loading)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 20),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
           child: Center(child: CircularProgressIndicator(color: accent)),
         )
       else if (_trip != null) ...[
@@ -345,20 +341,20 @@ class _UpiPopupState extends State<_UpiPopup> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_locating)
-                  const Padding(
-                    padding: EdgeInsets.all(15),
+                  Padding(
+                    padding: const EdgeInsets.all(15),
                     child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: accent)),
                   )
                 else
                   IconButton(
                     tooltip: 'Use current location',
                     onPressed: _busy ? null : _useCurrentLocation,
-                    icon: const Icon(Icons.my_location_outlined, size: 18, color: accent),
+                    icon: Icon(Icons.my_location_outlined, size: 18, color: accent),
                   ),
                 IconButton(
                   tooltip: 'Pick on map',
                   onPressed: _busy ? null : _openLocationPicker,
-                  icon: const Icon(Icons.map_outlined, size: 18, color: accent),
+                  icon: Icon(Icons.map_outlined, size: 18, color: accent),
                 ),
               ],
             ),
@@ -368,7 +364,7 @@ class _UpiPopupState extends State<_UpiPopup> {
         fieldLabel('WHEN'),
         const SizedBox(height: 8),
         Material(
-          color: Colors.white,
+          color: surface,
           borderRadius: BorderRadius.circular(16),
           child: InkWell(
             onTap: _busy ? null : _pickDateTime,
@@ -377,15 +373,15 @@ class _UpiPopupState extends State<_UpiPopup> {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               child: Row(
                 children: [
-                  const Icon(Icons.schedule_outlined, size: 18, color: muted),
+                  Icon(Icons.schedule_outlined, size: 18, color: muted),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       _fullDateTime(_time),
-                      style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w700),
+                      style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w700),
                     ),
                   ),
-                  const Icon(Icons.edit_calendar_outlined, size: 17, color: accent),
+                  Icon(Icons.edit_calendar_outlined, size: 17, color: accent),
                 ],
               ),
             ),
@@ -395,7 +391,7 @@ class _UpiPopupState extends State<_UpiPopup> {
       if (_error != null)
         Padding(
           padding: const EdgeInsets.only(top: 10),
-          child: Text(_error!, style: const TextStyle(color: negative, fontSize: 12)),
+          child: Text(_error!, style: TextStyle(color: negative, fontSize: 12)),
         ),
       if (_trip != null) ...[
         const SizedBox(height: 18),
@@ -406,11 +402,11 @@ class _UpiPopupState extends State<_UpiPopup> {
             onPressed: _busy || _loading ? null : _save,
             style: FilledButton.styleFrom(
               backgroundColor: ink,
-              foregroundColor: Colors.white,
+              foregroundColor: paper,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             ),
             child: _busy
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: paper))
                 : const Text('Save expense', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ),
@@ -429,9 +425,9 @@ class _UpiPopupState extends State<_UpiPopup> {
             fieldLabel('CATEGORY'),
             if (!_categoryPicked) ...[
               const SizedBox(width: 6),
-              const Icon(Icons.auto_awesome_outlined, size: 11, color: accent),
+              Icon(Icons.auto_awesome_outlined, size: 11, color: accent),
               const SizedBox(width: 3),
-              const Text('auto', style: TextStyle(color: accent, fontSize: 9, fontWeight: FontWeight.w800)),
+              Text('auto', style: TextStyle(color: accent, fontSize: 9, fontWeight: FontWeight.w800)),
             ],
           ],
         ),
@@ -454,7 +450,7 @@ class _UpiPopupState extends State<_UpiPopup> {
                 showCheckmark: false,
                 visualDensity: VisualDensity.compact,
                 selectedColor: colorForCategory(c).withValues(alpha: .16),
-                backgroundColor: Colors.white,
+                backgroundColor: surface,
                 side: BorderSide(color: _category == c ? colorForCategory(c) : Colors.transparent),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 labelStyle: TextStyle(

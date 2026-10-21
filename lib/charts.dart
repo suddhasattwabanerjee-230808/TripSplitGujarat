@@ -69,7 +69,7 @@ class _HBarChartState extends State<HBarChart> {
                                 rows[i].label,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w500),
+                                style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w500),
                               ),
                             ),
                             AnimatedSwitcher(
@@ -79,11 +79,11 @@ class _HBarChartState extends State<HBarChart> {
                                     ? '${(rows[i].value / total * 100).round()}% · ${money(rows[i].value)}'
                                     : money(rows[i].value),
                                 key: ValueKey(_selected == i),
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: ink,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  fontFeatures: [FontFeature.tabularFigures()],
+                                  fontFeatures: const [FontFeature.tabularFigures()],
                                 ),
                               ),
                             ),
@@ -216,7 +216,7 @@ class _TimeBarChartState extends State<TimeBarChart> {
                   overflow: TextOverflow.visible,
                   softWrap: false,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: muted, fontSize: 10),
+                  style: TextStyle(color: muted, fontSize: 10),
                 ),
               ),
           ],
