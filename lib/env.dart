@@ -13,6 +13,6 @@ const googleMapsApiKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
 const googleWebClientId = '442536622738-q17cm7jj8fqlb40os36qc2n722hbmmlv.apps.googleusercontent.com';
 
 /// The push relay (push-worker/worker.js, a free Cloudflare Worker) that sends
-/// tripmates an instant notification when someone adds an expense. Empty
-/// until it's deployed: then only the in-app and 15-minute checks notify.
-const pushRelayUrl = '';
+/// tripmates an instant notification when someone adds an expense. If it's
+/// down, the in-app and 15-minute checks still notify.
+const pushRelayUrl = 'https://tripsplit-push.sb-sapientinfo.workers.dev';

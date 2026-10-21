@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.10.1] - 2026-10-22 (build 33)
+
+### Added
+- Instant expense notifications: when someone adds an expense, everyone else
+  on the trip gets it on their phone straight away, even with TripSplit
+  closed and the phone locked (before, it could take up to 15 minutes).
+  Open this version once and allow notifications so your phone can receive
+  them. If they don't arrive on your phone, set TripSplit's Battery setting
+  to Unrestricted.
+
 ## [1.10.0] - 2026-10-21 (build 32)
 
 ### Added
