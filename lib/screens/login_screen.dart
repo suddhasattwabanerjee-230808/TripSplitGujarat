@@ -6,6 +6,7 @@ import '../api_client.dart';
 import '../google_auth.dart';
 import '../theme.dart';
 import 'home_shell.dart';
+import 'nickname_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -35,10 +36,10 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     });
     try {
       final idToken = await GoogleAuth.signIn();
-      await ApiClient.instance.signInWithGoogle(idToken);
+      final user = await ApiClient.instance.signInWithGoogle(idToken);
       if (!mounted) return;
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const HomeShell()),
+        MaterialPageRoute(builder: (_) => user.nicknameSet ? const HomeShell() : const NicknameScreen()),
       );
     } on GoogleAuthException catch (e) {
       if (!e.canceled) setState(() => _error = e.message);

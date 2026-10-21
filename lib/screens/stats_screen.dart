@@ -282,7 +282,7 @@ class _StatsScreenState extends State<StatsScreen> {
     final members = <String, TripMember>{};
     for (final r in rows) {
       sums[r.$2.paidBy] = (sums[r.$2.paidBy] ?? 0) + r.$2.amount;
-      names[r.$2.paidBy] = r.$2.paidByName;
+      names[r.$2.paidBy] = r.$2.payerName(r.$1);
       final m = r.$1.member(r.$2.paidBy);
       if (m != null) members[m.id] = m;
     }

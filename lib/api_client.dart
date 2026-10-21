@@ -118,6 +118,7 @@ class ApiClient {
           email: account.email ?? user.email,
           photoUrl: account.photoURL,
           upiId: user.upiId,
+          nicknameSet: user.nicknameSet,
         );
         unawaited(_saveProfile(updated, {'email': updated.email, 'photoUrl': updated.photoUrl}).catchError((_) {}));
         return updated;
@@ -134,6 +135,8 @@ class ApiClient {
     return _user = await _loadProfile(account);
   }
 
+  /// Sets the nickname shown to tripmates everywhere (also on every trip the
+  /// user is in). Photo and email keep coming from Google.
   Future<AppUser> updateName(String name) {
     final user = _user!;
     final updated = AppUser(
@@ -143,8 +146,9 @@ class ApiClient {
       email: user.email,
       photoUrl: user.photoUrl,
       upiId: user.upiId,
+      nicknameSet: true,
     );
-    return _saveProfile(updated, {'name': name}).then((_) => _user = updated);
+    return _saveProfile(updated, {'name': name, 'nicknameSet': true}).then((_) => _user = updated);
   }
 
   /// An empty [upiId] removes it.
@@ -161,6 +165,7 @@ class ApiClient {
       email: user.email,
       photoUrl: user.photoUrl,
       upiId: value,
+      nicknameSet: user.nicknameSet,
     );
     return _saveProfile(updated, {'upiId': value}).then((_) => _user = updated);
   }
@@ -198,11 +203,12 @@ class ApiClient {
       _expenses(tripId).orderBy('date', descending: true).snapshots(includeMetadataChanges: true);
 
   /// The 50 newest expenses across all the user's trips (the bell's feed).
-  Stream<List<TripExpense>> watchActivity() => _db
-      .collectionGroup('expenses')
-      .where('memberIds', arrayContains: _uid)
+  /// One trip's newest expenses, for the bell. Listened to per trip rather
+  /// than with one collection-group query, which silently needed a composite
+  /// index and left the feed empty without it; this needs none.
+  Stream<List<TripExpense>> watchRecentExpenses(String tripId) => _expenses(tripId)
       .orderBy('createdAt', descending: true)
-      .limit(50)
+      .limit(30)
       .snapshots()
       .map((s) => s.docs.map(TripExpense.fromDoc).toList());
 

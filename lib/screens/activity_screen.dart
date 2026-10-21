@@ -60,18 +60,28 @@ class _ActivityScreenState extends State<ActivityScreen> {
         },
         child: items.isEmpty
             ? ListView(
-                children: const [
-                  SizedBox(height: 120),
-                  Center(child: IconCircle(icon: Icons.notifications_none_rounded, size: 64)),
-                  SizedBox(height: 14),
+                children: [
+                  const SizedBox(height: 120),
                   Center(
-                    child: Text('No activity yet', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
+                    child: IconCircle(
+                      icon: _store.activityError == null ? Icons.notifications_none_rounded : Icons.cloud_off_outlined,
+                      size: 64,
+                    ),
                   ),
-                  SizedBox(height: 4),
+                  const SizedBox(height: 14),
                   Center(
                     child: Text(
-                      'When someone adds an expense, it shows up here.',
-                      style: TextStyle(color: muted, fontSize: 13),
+                      _store.activityError == null ? 'No activity yet' : 'Couldn’t load notifications',
+                      style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      _store.activityError ?? 'When someone adds an expense, it shows up here.',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: muted, fontSize: 13),
                     ),
                   ),
                 ],

@@ -35,11 +35,14 @@ class TripStore extends ChangeNotifier {
   String? error;
   final Map<String, List<TripExpense>> expenses = {};
   List<ActivityItem> activity = [];
-  List<TripExpense> _activityRaw = [];
+
+  /// Why the feed couldn't load, if it couldn't (shown instead of "No activity").
+  String? activityError;
+  final Map<String, List<TripExpense>> _recentByTrip = {};
   DateTime? _activitySeenAt;
 
   StreamSubscription<List<Trip>>? _tripsSub;
-  StreamSubscription<List<TripExpense>>? _activitySub;
+  final Map<String, StreamSubscription<List<TripExpense>>> _recentSubs = {};
   Completer<void>? _firstTrips;
 
   /// The trip the Trip tab shows; the app opens on it.
@@ -67,7 +70,6 @@ class TripStore extends ChangeNotifier {
       error = null;
       try {
         _tripsSub = ApiClient.instance.watchTrips().listen(_onTrips, onError: _onError);
-        _activitySub = ApiClient.instance.watchActivity().listen(_onActivity, onError: (_) {});
         SharedPreferences.getInstance().then((p) {
           _activitySeenAt ??= DateTime.tryParse(p.getString(_seenKey) ?? '');
           notifyListeners();
@@ -87,6 +89,7 @@ class TripStore extends ChangeNotifier {
     trips = list;
     error = null;
     revision++;
+    _watchRecent(list);
     _buildActivity();
     if (!(_firstTrips?.isCompleted ?? true)) _firstTrips!.complete();
     notifyListeners();
@@ -98,16 +101,35 @@ class TripStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onActivity(List<TripExpense> list) {
-    _activityRaw = list;
-    _buildActivity();
-    notifyListeners();
+  /// Keeps one listener per trip the user is on, for the bell.
+  void _watchRecent(List<Trip> list) {
+    final ids = {for (final t in list) t.id};
+    for (final gone in _recentSubs.keys.where((id) => !ids.contains(id)).toList()) {
+      _recentSubs.remove(gone)?.cancel();
+      _recentByTrip.remove(gone);
+    }
+    for (final id in ids.where((id) => !_recentSubs.containsKey(id))) {
+      _recentSubs[id] = ApiClient.instance.watchRecentExpenses(id).listen(
+        (expenses) {
+          _recentByTrip[id] = expenses;
+          activityError = null;
+          _buildActivity();
+          notifyListeners();
+        },
+        onError: (Object e) {
+          activityError = 'Couldn’t load notifications ($e).';
+          notifyListeners();
+        },
+      );
+    }
   }
 
   void _buildActivity() {
-    final names = {for (final t in trips ?? const <Trip>[]) t.id: t.name};
+    final byId = {for (final t in trips ?? const <Trip>[]) t.id: t};
     final me = _me ?? '';
-    activity = [for (final e in _activityRaw) ActivityItem.of(e, names[e.tripId] ?? 'A trip', me)];
+    final recent = [for (final list in _recentByTrip.values) ...list]
+      ..sort((a, b) => (b.createdAt ?? DateTime.now()).compareTo(a.createdAt ?? DateTime.now()));
+    activity = [for (final e in recent.take(50)) ActivityItem.of(e, byId[e.tripId], me)];
   }
 
   /// Every trip's expenses, for the statistics tab.
@@ -180,14 +202,17 @@ class TripStore extends ChangeNotifier {
   /// Stops listening and forgets everything (on sign-out).
   void clear() {
     _tripsSub?.cancel();
-    _activitySub?.cancel();
     _tripsSub = null;
-    _activitySub = null;
+    for (final sub in _recentSubs.values) {
+      sub.cancel();
+    }
+    _recentSubs.clear();
+    _recentByTrip.clear();
+    activityError = null;
     trips = null;
     error = null;
     expenses.clear();
     activity = [];
-    _activityRaw = [];
     currentTripId = null;
     notifyListeners();
   }

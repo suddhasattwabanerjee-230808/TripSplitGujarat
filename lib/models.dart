@@ -34,8 +34,11 @@ class AppUser {
     this.email,
     this.photoUrl,
     this.upiId,
+    this.nicknameSet = false,
   });
   final String id;
+
+  /// The nickname tripmates see everywhere (starts as the Google name).
   final String name;
 
   /// Only set on accounts first created with the old phone + OTP login.
@@ -45,6 +48,10 @@ class AppUser {
 
   /// Where tripmates pay this person from "Pay now" (e.g. name@okhdfc).
   final String? upiId;
+
+  /// True once they've chosen a nickname, on the screen after sign-in or in
+  /// Profile; until then that screen opens first.
+  final bool nicknameSet;
 
   bool get hasGoogle => email != null;
 
@@ -57,6 +64,7 @@ class AppUser {
     email: data['email'] as String?,
     photoUrl: data['photoUrl'] as String?,
     upiId: data['upiId'] as String?,
+    nicknameSet: data['nicknameSet'] == true,
   );
 
   /// The copy kept on each trip, so faces and "Pay" need no extra reads.
@@ -192,6 +200,10 @@ class TripExpense {
 
   bool get isSettlement => category == settlementCategory;
 
+  /// The payer's current name on [trip] (it follows nickname changes), or the
+  /// name saved with the expense if they're no longer on it.
+  String payerName(Trip? trip) => trip?.member(paidBy)?.name ?? paidByName;
+
   double shareOf(String userId) {
     for (final s in shares) {
       if (s.userId == userId) return s.shareAmount;
@@ -276,15 +288,15 @@ class ActivityItem {
   final DateTime createdAt;
   final double myShare;
 
-  factory ActivityItem.of(TripExpense e, String tripName, String me) => ActivityItem(
+  factory ActivityItem.of(TripExpense e, Trip? trip, String me) => ActivityItem(
     expenseId: e.id,
     tripId: e.tripId,
-    tripName: tripName,
+    tripName: trip?.name ?? 'A trip',
     description: e.description,
     amount: e.amount,
     category: e.category,
     paidBy: e.paidBy,
-    paidByName: e.paidByName,
+    paidByName: e.payerName(trip),
     createdAt: e.createdAt ?? DateTime.now(),
     myShare: e.shareOf(me),
   );

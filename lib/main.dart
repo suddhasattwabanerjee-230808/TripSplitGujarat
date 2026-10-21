@@ -6,6 +6,7 @@ import 'api_client.dart';
 import 'screens/login_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/home_shell.dart';
+import 'screens/nickname_screen.dart';
 import 'screens/update_dialog.dart';
 import 'theme.dart';
 import 'update_service.dart';
@@ -169,7 +170,11 @@ class _AppRootState extends State<_AppRoot> {
           )
         : KeyedSubtree(
             key: ValueKey(_loggedIn),
-            child: _loggedIn! ? const HomeShell() : const LoginScreen(),
+            child: !_loggedIn!
+                ? const LoginScreen()
+                : (ApiClient.instance.currentUser?.nicknameSet ?? true)
+                ? const HomeShell()
+                : const NicknameScreen(),
           );
     return AnimatedSwitcher(duration: const Duration(milliseconds: 300), child: child);
   }

@@ -128,4 +128,13 @@ void main() {
     final after = expense('dinner', 'a', 300, {'a': 150, 'c': 150});
     expect(moneyDelta(before, after), {'owed.a': 50, 'owed.b': -100, 'owed.c': 50});
   });
+
+  test('a payer shows by their current trip nickname, else the saved name', () {
+    final e = expense('cab', 'a', 240, {'b': 240});
+    const renamed = Trip(id: 't', name: 'T', destination: null, inviteCode: 'X', members: [TripMember(id: 'a', name: 'Bittu')]);
+    expect(e.payerName(renamed), 'Bittu');
+    const left = Trip(id: 't', name: 'T', destination: null, inviteCode: 'X', members: [TripMember(id: 'b', name: 'B')]);
+    expect(e.payerName(left), 'a'); // saved paidByName
+    expect(e.payerName(null), 'a');
+  });
 }

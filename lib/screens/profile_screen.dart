@@ -222,13 +222,13 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _EditFieldSheet(
-        title: 'Your name',
-        subtitle: 'This is what everyone on your trips sees.',
-        label: 'NAME',
-        hint: 'e.g. Aarav',
-        icon: Icons.person_outline_rounded,
+        title: 'Nickname',
+        subtitle: 'What everyone on your trips sees, instead of your Google name.',
+        label: 'NICKNAME',
+        hint: 'e.g. Bittu',
+        icon: Icons.badge_outlined,
         initial: _user?.name ?? '',
-        emptyError: 'Enter your name.',
+        emptyError: 'Enter a nickname.',
         save: ApiClient.instance.updateName,
       ),
     );
@@ -355,7 +355,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                           _card([
                             _row(
                               icon: Icons.badge_outlined,
-                              label: 'Name',
+                              label: 'Nickname',
                               value: user.name,
                               trailing: const Icon(Icons.edit_outlined, size: 17, color: muted),
                               onTap: _editName,

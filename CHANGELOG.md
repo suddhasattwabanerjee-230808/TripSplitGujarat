@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.7.6] - 2026-10-21 (build 29)
+
+### Added
+- Pick a nickname after signing in with Google. It's what everyone sees on
+  trips, expenses, balances and notifications instead of your Google name;
+  your photo and email still come from Google. Change it any time in
+  Profile → Nickname. Existing users are asked once too.
+
+### Fixed
+- Notifications (the bell) were always empty. They now show the latest
+  expenses from all your trips, and say why if they can't load.
+
 ## [1.7.5] - 2026-10-21 (build 28)
 
 ### Changed

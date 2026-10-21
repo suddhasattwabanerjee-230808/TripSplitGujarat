@@ -704,7 +704,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       detail = expense.description;
     } else {
       title = expense.description;
-      detail = '${iPaid ? 'You' : expense.paidByName} paid${city == null ? '' : ' · $city'}';
+      detail = '${iPaid ? 'You' : expense.payerName(_trip)} paid${city == null ? '' : ' · $city'}';
     }
     return AppCard(
       onTap: () => _showExpenseDetails(expense),
@@ -773,7 +773,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               const SizedBox(height: 10),
               AvatarStack(
                 members: expense.isSettlement
-                    ? [_trip?.member(expense.paidBy) ?? TripMember(id: expense.paidBy, name: expense.paidByName), ...people]
+                    ? [_trip?.member(expense.paidBy) ?? TripMember(id: expense.paidBy, name: expense.payerName(_trip)), ...people]
                     : people,
                 size: 20,
                 max: 3,
@@ -893,7 +893,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                   style: const TextStyle(color: ink, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -.6),
                 ),
                 Text(
-                  '${isOwn ? 'You' : expense.paidByName} paid · ${expense.category ?? 'Other'}',
+                  '${isOwn ? 'You' : expense.payerName(_trip)} paid · ${expense.category ?? 'Other'}',
                   style: const TextStyle(color: muted, fontSize: 12),
                 ),
               ],
