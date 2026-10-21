@@ -11,13 +11,14 @@ import '../widgets.dart';
 import 'balance_screen.dart';
 import 'stats_screen.dart';
 import 'expense_screen.dart';
+import 'expenses_screen.dart';
 import 'profile_screen.dart';
 import 'settle_screen.dart';
 import 'trip_home_screen.dart';
 import 'trips_ui.dart';
 
-/// The signed-in app: Trip (the current trip — where the app opens), Add
-/// expense, Balance, Statistics, Profile.
+/// The signed-in app: Trip (the current trip's dashboard — where the app
+/// opens), its Expenses, Add expense, Balance, Statistics, Profile.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -28,7 +29,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   // Tab indexes into the bar; "Add expense" (2) is an action, not a page.
   // The app opens on the current trip's page, which is its dashboard.
-  static const _trip = 0, _balance = 1, _add = 2, _stats = 3, _profile = 4;
+  static const _trip = 0, _expenses = 1, _add = 2, _balance = 3, _stats = 4, _profile = 5;
   int _tab = _trip;
 
   /// Tabs are built the first time they're opened, then kept alive.
@@ -100,12 +101,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
   }
 
-  /// Picking a trip anywhere (Profile, Balance, the bell) brings up the Trip tab.
+  /// Picking a trip anywhere (Profile, Balance, the bell) brings up the Trip
+  /// tab; switching trips on the Expenses tab stays there.
   void _onStore() {
     if (!mounted) return;
     final id = _store.currentTripId;
     setState(() {
-      if (id != null && _shownTripId != null && id != _shownTripId) {
+      if (id != null && _shownTripId != null && id != _shownTripId && _tab != _expenses) {
         _tab = _trip;
         _visited.add(_trip); // it may not have been built yet (the app opens on Home)
       }
@@ -177,6 +179,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   Widget _page(int index) => switch (index) {
     _trip => _tripPage(),
+    _expenses => _expensesPage(),
     _balance => BalanceScreen(onOpenTrip: _store.selectTrip),
     _stats => const StatsScreen(),
     _profile => const ProfileScreen(embedded: true),
@@ -186,8 +189,24 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Widget _tripPage() {
     final trip = _store.currentTrip;
     if (trip != null) {
-      return TripHomeScreen(key: ValueKey(trip.id), tripId: trip.id, tripName: trip.name, embedded: true);
+      return TripHomeScreen(
+        key: ValueKey(trip.id),
+        tripId: trip.id,
+        tripName: trip.name,
+        embedded: true,
+        onOpenExpenses: () => _select(_expenses),
+      );
     }
+    return _noTrip();
+  }
+
+  Widget _expensesPage() {
+    final trip = _store.currentTrip;
+    if (trip != null) return ExpensesScreen(key: ValueKey(trip.id), tripId: trip.id);
+    return _noTrip();
+  }
+
+  Widget _noTrip() {
     if (_store.trips == null) {
       return _store.error == null
           ? Center(child: CircularProgressIndicator(color: accent))
@@ -246,7 +265,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       backgroundColor: paper,
       body: Stack(
         children: [
-          for (final index in [_trip, _balance, _stats, _profile])
+          for (final index in [_trip, _expenses, _balance, _stats, _profile])
             if (_visited.contains(index))
               Offstage(
                 offstage: _tab != index,
@@ -266,9 +285,10 @@ class _NavBar extends StatelessWidget {
 
   static const _items = [
     (Icons.luggage_outlined, Icons.luggage_rounded, 'Trip'),
-    (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Balance'),
+    (Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Expenses'),
     (Icons.add_rounded, Icons.add_rounded, 'Add'),
-    (Icons.insights_outlined, Icons.insights_rounded, 'Statistics'),
+    (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Balance'),
+    (Icons.insights_outlined, Icons.insights_rounded, 'Stats'),
     (Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
   ];
 
@@ -304,14 +324,14 @@ class _NavBar extends StatelessWidget {
         height: 52,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: LinearGradient(
+          gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [accent, Color.lerp(accent, const Color(0xFF8B5CF6), .55)!],
+            colors: [logoOrange, wineBright],
           ),
-          boxShadow: [BoxShadow(color: accent.withValues(alpha: .35), blurRadius: 16, offset: const Offset(0, 6))],
+          boxShadow: [BoxShadow(color: wine.withValues(alpha: .35), blurRadius: 16, offset: const Offset(0, 6))],
         ),
-        child: Icon(Icons.add_rounded, color: onAccent, size: 28, semanticLabel: 'Add expense'),
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28, semanticLabel: 'Add expense'),
       ),
     ),
   );
@@ -327,7 +347,7 @@ class _NavBar extends StatelessWidget {
           AnimatedContainer(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
             decoration: BoxDecoration(
               color: selected ? accentSoft : Colors.transparent,
               borderRadius: BorderRadius.circular(20),

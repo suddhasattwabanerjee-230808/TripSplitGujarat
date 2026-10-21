@@ -16,9 +16,12 @@ class BarDatum {
 /// Ranked horizontal bars, one hue, values in ink beside each bar. Tapping a
 /// row shows its share of the total.
 class HBarChart extends StatefulWidget {
-  const HBarChart({super.key, required this.data, this.maxRows = 8});
+  const HBarChart({super.key, required this.data, this.maxRows = 8, this.ranked = true});
   final List<BarDatum> data;
   final int maxRows;
+
+  /// Largest first; false keeps the given order (e.g. times of day).
+  final bool ranked;
 
   @override
   State<HBarChart> createState() => _HBarChartState();
@@ -29,7 +32,8 @@ class _HBarChartState extends State<HBarChart> {
 
   @override
   Widget build(BuildContext context) {
-    final sorted = [...widget.data]..sort((a, b) => b.value.compareTo(a.value));
+    final sorted = [...widget.data];
+    if (widget.ranked) sorted.sort((a, b) => b.value.compareTo(a.value));
     // Past maxRows, fold the tail into "Other" rather than inventing more rows.
     final rows = sorted.length <= widget.maxRows
         ? sorted
@@ -42,7 +46,7 @@ class _HBarChartState extends State<HBarChart> {
             ),
           ];
     final total = rows.fold(0.0, (s, d) => s + d.value);
-    final maxValue = rows.isEmpty ? 0.0 : rows.first.value;
+    final maxValue = rows.fold(0.0, (m, d) => math.max(m, d.value));
     return Column(
       children: [
         for (var i = 0; i < rows.length; i++)
@@ -130,11 +134,14 @@ class _HBarChartState extends State<HBarChart> {
 /// Spending over time: one bar per day (or month), a recessive baseline, the
 /// peak value as the only gridline label, and a tap-for-detail readout.
 class TimeBarChart extends StatefulWidget {
-  const TimeBarChart({super.key, required this.buckets, this.height = 150});
+  const TimeBarChart({super.key, required this.buckets, this.height = 150, this.average});
 
   /// In order, oldest first. Labels are short ("12", "Sep").
   final List<BarDatum> buckets;
   final double height;
+
+  /// Drawn as a dashed reference line across the bars when set.
+  final double? average;
 
   @override
   State<TimeBarChart> createState() => _TimeBarChartState();
@@ -171,7 +178,14 @@ class _TimeBarChartState extends State<TimeBarChart> {
             children: [
               // The peak gridline, dashed-look via low alpha.
               Positioned(top: 0, left: 0, right: 0, child: Container(height: 1, color: line)),
-              Positioned(bottom: 0, left: 0, right: 0, child: Container(height: 1, color: const Color(0xFFD5D8E2))),
+              Positioned(bottom: 0, left: 0, right: 0, child: Container(height: 1, color: muted.withValues(alpha: .35))),
+              if (widget.average != null && peak > 0)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: widget.height * (widget.average! / peak).clamp(0.0, 1.0),
+                  child: _AverageLine(label: 'avg ${compactMoney(widget.average!)}'),
+                ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
@@ -223,6 +237,147 @@ class _TimeBarChartState extends State<TimeBarChart> {
               ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+/// A dashed hairline with its value at the right end (the bar chart's average).
+class _AverageLine extends StatelessWidget {
+  const _AverageLine({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 14,
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: CustomPaint(size: const Size(double.infinity, 1), painter: _DashPainter(ink.withValues(alpha: .45))),
+        ),
+        Positioned(
+          right: 0,
+          bottom: 2,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            color: surface,
+            child: Text(label, style: TextStyle(color: muted, fontSize: 9.5, fontWeight: FontWeight.w700)),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _DashPainter extends CustomPainter {
+  _DashPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    for (var x = 0.0; x < size.width; x += 7) {
+      canvas.drawLine(Offset(x, 0), Offset(math.min(x + 4, size.width), 0), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashPainter old) => old.color != color;
+}
+
+/// Who is ahead and who is behind: one row per person, bars growing right
+/// (gets back, [positive]) or left (owes, [negative]) from a zero line, the
+/// amount in ink at the end. Polarity is also in the sign, never colour alone.
+class DivergingBarChart extends StatelessWidget {
+  const DivergingBarChart({super.key, required this.data, this.maxRows = 6});
+  final List<BarDatum> data;
+  final int maxRows;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = ([...data]..sort((a, b) => b.value.compareTo(a.value))).take(maxRows).toList();
+    final peak = rows.fold(0.0, (m, d) => math.max(m, d.value.abs()));
+    return Column(
+      children: [
+        for (final (i, d) in rows.indexed)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(
+              children: [
+                SizedBox(width: 26, child: d.leading ?? Icon(d.icon ?? Icons.circle_outlined, size: 18, color: muted)),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 74,
+                  child: Text(
+                    d.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: ink, fontSize: 12.5, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, c) {
+                      final half = c.maxWidth / 2;
+                      final f = peak == 0 ? 0.0 : d.value.abs() / peak;
+                      final settled = d.value.abs() < 0.5;
+                      return TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: settled ? 0 : f),
+                        duration: Duration(milliseconds: 500 + i * 60),
+                        curve: Curves.easeOutCubic,
+                        builder: (_, t, _) => SizedBox(
+                          height: 18,
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                left: half - .5,
+                                top: 0,
+                                bottom: 0,
+                                child: Container(width: 1, color: muted.withValues(alpha: .5)),
+                              ),
+                              Positioned(
+                                left: d.value >= 0 ? half + 1 : half - 1 - (half - 1) * t,
+                                top: 4,
+                                child: Container(
+                                  width: (half - 1) * t,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: d.value >= 0 ? positive : negative,
+                                    borderRadius: d.value >= 0
+                                        ? const BorderRadius.horizontal(right: Radius.circular(4))
+                                        : const BorderRadius.horizontal(left: Radius.circular(4)),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 66,
+                  child: Text(
+                    d.value.abs() < 0.5 ? 'settled' : signedMoney(d.value),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: ink,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }

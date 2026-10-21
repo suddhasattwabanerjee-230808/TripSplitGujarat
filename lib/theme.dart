@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // --- Palette ------------------------------------------------------------------
-// Light: a bright, airy look (light grey page, white outlined cards, one blue
-// accent, green / red kept for money only). Dark: the same layout on deep
-// blue-black, cards lifted a step, a brighter accent and softer money colours.
+// The brand is the logo's orange with deep wine reds. Light: a bright, airy
+// look (light grey page, white outlined cards, a burnt-orange accent dark
+// enough for text, green / red kept for money only). Dark: the same layout on
+// a warm black with a wine undertone, cards lifted a step, the logo's own
+// orange as the accent and softer money colours.
 // The names below always give the current theme's colour (see AppTheme).
 
 class Palette {
@@ -27,24 +29,39 @@ class Palette {
     ink: Color(0xFF0F1222),
     muted: Color(0xFF6B7187),
     line: Color(0xFFE5E7EF),
-    accent: Color(0xFF4F46E5),
-    accentSoft: Color(0xFFEEEDFD),
+    accent: Color(0xFFBA4F0C),
+    accentSoft: Color(0xFFFCEDE2),
     positive: Color(0xFF0F8A4C),
     negative: Color(0xFFD7344A),
   );
 
   static const dark = Palette(
-    paper: Color(0xFF0D0F14),
-    surface: Color(0xFF171A22),
-    ink: Color(0xFFEDEFF5),
-    muted: Color(0xFF959BAD),
-    line: Color(0xFF272B36),
-    accent: Color(0xFF8E88FF),
-    accentSoft: Color(0xFF221F47),
+    paper: Color(0xFF0F0A0B),
+    surface: Color(0xFF1B1315),
+    ink: Color(0xFFF6EEEA),
+    muted: Color(0xFFA8989A),
+    line: Color(0xFF2F2225),
+    accent: Color(0xFFF5831F),
+    accentSoft: Color(0xFF3A2116),
     positive: Color(0xFF3CCB82),
     negative: Color(0xFFFF6E7B),
   );
 }
+
+// The brand's fixed colours, the same in both themes.
+const logoOrange = Color(0xFFF5831F);
+const wineDeep = Color(0xFF2A0A14);
+const wine = Color(0xFF7A1A33);
+const wineBright = Color(0xFF9C2A44);
+
+/// The hero surfaces (the trip card, the profile header): deep wine through
+/// wine red to the logo's orange.
+const brandGradient = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [wineDeep, wine, Color(0xFFE0691A)],
+  stops: [0, .58, 1],
+);
 
 /// Light or dark, remembered on the phone. The first time it follows the
 /// phone's own setting. Flipping it redraws every screen in place.
@@ -121,7 +138,7 @@ Color get positive => _p.positive; // you are owed / you lent
 Color get negative => _p.negative; // you owe / you borrowed
 // Text and icons on an [accent] fill: white, or near-black on the brighter dark accent.
 Color get onAccent => AppTheme.instance.dark ? Palette.dark.paper : Colors.white;
-const accentGlow = Color(0xFFB4BEFF); // highlights on dark surfaces (splash, profile header)
+const accentGlow = Color(0xFFFFC08A); // highlights on dark surfaces (splash, profile header)
 
 const cardRadius = 16.0;
 
@@ -154,8 +171,8 @@ BoxDecoration cardDecoration({Color? color, double radius = cardRadius}) => BoxD
 );
 
 const _cardShadow = [
-  BoxShadow(color: Color(0x0D141A3A), blurRadius: 24, offset: Offset(0, 8)),
-  BoxShadow(color: Color(0x08141A3A), blurRadius: 4, offset: Offset(0, 1)),
+  BoxShadow(color: Color(0x0D2A0A14), blurRadius: 24, offset: Offset(0, 8)),
+  BoxShadow(color: Color(0x082A0A14), blurRadius: 4, offset: Offset(0, 1)),
 ];
 
 // --- Expense categories ---------------------------------------------------------
@@ -227,7 +244,7 @@ class TripKind {
 }
 
 const tripKinds = [
-  TripKind('trip', 'Trip', Icons.luggage_outlined, Color(0xFF4C5FE0)),
+  TripKind('trip', 'Trip', Icons.luggage_outlined, Color(0xFFB8364F)),
   TripKind('vacation', 'Vacation', Icons.beach_access_outlined, Color(0xFF2585AE)),
   TripKind('roommates', 'Roommates', Icons.groups_outlined, Color(0xFFC94F80)),
   TripKind('friends', 'Friends', Icons.diversity_3_outlined, Color(0xFF2E9465)),

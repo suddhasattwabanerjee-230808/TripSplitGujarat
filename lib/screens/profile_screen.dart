@@ -568,13 +568,9 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: EdgeInsets.fromLTRB(8, top + 4, 8, 26),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Palette.light.ink, const Color(0xFF2A3480), Palette.light.accent],
-        ),
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
+      decoration: const BoxDecoration(
+        gradient: brandGradient,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
       ),
       child: Column(
         children: [

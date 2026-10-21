@@ -4,6 +4,38 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.11.0] - 2026-10-22 (build 34)
+
+### Added
+- An Expenses tab in the bottom bar, with everything about the trip's
+  expenses:
+  - Three views: the whole trip, per person (pick anyone to see what they
+    paid, their share and where they stand), and Me (all mine, what I paid,
+    or what others paid for me).
+  - Search by description, place, category, who paid or amount.
+  - Filters: a date range, a time window (e.g. 6–10 PM, even past
+    midnight), morning / afternoon / evening / night, categories,
+    locations, who paid, an amount range, and settle-ups on or off. They
+    combine, and the button shows how many expenses are left.
+  - Sort by newest, oldest, highest or lowest amount.
+  - A summary at the top (paid, share, net) with a category split bar.
+  - Tap an expense for its details; edit or delete your own, as before.
+- Richer trip insights as swipeable cards, with chips to jump between them:
+  an overview (per day, per person, average bill, biggest expense, top
+  category, spending pace), by date with the daily average marked, by
+  category with counts and percentages, by person, who's ahead (who gets
+  money back and who owes), by location, by time of day, and the biggest
+  expenses.
+
+### Changed
+- New colours from the logo: its orange with deep wine reds, in place of
+  the blue and purple. The dark theme is now a warm, deep black with the
+  logo's orange.
+- Everyone's photos now sit beside the trip total on the trip card.
+- The trip page no longer lists expenses (they're on the Expenses tab); a
+  card there opens them.
+- The bottom bar is Trip · Expenses · ＋ · Balance · Stats · Profile.
+
 ## [1.10.1] - 2026-10-22 (build 33)
 
 ### Added

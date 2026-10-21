@@ -85,11 +85,21 @@ class MemberAvatar extends StatelessWidget {
     this.photoUrl,
     this.size = 32,
     this.ring = 0,
+    this.ringColor,
     this.tripId,
   });
 
-  MemberAvatar.of(TripMember member, {Key? key, double size = 32, double ring = 0, String? tripId})
-    : this(key: key, id: member.id, name: member.name, photoUrl: member.photoUrl, size: size, ring: ring, tripId: tripId);
+  MemberAvatar.of(TripMember member, {Key? key, double size = 32, double ring = 0, Color? ringColor, String? tripId})
+    : this(
+        key: key,
+        id: member.id,
+        name: member.name,
+        photoUrl: member.photoUrl,
+        size: size,
+        ring: ring,
+        ringColor: ringColor,
+        tripId: tripId,
+      );
 
   /// When set, tapping the face opens this person's page on that trip.
   final String? tripId;
@@ -101,6 +111,9 @@ class MemberAvatar extends StatelessWidget {
 
   /// A white ring around the photo, so overlapping stacks read as separate faces.
   final double ring;
+
+  /// The ring's colour; defaults to [surface].
+  final Color? ringColor;
 
   String get _initials {
     final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
@@ -131,7 +144,7 @@ class MemberAvatar extends StatelessWidget {
         ? avatar
         : Container(
             padding: EdgeInsets.all(ring),
-            decoration: BoxDecoration(color: surface, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: ringColor ?? surface, shape: BoxShape.circle),
             child: avatar,
           );
     final trip = tripId;
@@ -142,10 +155,22 @@ class MemberAvatar extends StatelessWidget {
 
 /// Overlapping faces, with a "+N" disc when there are more than [max].
 class AvatarStack extends StatelessWidget {
-  const AvatarStack({super.key, required this.members, this.size = 26, this.max = 4});
+  const AvatarStack({
+    super.key,
+    required this.members,
+    this.size = 26,
+    this.max = 4,
+    this.ringColor,
+    this.extraColor,
+    this.extraTextColor,
+  });
   final List<TripMember> members;
   final double size;
   final int max;
+
+  /// For stacks on a coloured surface (the trip card): the rings, and the
+  /// "+N" disc's fill and text. Default to [surface], [accentSoft], [accent].
+  final Color? ringColor, extraColor, extraTextColor;
 
   @override
   Widget build(BuildContext context) {
@@ -161,7 +186,7 @@ class AvatarStack extends StatelessWidget {
       child: Stack(
         children: [
           for (var i = 0; i < shown.length; i++)
-            Positioned(left: step * i, child: MemberAvatar.of(shown[i], size: size, ring: 2)),
+            Positioned(left: step * i, child: MemberAvatar.of(shown[i], size: size, ring: 2, ringColor: ringColor)),
           if (extra > 0)
             Positioned(
               left: step * shown.length,
@@ -170,13 +195,13 @@ class AvatarStack extends StatelessWidget {
                 height: outer,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: accentSoft,
+                  color: extraColor ?? accentSoft,
                   shape: BoxShape.circle,
-                  border: Border.all(color: surface, width: 2),
+                  border: Border.all(color: ringColor ?? surface, width: 2),
                 ),
                 child: Text(
                   '+$extra',
-                  style: TextStyle(color: accent, fontSize: size * .36, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: extraTextColor ?? accent, fontSize: size * .36, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -385,7 +410,7 @@ ButtonStyle primaryButton({double radius = 14}) => FilledButton.styleFrom(
   foregroundColor: onAccent,
   padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
-  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+  textStyle: const TextStyle(fontFamily: 'Manrope', fontWeight: FontWeight.w700, fontSize: 14),
 );
 
 ButtonStyle secondaryButton({Color? color, double radius = 14}) => OutlinedButton.styleFrom(
@@ -394,7 +419,7 @@ ButtonStyle secondaryButton({Color? color, double radius = 14}) => OutlinedButto
   side: BorderSide(color: line),
   padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
-  textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+  textStyle: const TextStyle(fontFamily: 'Manrope', fontWeight: FontWeight.w700, fontSize: 14),
 );
 
 // --- Pay now ------------------------------------------------------------------
