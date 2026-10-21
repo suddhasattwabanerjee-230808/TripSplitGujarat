@@ -9,10 +9,10 @@ import '../theme.dart';
 import '../trip_store.dart';
 import '../widgets.dart';
 import 'balance_screen.dart';
+import 'stats_screen.dart';
 import 'expense_screen.dart';
 import 'profile_screen.dart';
 import 'settle_screen.dart';
-import 'stats_screen.dart';
 import 'trip_home_screen.dart';
 import 'trips_ui.dart';
 
@@ -26,8 +26,9 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
-  // Tab indexes into the bar; "Add expense" (1) is an action, not a page.
-  static const _trip = 0, _add = 1, _balance = 2, _stats = 3, _profile = 4;
+  // Tab indexes into the bar; "Add expense" (2) is an action, not a page.
+  // The app opens on the current trip's page, which is its dashboard.
+  static const _trip = 0, _balance = 1, _add = 2, _stats = 3, _profile = 4;
   int _tab = _trip;
 
   /// Tabs are built the first time they're opened, then kept alive.
@@ -104,7 +105,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (!mounted) return;
     final id = _store.currentTripId;
     setState(() {
-      if (id != null && _shownTripId != null && id != _shownTripId) _tab = _trip;
+      if (id != null && _shownTripId != null && id != _shownTripId) {
+        _tab = _trip;
+        _visited.add(_trip); // it may not have been built yet (the app opens on Home)
+      }
       _shownTripId = id;
     });
   }
@@ -262,8 +266,8 @@ class _NavBar extends StatelessWidget {
 
   static const _items = [
     (Icons.luggage_outlined, Icons.luggage_rounded, 'Trip'),
-    (Icons.add_circle_outline_rounded, Icons.add_circle_rounded, 'Add expense'),
     (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Balance'),
+    (Icons.add_rounded, Icons.add_rounded, 'Add'),
     (Icons.insights_outlined, Icons.insights_rounded, 'Statistics'),
     (Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
   ];
@@ -274,54 +278,74 @@ class _NavBar extends StatelessWidget {
       decoration: BoxDecoration(
         color: surface,
         border: Border(top: BorderSide(color: line)),
-        boxShadow: softShadow(ink, .04),
+        boxShadow: softShadow(ink, .05),
       ),
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 62,
+          height: 66,
           child: Row(
             children: [
               for (var i = 0; i < _items.length; i++)
-                Expanded(
-                  child: InkResponse(
-                    onTap: () => onSelect(i),
-                    radius: 36,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOut,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: current == i ? accentSoft : Colors.transparent,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Icon(
-                            current == i ? _items[i].$2 : _items[i].$1,
-                            size: i == 1 ? 26 : 23,
-                            color: current == i || i == 1 ? accent : muted,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          _items[i].$3,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: current == i ? FontWeight.w700 : FontWeight.w500,
-                            color: current == i ? ink : muted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                Expanded(child: i == 2 ? _addButton() : _item(i)),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// The main action, raised in the middle of the bar.
+  Widget _addButton() => Center(
+    child: GestureDetector(
+      onTap: () => onSelect(2),
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [accent, Color.lerp(accent, const Color(0xFF8B5CF6), .55)!],
+          ),
+          boxShadow: [BoxShadow(color: accent.withValues(alpha: .35), blurRadius: 16, offset: const Offset(0, 6))],
+        ),
+        child: Icon(Icons.add_rounded, color: onAccent, size: 28, semanticLabel: 'Add expense'),
+      ),
+    ),
+  );
+
+  Widget _item(int i) {
+    final selected = current == i;
+    return InkResponse(
+      onTap: () => onSelect(i),
+      radius: 36,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: selected ? accentSoft : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(selected ? _items[i].$2 : _items[i].$1, size: 23, color: selected ? accent : muted),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            _items[i].$3,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              color: selected ? ink : muted,
+            ),
+          ),
+        ],
       ),
     );
   }

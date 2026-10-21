@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.10.0] - 2026-10-21 (build 32)
+
+### Added
+- Your trip's page is now its dashboard (still the first thing you see): the
+  trip total up top with your share, what you paid and where you stand, then
+  insights for that trip: by date (each day, the busiest day, the daily
+  average), by category, by person (who paid, or each person's share) and by
+  location (each city). Switch between the whole trip and just your share.
+  The expense list follows, as before.
+
+### Changed
+- A richer, more polished look: the Manrope typeface throughout, deeper
+  colours, and cards with soft depth instead of flat outlines.
+- The bottom bar is Trip · Balance · ＋ · Statistics · Profile, with a raised
+  button in the middle to add an expense.
+
 ## [1.9.0] - 2026-10-21 (build 31)
 
 ### Added

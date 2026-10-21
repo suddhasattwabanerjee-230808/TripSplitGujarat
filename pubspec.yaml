@@ -1,7 +1,7 @@
 name: trip_split_gujarat
 description: Multi-user, multi-trip expense splitter with Google sign-in and Google Maps location picking.
 publish_to: 'none'
-version: 1.9.0+31
+version: 1.10.0+32
 
 environment:
   sdk: '>=3.11.0 <4.0.0'
@@ -39,3 +39,17 @@ flutter:
   assets:
     - assets/splash_logo.png
     - assets/success_check.json
+    - assets/fonts/OFL.txt
+  # Manrope (SIL Open Font License 1.1, assets/fonts/OFL.txt): the app's typeface.
+  fonts:
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-400.ttf
+        - asset: assets/fonts/Manrope-500.ttf
+          weight: 500
+        - asset: assets/fonts/Manrope-600.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-700.ttf
+          weight: 700
+        - asset: assets/fonts/Manrope-800.ttf
+          weight: 800

@@ -22,15 +22,15 @@ class Palette {
   final Color paper, surface, ink, muted, line, accent, accentSoft, positive, negative;
 
   static const light = Palette(
-    paper: Color(0xFFF5F6FA),
+    paper: Color(0xFFF2F3F8),
     surface: Colors.white,
-    ink: Color(0xFF171A26),
-    muted: Color(0xFF7B8193),
-    line: Color(0xFFE6E8EF),
-    accent: Color(0xFF4C5FE0),
-    accentSoft: Color(0xFFECEEFD),
-    positive: Color(0xFF168A4A),
-    negative: Color(0xFFD93848),
+    ink: Color(0xFF0F1222),
+    muted: Color(0xFF6B7187),
+    line: Color(0xFFE5E7EF),
+    accent: Color(0xFF4F46E5),
+    accentSoft: Color(0xFFEEEDFD),
+    positive: Color(0xFF0F8A4C),
+    negative: Color(0xFFD7344A),
   );
 
   static const dark = Palette(
@@ -39,8 +39,8 @@ class Palette {
     ink: Color(0xFFEDEFF5),
     muted: Color(0xFF959BAD),
     line: Color(0xFF272B36),
-    accent: Color(0xFF8C9BFF),
-    accentSoft: Color(0xFF1F2442),
+    accent: Color(0xFF8E88FF),
+    accentSoft: Color(0xFF221F47),
     positive: Color(0xFF3CCB82),
     negative: Color(0xFFFF6E7B),
   );
@@ -86,7 +86,7 @@ ThemeData appThemeData() {
     colorScheme: scheme,
     scaffoldBackgroundColor: paper,
     canvasColor: paper,
-    fontFamily: 'Roboto',
+    fontFamily: 'Manrope',
     dividerColor: line,
     appBarTheme: AppBarTheme(backgroundColor: paper, foregroundColor: ink, surfaceTintColor: paper),
     dialogTheme: DialogThemeData(backgroundColor: surface, surfaceTintColor: Colors.transparent),
@@ -144,12 +144,19 @@ List<BoxShadow> softShadow([Color? tint, double opacity = .07]) => [
   BoxShadow(color: (tint ?? ink).withValues(alpha: opacity), blurRadius: 16, offset: const Offset(0, 5)),
 ];
 
-/// The standard card ([surface]: white, or lifted dark): outlined, no shadow.
+/// The standard card ([surface]): in light mode a hairline outline and a
+/// soft, wide shadow for depth; in dark mode the lifted surface does that.
 BoxDecoration cardDecoration({Color? color, double radius = cardRadius}) => BoxDecoration(
   color: color ?? surface,
   borderRadius: BorderRadius.circular(radius),
-  border: Border.all(color: line),
+  border: Border.all(color: AppTheme.instance.dark ? line : line.withValues(alpha: .7)),
+  boxShadow: AppTheme.instance.dark ? null : _cardShadow,
 );
+
+const _cardShadow = [
+  BoxShadow(color: Color(0x0D141A3A), blurRadius: 24, offset: Offset(0, 8)),
+  BoxShadow(color: Color(0x08141A3A), blurRadius: 4, offset: Offset(0, 1)),
+];
 
 // --- Expense categories ---------------------------------------------------------
 

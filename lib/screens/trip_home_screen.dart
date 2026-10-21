@@ -18,6 +18,7 @@ import '../widgets.dart';
 import 'activity_screen.dart';
 import 'location_picker_screen.dart';
 import 'stats_screen.dart';
+import 'trip_insights.dart';
 import 'trip_people.dart';
 import 'trips_ui.dart';
 
@@ -397,6 +398,11 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
                   sliver: SliverToBoxAdapter(child: _quickOperations(trip)),
                 ),
+                if (_expenses.any((e) => !e.isSettlement))
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(16, 26, 16, 0),
+                    sliver: SliverToBoxAdapter(child: TripInsights(trip: trip, expenses: _expenses)),
+                  ),
                 if (_expenses.isEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(16, 36, 16, 0),
@@ -513,82 +519,151 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   void _openDetails(Trip trip) =>
       Navigator.of(context).push(MaterialPageRoute(builder: (_) => TripDetailsScreen(tripId: trip.id)));
 
+  /// The trip at a glance: what it cost (the one big number), your share and
+  /// what you paid, where you stand, and anything you need to settle.
   Widget _balanceCard() {
+    final trip = _trip!;
     final mine = _myBalance;
     final net = mine?.netBalance ?? 0;
     final settled = net.abs() < 0.5;
     final debts = _myDebts;
-    return Container(
-      decoration: cardDecoration(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-            child: Row(
-              children: [
-                IconCircle(
-                  icon: settled ? Icons.check_circle_outline_rounded : Icons.account_balance_wallet_outlined,
-                  color: settled ? positive : accent,
-                  size: 40,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Balance summary', style: TextStyle(color: ink, fontSize: 14.5, fontWeight: FontWeight.w700)),
-                      Text(
-                        settled ? 'You’re all settled up' : (net > 0 ? 'You are owed' : 'You owe'),
-                        style: TextStyle(color: muted, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-                AmountPill(value: net, fontSize: 15),
-              ],
+    final count = _expenses.where((e) => !e.isSettlement).length;
+    return Column(
+      children: [
+        Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(26),
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF14163A), Color(0xFF372FBE), Color(0xFF6E58F4)],
+              stops: [0, .62, 1],
             ),
+            boxShadow: const [BoxShadow(color: Color(0x40372FBE), blurRadius: 30, offset: Offset(0, 14))],
           ),
-          if (debts.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            for (final d in debts) DebtRow(debt: d, onPaid: _loadAll),
-          ],
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-            child: Divider(height: 1, color: line),
+          child: Stack(
+            children: [
+              Positioned(right: -60, top: -70, child: _glow(200)),
+              Positioned(right: 40, bottom: -90, child: _glow(160)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'Trip total',
+                          style: TextStyle(color: Colors.white.withValues(alpha: .75), fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        const Spacer(),
+                        _heroChip('${trip.memberCount} people · $count expense${count == 1 ? '' : 's'}'),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      money(total),
+                      style: const TextStyle(color: Colors.white, fontSize: 44, fontWeight: FontWeight.w800, letterSpacing: -1.5, height: 1.1),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: _glass('Your share', money(mine?.totalOwed ?? 0))),
+                        const SizedBox(width: 10),
+                        Expanded(child: _glass('You paid', money(mine?.totalPaid ?? 0))),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                      child: Row(
+                        children: [
+                          Icon(
+                            settled ? Icons.check_circle_rounded : (net > 0 ? Icons.south_west_rounded : Icons.north_east_rounded),
+                            size: 18,
+                            color: settled ? const Color(0xFF0F8A4C) : (net > 0 ? const Color(0xFF0F8A4C) : const Color(0xFFD7344A)),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              settled ? 'You’re all settled up' : (net > 0 ? 'You get back ${money(net)}' : 'You owe ${money(-net)}'),
+                              style: const TextStyle(color: Color(0xFF0F1222), fontSize: 14, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          FilledButton(
+                            onPressed: () => _showBalances(trip),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: const Color(0xFF372FBE),
+                              foregroundColor: Colors.white,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('Settle up', style: TextStyle(fontWeight: FontWeight.w800)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            child: Row(
+        ),
+        if (debts.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            decoration: cardDecoration(radius: 20),
+            child: Column(
               children: [
-                Expanded(child: _miniStat('Your share', money(mine?.totalOwed ?? 0))),
-                Expanded(child: _miniStat('You paid', money(mine?.totalPaid ?? 0))),
-                Expanded(child: _miniStat('Trip total', money(total))),
+                for (final (i, d) in debts.indexed) ...[
+                  if (i > 0) Divider(height: 1, indent: 60, color: line),
+                  DebtRow(debt: d, onPaid: _loadAll),
+                ],
               ],
             ),
           ),
         ],
-      ),
+      ],
     );
   }
 
-  Widget _miniStat(String label, String value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: TextStyle(color: muted, fontSize: 11)),
-      const SizedBox(height: 2),
-      Text(
-        value,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          color: ink,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-          fontFeatures: const [FontFeature.tabularFigures()],
+  Widget _glow(double size) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: RadialGradient(colors: [Colors.white.withValues(alpha: .14), Colors.white.withValues(alpha: 0)]),
+    ),
+  );
+
+  Widget _heroChip(String text) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(color: Colors.white.withValues(alpha: .12), borderRadius: BorderRadius.circular(20)),
+    child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700)),
+  );
+
+  Widget _glass(String label, String value) => Container(
+    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: .1),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: Colors.white.withValues(alpha: .14)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(color: Colors.white.withValues(alpha: .7), fontSize: 11)),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
         ),
-      ),
-    ],
+      ],
+    ),
   );
 
   Widget _quickOperations(Trip trip) => Column(

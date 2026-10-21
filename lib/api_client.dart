@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -37,6 +38,10 @@ class ApiClient {
   StreamSubscription<User?>? _authWatch;
 
   AppUser? get currentUser => _user;
+
+  /// Tests and previews: act as [user] without Firebase.
+  @visibleForTesting
+  void debugSignIn(AppUser? user) => _user = user;
 
   /// Called if Firebase signs the user out on its own (e.g. account disabled).
   void Function()? onSessionExpired;

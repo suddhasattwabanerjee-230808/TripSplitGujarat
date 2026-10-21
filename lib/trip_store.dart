@@ -75,7 +75,9 @@ class TripStore extends ChangeNotifier {
           _activitySeenAt ??= DateTime.tryParse(p.getString(_seenKey) ?? '');
           notifyListeners();
         });
-      } on ApiException catch (e) {
+      } catch (e) {
+        // ApiException, or Firebase failing outright (e.g. not set up).
+        _tripsSub = null;
         _onError(e);
       }
     }
