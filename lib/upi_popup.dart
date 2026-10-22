@@ -8,6 +8,7 @@ import 'location_service.dart';
 import 'models.dart';
 import 'screens/location_picker_screen.dart';
 import 'theme.dart';
+import 'widgets.dart';
 
 const _channel = MethodChannel('tripsplit/upi');
 
@@ -414,14 +415,11 @@ class _UpiPopupState extends State<_UpiPopup> {
           height: 50,
           child: FilledButton(
             onPressed: _busy || _loading ? null : _save,
-            style: FilledButton.styleFrom(
-              backgroundColor: ink,
-              foregroundColor: paper,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            ),
+            // The same button as the app's Add Expense page.
+            style: primaryButton(radius: 16),
             child: _busy
-                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: paper))
-                : const Text('Save Expense', style: TextStyle(fontWeight: FontWeight.w700)),
+                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: onAccent))
+                : const Text('Save Expense'),
           ),
         ),
       ],
