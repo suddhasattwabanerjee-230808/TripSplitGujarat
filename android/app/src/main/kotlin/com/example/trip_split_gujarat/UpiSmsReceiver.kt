@@ -43,11 +43,55 @@ object UpiSettings {
     }
 }
 
+/**
+ * A settle-up payment TripSplit sent the user off to make in a UPI app. The
+ * bank's debit SMS for the same amount, within [WINDOW], confirms it; the app
+ * reads the result when it's back on screen and records the payment.
+ */
+object UpiSettle {
+    private const val PREFS = "upi_settle"
+    private const val WINDOW = 30 * 60 * 1000L
+
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    fun expect(context: Context, amount: Double) {
+        prefs(context).edit().clear()
+            .putString("amount", amount.toString())
+            .putLong("started", System.currentTimeMillis())
+            .apply()
+    }
+
+    fun cancel(context: Context) {
+        prefs(context).edit().clear().apply()
+    }
+
+    /** True if [txn] is the payment being waited for (it's then remembered as paid). */
+    fun match(context: Context, txn: UpiTxn, time: Long): Boolean {
+        val p = prefs(context)
+        val amount = p.getString("amount", null)?.toDoubleOrNull() ?: return false
+        if (System.currentTimeMillis() - p.getLong("started", 0) > WINDOW) return false
+        if (kotlin.math.abs(txn.amount - amount) > 0.5) return false
+        p.edit().remove("amount").putString("paid", txn.amount.toString()).putLong("paidAt", time).commit()
+        return true
+    }
+
+    /** {waiting, paid (amount or null), paidAt}. */
+    fun status(context: Context): Map<String, Any?> {
+        val p = prefs(context)
+        val waiting = p.getString("amount", null) != null &&
+            System.currentTimeMillis() - p.getLong("started", 0) <= WINDOW
+        return mapOf(
+            "waiting" to waiting,
+            "paid" to p.getString("paid", null)?.toDoubleOrNull(),
+            "paidAt" to p.getLong("paidAt", 0),
+        )
+    }
+}
+
 /** Watches incoming SMS for bank UPI debit alerts and posts a "add to trip" notification. */
 class UpiSmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
-        if (!UpiSettings.isEnabled(context) || !UpiSettings.allEnabled(context)) return
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (messages.isNullOrEmpty()) return
         // Banks send from alphanumeric sender IDs (e.g. "VM-HDFCBK"); personal numbers are all digits.
@@ -55,7 +99,12 @@ class UpiSmsReceiver : BroadcastReceiver() {
         if (sender.none { it.isLetter() }) return
         val body = messages.joinToString("") { it.messageBody ?: "" }
         val txn = UpiParser.parse(body) ?: return
-        UpiNotifier.show(context, txn, messages.first().timestampMillis)
+        val time = messages.first().timestampMillis
+        // The settle-up payment TripSplit is waiting for: it's recorded as
+        // that, not offered as a new expense (whatever the alerts switch says).
+        if (UpiSettle.match(context, txn, time)) return
+        if (!UpiSettings.isEnabled(context) || !UpiSettings.allEnabled(context)) return
+        UpiNotifier.show(context, txn, time)
     }
 }
 

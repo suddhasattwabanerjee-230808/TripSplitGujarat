@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_fonts.dart';
+
 // --- Palette ------------------------------------------------------------------
 // The brand is the logo's orange with deep wine reds. Light: a bright, airy
 // look (light grey page, white outlined cards, a burnt-orange accent dark
@@ -103,7 +105,7 @@ ThemeData appThemeData() {
     colorScheme: scheme,
     scaffoldBackgroundColor: paper,
     canvasColor: paper,
-    fontFamily: 'Inter',
+    fontFamily: AppFonts.instance.family,
     dividerColor: line,
     appBarTheme: AppBarTheme(backgroundColor: paper, foregroundColor: ink, surfaceTintColor: paper),
     dialogTheme: DialogThemeData(backgroundColor: surface, surfaceTintColor: Colors.transparent),

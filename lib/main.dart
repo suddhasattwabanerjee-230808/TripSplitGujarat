@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
+import 'app_fonts.dart';
 import 'expense_notifier.dart';
 import 'screens/expense_screen.dart';
 import 'screens/settle_screen.dart';
@@ -13,6 +14,7 @@ import 'screens/splash_screen.dart';
 import 'screens/home_shell.dart';
 import 'screens/nickname_screen.dart';
 import 'screens/update_dialog.dart';
+import 'settle_watch.dart';
 import 'theme.dart';
 import 'update_service.dart';
 import 'upi_popup.dart';
@@ -20,6 +22,7 @@ import 'upi_popup.dart';
 Future<void> main() async {
   await _initFirebase();
   await AppTheme.instance.load();
+  await AppFonts.instance.load();
   _introOnStart = await _awayLongEnough();
   // Instant expense pushes while the app is closed (see ExpenseNotifier).
   if (Firebase.apps.isNotEmpty) FirebaseMessaging.onBackgroundMessage(expensePushHandler);
@@ -32,12 +35,13 @@ Future<void> main() async {
 Future<void> upiPopupMain() async {
   await _initFirebase();
   await AppTheme.instance.load();
+  await AppFonts.instance.load();
   runApp(const UpiPopupApp());
 }
 
 /// The intro plays only when the app opens [_introGap] or more after it was
 /// last closed; a quick hop out and back (a UPI app, the camera) skips it.
-const _introGap = Duration(seconds: 30);
+const _introGap = Duration(minutes: 1);
 const _closedAtKey = 'trip_split.closed_at.v1';
 bool _introOnStart = true;
 
@@ -92,6 +96,10 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
         _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('Not Saved: ${error.message}')));
     // Light/dark: redraw every screen in place with the new colours.
     AppTheme.instance.addListener(_onTheme);
+    // A new font or bold text: the same, everywhere.
+    AppFonts.instance.addListener(_onTheme);
+    // Settle-ups paid in a UPI app, confirmed from the bank's SMS.
+    SettleWatch.instance.init(() => _messengerKey.currentState);
     // A new version: say so once, after the intro.
     Updates.instance.addListener(_tellUpdate);
     Updates.instance.launchCheck();
@@ -130,6 +138,7 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
   void dispose() {
     Updates.instance.removeListener(_tellUpdate);
     AppTheme.instance.removeListener(_onTheme);
+    AppFonts.instance.removeListener(_onTheme);
     WidgetsBinding.instance.removeObserver(this);
     ApiClient.instance.onSessionExpired = null;
     super.dispose();
@@ -183,7 +192,11 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
               systemNavigationBarColor: paper,
               systemNavigationBarIconBrightness: dark ? Brightness.light : Brightness.dark,
             ),
-            child: child!,
+            // "Bold text" from the profile: every Text in bold.
+            child: MediaQuery(
+              data: MediaQuery.of(context).copyWith(boldText: AppFonts.instance.bold || MediaQuery.boldTextOf(context)),
+              child: child!,
+            ),
           ),
           if (_showSplash)
             IgnorePointer(

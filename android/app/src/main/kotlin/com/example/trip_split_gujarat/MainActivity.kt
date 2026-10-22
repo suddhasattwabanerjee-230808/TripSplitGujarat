@@ -90,6 +90,16 @@ class MainActivity : FlutterActivity() {
                 "open" -> result.success(UpiApps.open(this, call.argument<String>("package") ?: ""))
                 // Opens one on its QR scanner (or its home screen if we can't).
                 "scan" -> result.success(UpiApps.scan(this, call.argument<String>("package") ?: ""))
+                // A settle-up payment to confirm from the bank's debit SMS.
+                "expectSettle" -> {
+                    UpiSettle.expect(this, call.argument<Double>("amount") ?: 0.0)
+                    result.success(null)
+                }
+                "settleStatus" -> result.success(UpiSettle.status(this))
+                "cancelSettle" -> {
+                    UpiSettle.cancel(this)
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'app_fonts.dart';
 import 'theme.dart';
 
 /// One bar: a label (with an optional icon or leading widget) and its value.
@@ -471,7 +472,7 @@ class _TrendPainter extends CustomPainter {
     final peak = points.fold(0.0, (m, p) => p.value > m ? p.value : m);
     final top = _niceCeil(peak <= 0 ? 100 : peak);
     TextPainter label(String s, {Color? color, FontWeight weight = FontWeight.w500, double size = 10.5}) => TextPainter(
-      text: TextSpan(text: s, style: TextStyle(color: color ?? colors.muted, fontSize: size, fontWeight: weight, fontFamily: 'Inter')),
+      text: TextSpan(text: s, style: TextStyle(color: color ?? colors.muted, fontSize: size, fontWeight: weight, fontFamily: AppFonts.instance.family)),
       textDirection: TextDirection.ltr,
     )..layout();
 

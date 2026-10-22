@@ -15,6 +15,7 @@ import '../models.dart';
 import '../receipt_scanner.dart';
 import '../theme.dart';
 import '../trip_store.dart';
+import '../upi_alerts.dart';
 import '../widgets.dart';
 import 'activity_screen.dart';
 import 'location_picker_screen.dart';
@@ -357,7 +358,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
             child: Text(
               [
                 trip.tripKind.label,
-                if (trip.date != null) formatDate(trip.date!),
+                formatDate(DateTime.now()), // today, not the trip's start
                 if (trip.destination != null) trip.destination!,
               ].join(' · '),
               maxLines: 1,
@@ -416,8 +417,20 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _operation('Invite', Icons.person_add_alt_outlined, () => showInviteSheet(context, trip)),
-          _operation('Add Expense', Icons.post_add_rounded, _addExpense),
+          _operation('Balance', Icons.account_balance_wallet_outlined, () => _showBalances(trip)),
+          // UPI payment alerts on or off: filled while on.
+          ListenableBuilder(
+            listenable: UpiAlerts.instance,
+            builder: (context, _) {
+              final on = UpiAlerts.instance.on;
+              return _operation(
+                on ? 'UPI Alerts On' : 'UPI Alerts Off',
+                on ? Icons.notifications_active_rounded : Icons.notifications_off_outlined,
+                () => UpiAlerts.instance.set(context, !on),
+                active: on,
+              );
+            },
+          ),
           _operation('Scan Receipt', Icons.document_scanner_outlined, () => _addExpense(scan: true)),
           _operation(
             'View Stats',
@@ -431,7 +444,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     ],
   );
 
-  Widget _operation(String label, IconData icon, VoidCallback onTap) => SizedBox(
+  Widget _operation(String label, IconData icon, VoidCallback onTap, {bool active = false}) => SizedBox(
     width: 76,
     child: InkWell(
       onTap: onTap,
@@ -440,15 +453,17 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           children: [
-            Container(
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
               width: 54,
               height: 54,
               decoration: BoxDecoration(
-                color: surface,
+                color: active ? accent : surface,
                 shape: BoxShape.circle,
-                border: Border.all(color: line),
+                border: Border.all(color: active ? accent : line),
+                boxShadow: active ? [BoxShadow(color: accent.withValues(alpha: .3), blurRadius: 12, offset: const Offset(0, 4))] : null,
               ),
-              child: Icon(icon, color: accent, size: 24),
+              child: Icon(icon, color: active ? onAccent : accent, size: 24),
             ),
             const SizedBox(height: 7),
             Text(

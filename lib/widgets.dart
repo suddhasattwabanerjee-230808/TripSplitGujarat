@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'app_fonts.dart';
 import 'api_client.dart';
 import 'expense_notifier.dart';
 import 'models.dart';
 import 'theme.dart';
 import 'trip_store.dart';
 import 'screens/trip_people.dart';
+import 'settle_watch.dart';
 import 'upi_pay.dart';
 
 /// Google serves profile photos at any size; ask for one sharp at [size].
@@ -410,7 +412,7 @@ ButtonStyle primaryButton({double radius = 14}) => FilledButton.styleFrom(
   foregroundColor: onAccent,
   padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
-  textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w700, fontSize: 14),
+  textStyle: TextStyle(fontFamily: AppFonts.instance.family, fontWeight: FontWeight.w700, fontSize: 14),
 );
 
 ButtonStyle secondaryButton({Color? color, double radius = 14}) => OutlinedButton.styleFrom(
@@ -419,7 +421,7 @@ ButtonStyle secondaryButton({Color? color, double radius = 14}) => OutlinedButto
   side: BorderSide(color: line),
   padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
-  textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w700, fontSize: 14),
+  textStyle: TextStyle(fontFamily: AppFonts.instance.family, fontWeight: FontWeight.w700, fontSize: 14),
 );
 
 // --- Pay now ------------------------------------------------------------------
@@ -606,9 +608,11 @@ class _UpiAppButton extends StatelessWidget {
 }
 
 /// Carries out a [SettleOptions] choice for [debt]. True once a payment was
-/// recorded (a reminder isn't one).
+/// recorded (a reminder isn't one). A payment made in a UPI app that doesn't
+/// report back is confirmed from the bank's SMS by [SettleWatch], not asked.
 Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
   final messenger = ScaffoldMessenger.of(context);
+  final watch = SettleWatch.instance;
   if (choice == 'remind') {
     await pickSettleReminder(context, debt);
     return false;
@@ -618,40 +622,49 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
   if (choice.startsWith('app:') && debt.other?.upiId == null) choice = 'scan:${choice.substring(4)}';
   if (choice.startsWith('app:')) {
     final package = choice.substring(4);
-    final upiId = debt.other?.upiId;
-    if (upiId != null) {
-      // Their UPI ID is known: the app opens on the payment, filled in.
-      final status = await UpiPay.pay(
+    final upiId = debt.other!.upiId!;
+    // Their UPI ID is known: the app opens on the payment, filled in.
+    await watch.start(debt);
+    watch.paying = true;
+    final UpiPayStatus status;
+    try {
+      status = await UpiPay.pay(
         upiId: upiId,
         name: debt.otherName,
         amount: debt.amount,
         note: 'TripSplit · ${debt.trip.name}',
         package: package,
       );
-      if (!context.mounted) return false;
-      switch (status) {
-        case UpiPayStatus.noApp:
-          await Clipboard.setData(ClipboardData(text: upiId));
-          messenger.showSnackBar(SnackBar(content: Text('Couldn’t open that app. $upiId copied — pay from any app.')));
-          return false;
-        case UpiPayStatus.failed:
-          messenger.showSnackBar(const SnackBar(content: Text('The payment didn’t go through.')));
-          return false;
-        case UpiPayStatus.unknown:
-          if (!await _askPaid(context, debt)) return false;
-        case UpiPayStatus.success:
-          break;
-      }
+    } finally {
+      watch.paying = false;
+    }
+    switch (status) {
+      case UpiPayStatus.noApp:
+        await watch.cancel();
+        await Clipboard.setData(ClipboardData(text: upiId));
+        messenger.showSnackBar(SnackBar(content: Text('Couldn’t open that app. $upiId copied — pay from any app.')));
+        return false;
+      case UpiPayStatus.failed:
+        await watch.cancel();
+        messenger.showSnackBar(const SnackBar(content: Text('The payment didn’t go through.')));
+        return false;
+      case UpiPayStatus.unknown:
+        // The app didn't say: the bank's SMS will.
+        await watch.check();
+        return false;
+      case UpiPayStatus.success:
+        await watch.cancel();
     }
   } else if (choice.startsWith('scan:')) {
-    // Their QR: the app opens on its scanner; then confirm here.
+    // Their QR: the app opens on its scanner; the bank's SMS confirms it.
+    await watch.start(debt);
     if (!await UpiPay.scan(choice.substring(5))) {
+      await watch.cancel();
       messenger.showSnackBar(const SnackBar(content: Text('Couldn’t open that app.')));
       return false;
     }
-    if (!context.mounted || !await _askPaid(context, debt, scanned: true)) return false;
+    return false;
   }
-  if (!context.mounted) return false;
   try {
     await ApiClient.instance.recordPayment(
       tripId: debt.trip.id,
@@ -668,25 +681,6 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
     return false;
   }
 }
-
-Future<bool> _askPaid(BuildContext context, Debt debt, {bool scanned = false}) async =>
-    await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: paper,
-        title: const Text('Did The Payment Go Through?', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-        content: Text(
-          scanned
-              ? 'Scan ${debt.otherName}’s UPI QR in the app you opened and pay ${money(debt.amount)}. Then mark it paid here so everyone’s balance updates.'
-              : 'If you paid ${money(debt.amount)} to ${debt.otherName}, mark it paid so everyone’s balance updates.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not Yet')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), style: primaryButton(radius: 12), child: const Text('Mark Paid')),
-        ],
-      ),
-    ) ==
-    true;
 
 /// Asks when to be reminded about [debt] and sets the reminder. True if set.
 Future<bool> pickSettleReminder(BuildContext context, Debt debt) async {

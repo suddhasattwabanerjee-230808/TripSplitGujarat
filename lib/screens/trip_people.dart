@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../trip_store.dart';
 import '../widgets.dart';
 import 'expense_screen.dart';
+import 'trips_ui.dart';
 
 /// A trip and its expenses, kept live (the trip through the store, the
 /// expenses through their own listener), for the people pages.
@@ -69,7 +70,7 @@ class _TripDataState extends State<_TripData> {
 String _firstName(String name) => name.trim().split(RegExp(r'\s+')).first;
 
 /// Everyone on a trip with what they paid, their share and their balance,
-/// side by side. Tap a person for their page.
+/// side by side, and the way to invite more. Tap a person for their page.
 class TripDetailsScreen extends StatelessWidget {
   const TripDetailsScreen({super.key, required this.tripId});
   final String tripId;
@@ -105,7 +106,11 @@ class TripDetailsView extends StatelessWidget {
       children: [
         _header(trip, totals.totalSpent, spent),
         const SizedBox(height: 22),
-        const Padding(padding: EdgeInsets.only(left: 2, bottom: 10), child: SectionHeader(title: 'People')),
+        // Inviting lives here, with the people already on the trip.
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 10),
+          child: SectionHeader(title: 'People', action: 'Invite People', onAction: () => showInviteSheet(context, trip)),
+        ),
         Container(
           decoration: cardDecoration(),
           child: Column(

@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../app_fonts.dart';
 import '../ajrakh.dart';
 import '../theme.dart';
 
@@ -369,7 +370,7 @@ class _IntroPainter extends CustomPainter {
     final painter = TextPainter(
       textDirection: TextDirection.ltr,
       text: TextSpan(
-        style: TextStyle(fontFamily: 'Inter', fontSize: fontSize, fontWeight: FontWeight.w800, letterSpacing: spacing),
+        style: TextStyle(fontFamily: AppFonts.instance.family, fontSize: fontSize, fontWeight: FontWeight.w800, letterSpacing: spacing),
         children: [
           // Ivory and saffron, as on the print and the logo, with a dark halo
           // so the letters sit clear of the pattern behind them.

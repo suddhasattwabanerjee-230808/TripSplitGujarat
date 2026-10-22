@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../api_client.dart';
 import '../city_photo.dart';
@@ -14,8 +13,11 @@ import '../ledger.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../trip_store.dart';
+import '../app_fonts.dart';
 import '../update_service.dart';
+import '../upi_alerts.dart';
 import '../widgets.dart';
+import 'font_screen.dart';
 import 'login_screen.dart';
 import 'trips_ui.dart';
 import 'update_dialog.dart';
@@ -136,13 +138,12 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserver {
+class _ProfileScreenState extends State<ProfileScreen> {
   static const _upiSettings = MethodChannel('tripsplit/upi_settings');
 
-  bool _upiDetection = true;
-  bool _upiAlertsOn = true;
   bool _notificationsOn = true;
   final _updates = Updates.instance;
+  final _upi = UpiAlerts.instance;
   bool _deleting = false;
   bool _savingPhoto = false;
   AppUser? _user = ApiClient.instance.currentUser;
@@ -163,111 +164,23 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     TripStore.instance.removeListener(_onStore);
     _updates.removeListener(_onStore);
+    _upi.removeListener(_onStore);
+    AppFonts.instance.removeListener(_onStore);
     CityPhoto.instance.removeListener(_onStore);
     super.dispose();
   }
 
   @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Back from the Settings app, where SMS access may have just been allowed.
-    if (state == AppLifecycleState.resumed) _checkUpiDetection();
-  }
-
-  Future<void> _checkUpiDetection() async {
-    final granted = await Permission.sms.isGranted;
-    bool on;
-    try {
-      on = await _upiSettings.invokeMethod<bool>('isEnabled') ?? true;
-    } on Exception {
-      on = true;
-    }
-    if (mounted) {
-      setState(() {
-        _upiDetection = granted;
-        _upiAlertsOn = on;
-      });
-    }
-  }
-
-  /// The home screen's UPI alerts switch. Switching on without SMS access runs
-  /// the set-up flow; the switch then reads on only once access is granted
-  /// (re-checked on resume). Switching off keeps the permission, just silences
-  /// the alerts in the native receiver.
-  Future<void> _setUpiAlerts(bool on) async {
-    setState(() => _upiAlertsOn = on);
-    try {
-      await _upiSettings.invokeMethod<void>('setEnabled', on);
-    } on Exception {
-      // Setting stays as it was; the switch re-syncs on the next check.
-    }
-    if (on && !_upiDetection) await _enableUpiDetection();
-  }
-
-  Future<void> _enableUpiDetection() async {
-    final result = await [Permission.sms, Permission.notification].request();
-    final sms = result[Permission.sms] ?? PermissionStatus.denied;
-    // On a build installed from outside the Play Store, Play Protect treats SMS
-    // as a restricted permission and auto-denies the request — the toggle in
-    // Settings stays greyed out until the user turns on "Allow restricted
-    // settings" first. A plain openAppSettings() drops them there with no clue
-    // how to proceed, so when SMS didn't get granted we spell the steps out.
-    if (!sms.isGranted && mounted) {
-      await _showSmsHelpDialog();
-    }
-    await _checkUpiDetection();
-  }
-
-  Future<void> _showSmsHelpDialog() => showDialog<void>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      backgroundColor: paper,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(
-        'Allow SMS Access',
-        style: TextStyle(color: ink, fontWeight: FontWeight.w800, fontSize: 18),
-      ),
-      content: Text(
-        'Because TripSplit is installed outside the Play Store, Android keeps '
-        'SMS access switched off and greys out the toggle. Turn it on by hand:\n\n'
-        '1.  Tap “Open settings” below.\n'
-        '2.  On the App info screen, tap ⋮ in the top-right corner.\n'
-        '3.  Choose “Allow restricted settings”.\n'
-        '4.  Open Permissions → SMS → Allow.\n\n'
-        'Then come back here — the banner will disappear once it’s on.',
-        style: TextStyle(color: ink, fontSize: 13.5, height: 1.45),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: Text('Not Now', style: TextStyle(color: muted)),
-        ),
-        FilledButton(
-          onPressed: () {
-            Navigator.pop(ctx);
-            openAppSettings();
-          },
-          style: FilledButton.styleFrom(
-            backgroundColor: ink,
-            foregroundColor: paper,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-          child: const Text('Open Settings'),
-        ),
-      ],
-    ),
-  );
-
-  @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     TripStore.instance.addListener(_onStore);
     _updates.addListener(_onStore);
+    _upi.addListener(_onStore);
+    AppFonts.instance.addListener(_onStore);
     CityPhoto.instance.addListener(_onStore);
-    _checkUpiDetection();
+    _upi.refresh();
     ExpenseNotifier.enabled().then((on) {
       if (mounted) setState(() => _notificationsOn = on);
     });
@@ -420,6 +333,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     } on Exception {
       // The UPI receiver keeps its own switch.
     }
+    await _upi.refresh();
   }
 
   Future<void> _signOut() async {
@@ -539,18 +453,37 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                               ),
                             ),
                             _row(
-                              icon: _notificationsOn && _upiDetection && _upiAlertsOn
-                                  ? Icons.notifications_active_outlined
-                                  : Icons.notifications_off_outlined,
+                              icon: _upi.on ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
                               label: 'UPI Payment Alerts',
-                              value: !_upiDetection
+                              value: !_upi.smsGranted
                                   ? 'Needs SMS Access — Switch On'
-                                  : _upiAlertsOn
+                                  : _upi.enabled
                                   ? 'On For Every UPI Payment'
                                   : 'Off',
                               trailing: Switch(
-                                value: _notificationsOn && _upiDetection && _upiAlertsOn,
-                                onChanged: _notificationsOn ? _setUpiAlerts : null,
+                                value: _notificationsOn && _upi.on,
+                                onChanged: _notificationsOn ? (v) => _upi.set(context, v) : null,
+                                activeThumbColor: Colors.white,
+                                activeTrackColor: accent,
+                              ),
+                            ),
+                            _row(
+                              icon: Icons.text_fields_rounded,
+                              label: 'App Font',
+                              value: AppFonts.instance.family,
+                              trailing: Icon(Icons.chevron_right_rounded, color: muted),
+                              onTap: () {
+                                AppFonts.instance.registerAll();
+                                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FontScreen()));
+                              },
+                            ),
+                            _row(
+                              icon: Icons.format_bold_rounded,
+                              label: 'Bold Text',
+                              value: AppFonts.instance.bold ? 'Every Word In Bold' : 'Off',
+                              trailing: Switch(
+                                value: AppFonts.instance.bold,
+                                onChanged: AppFonts.instance.setBold,
                                 activeThumbColor: Colors.white,
                                 activeTrackColor: accent,
                               ),

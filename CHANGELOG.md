@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.13.0] - 2026-10-22 (build 36)
+
+### Added
+- Settle-ups paid in a UPI app confirm themselves: TripSplit watches for
+  your bank's UPI debit SMS for that amount (for up to 30 minutes) and
+  records the payment, instead of asking whether it went through. Without
+  SMS access, or if no SMS comes, a "Mark Paid" button shows instead.
+- App Font in the profile: 46 fonts (sans serif, serif and rounded), applied
+  across the whole app. Each downloads the first time you pick it.
+- Bold Text, in the profile and on the App Font page.
+- A UPI Alerts button in Quick Actions, to switch UPI payment alerts on or
+  off.
+- Invite People on the Trip Details page.
+
+### Changed
+- The bottom bar is just Trip, Add and Expenses. It shrinks to its icons as
+  you scroll and opens out again at the top of the page.
+- Quick Actions: Balance, UPI Alerts, Scan Receipt and View Stats.
+- The date next to the trip type is today's date.
+- The intro plays only when the app was closed for a minute or more.
+
 ## [1.12.0] - 2026-10-22 (build 35)
 
 ### Added

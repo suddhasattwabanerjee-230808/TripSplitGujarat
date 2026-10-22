@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -7,11 +8,10 @@ import '../api_client.dart';
 import '../city_photo.dart';
 import '../expense_notifier.dart';
 import '../models.dart';
+import '../settle_watch.dart';
 import '../theme.dart';
 import '../trip_store.dart';
 import '../widgets.dart';
-import 'balance_screen.dart';
-import 'stats_screen.dart';
 import 'expense_screen.dart';
 import 'expenses_screen.dart';
 import 'profile_screen.dart';
@@ -20,8 +20,10 @@ import 'trip_home_screen.dart';
 import 'trips_ui.dart';
 
 /// The signed-in app: Trip (the current trip's dashboard — where the app
-/// opens), its Expenses, Add expense, Balance, Statistics, on a floating bar.
-/// The profile opens from the user's photo at the top of the Trip page.
+/// opens), Add expense and the trip's Expenses, on a floating bar that
+/// shrinks to its icons while a page is scrolled. The profile opens from the
+/// user's photo at the top of the Trip page; balances and stats from the
+/// trip's quick actions.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -30,10 +32,20 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
-  // Tab indexes into the bar; "Add expense" (2) is an action, not a page.
+  // Tab indexes into the bar; "Add expense" (1) is an action, not a page.
   // The app opens on the current trip's page, which is its dashboard.
-  static const _trip = 0, _expenses = 1, _add = 2, _balance = 3, _stats = 4;
+  static const _trip = 0, _add = 1, _expenses = 2;
   int _tab = _trip;
+
+  /// The bar shows just its icons while the page is scrolled down.
+  bool _compact = false;
+
+  bool _onScroll(ScrollUpdateNotification n) {
+    if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
+    final compact = n.metrics.pixels > 24;
+    if (compact != _compact) setState(() => _compact = compact);
+    return false;
+  }
 
   /// Tabs are built the first time they're opened, then kept alive.
   final _visited = <int>{_trip};
@@ -49,6 +61,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _acceptInvites();
     _startNotifications();
     CityPhoto.instance.start();
+    // A settle-up paid while TripSplit was closed (or killed in the background).
+    SettleWatch.instance.check();
   }
 
   static bool _launchHandled = false;
@@ -127,6 +141,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     setState(() {
       _tab = index;
       _visited.add(index);
+      _compact = false;
     });
   }
 
@@ -184,8 +199,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   Widget _page(int index) => switch (index) {
     _trip => _tripPage(),
     _expenses => _expensesPage(),
-    _balance => BalanceScreen(onOpenTrip: _store.selectTrip),
-    _stats => const StatsScreen(),
     _ => const SizedBox.shrink(),
   };
 
@@ -274,69 +287,96 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       backgroundColor: paper,
       // The pages run on under the floating bar.
       extendBody: true,
-      body: Stack(
-        children: [
-          for (final index in [_trip, _expenses, _balance, _stats])
-            if (_visited.contains(index))
-              Offstage(
-                offstage: _tab != index,
-                child: TickerMode(enabled: _tab == index, child: _page(index)),
-              ),
-        ],
+      body: NotificationListener<ScrollUpdateNotification>(
+        onNotification: _onScroll,
+        child: Stack(
+          children: [
+            for (final index in [_trip, _expenses])
+              if (_visited.contains(index))
+                Offstage(
+                  offstage: _tab != index,
+                  child: TickerMode(enabled: _tab == index, child: _page(index)),
+                ),
+          ],
+        ),
       ),
-      bottomNavigationBar: _NavBar(current: _tab, onSelect: _select),
+      bottomNavigationBar: _NavBar(
+        current: _tab,
+        compact: _compact,
+        onSelect: _select,
+        onExpand: () => setState(() => _compact = false),
+      ),
     );
   }
 }
 
 /// The floating bar: a frosted pill above the bottom edge, with Add raised
-/// in the middle.
+/// in the middle. Full width with names at the top of a page; while the page
+/// is scrolled it shrinks to a smaller pill of icons (tap it to open it out).
 class _NavBar extends StatelessWidget {
-  const _NavBar({required this.current, required this.onSelect});
+  const _NavBar({required this.current, required this.compact, required this.onSelect, required this.onExpand});
   final int current;
+  final bool compact;
   final ValueChanged<int> onSelect;
+  final VoidCallback onExpand;
 
   static const _items = [
     (Icons.luggage_outlined, Icons.luggage_rounded, 'Trip'),
-    (Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Expenses'),
     (Icons.add_rounded, Icons.add_rounded, 'Add'),
-    (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Balance'),
-    (Icons.insights_outlined, Icons.insights_rounded, 'Stats'),
+    (Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Expenses'),
   ];
+
+  static const _motion = Duration(milliseconds: 320);
+  static const _curve = Curves.easeOutCubic;
 
   @override
   Widget build(BuildContext context) {
     final dark = AppTheme.instance.dark;
+    final full = math.min(MediaQuery.sizeOf(context).width - 32, 420.0);
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.only(bottom: 10),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(32),
-            boxShadow: [
-              BoxShadow(color: (dark ? Colors.black : wineDeep).withValues(alpha: dark ? .5 : .16), blurRadius: 28, offset: const Offset(0, 10)),
-              BoxShadow(color: (dark ? Colors.black : wineDeep).withValues(alpha: .06), blurRadius: 4, offset: const Offset(0, 1)),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(32),
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-              child: Container(
-                height: 66,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                decoration: BoxDecoration(
-                  color: surface.withValues(alpha: dark ? .86 : .9),
-                  borderRadius: BorderRadius.circular(32),
-                  border: Border.all(color: dark ? Colors.white.withValues(alpha: .07) : line.withValues(alpha: .8)),
-                ),
-                child: Row(
-                  children: [
-                    for (var i = 0; i < _items.length; i++)
-                      Expanded(child: i == 2 ? _addButton() : _item(i)),
-                  ],
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Center(
+          heightFactor: 1,
+          child: GestureDetector(
+            // In its small form, a tap between the icons opens it out again.
+            onTap: compact ? onExpand : null,
+            child: AnimatedContainer(
+              duration: _motion,
+              curve: _curve,
+              width: compact ? 196 : full,
+              height: compact ? 54 : 66,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(32),
+                boxShadow: [
+                  BoxShadow(
+                    color: (dark ? Colors.black : wineDeep).withValues(alpha: dark ? .5 : .16),
+                    blurRadius: 28,
+                    offset: const Offset(0, 10),
+                  ),
+                  BoxShadow(color: (dark ? Colors.black : wineDeep).withValues(alpha: .06), blurRadius: 4, offset: const Offset(0, 1)),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(32),
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: surface.withValues(alpha: dark ? .86 : .9),
+                      borderRadius: BorderRadius.circular(32),
+                      border: Border.all(color: dark ? Colors.white.withValues(alpha: .07) : line.withValues(alpha: .8)),
+                    ),
+                    child: Row(
+                      children: [
+                        for (var i = 0; i < _items.length; i++)
+                          Expanded(child: i == 1 ? _addButton() : _item(i)),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -349,10 +389,12 @@ class _NavBar extends StatelessWidget {
   /// The main action, in the middle of the bar.
   Widget _addButton() => Center(
     child: GestureDetector(
-      onTap: () => onSelect(2),
-      child: Container(
-        width: 50,
-        height: 50,
+      onTap: () => onSelect(1),
+      child: AnimatedContainer(
+        duration: _motion,
+        curve: _curve,
+        width: compact ? 42 : 50,
+        height: compact ? 42 : 50,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: const LinearGradient(
@@ -362,7 +404,7 @@ class _NavBar extends StatelessWidget {
           ),
           boxShadow: [BoxShadow(color: wine.withValues(alpha: .35), blurRadius: 14, offset: const Offset(0, 5))],
         ),
-        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28, semanticLabel: 'Add Expense'),
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 26, semanticLabel: 'Add Expense'),
       ),
     ),
   );
@@ -383,18 +425,32 @@ class _NavBar extends StatelessWidget {
               color: selected ? accentSoft : Colors.transparent,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Icon(selected ? _items[i].$2 : _items[i].$1, size: 22, color: selected ? accent : muted),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            _items[i].$3,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? ink : muted,
+            child: Icon(
+              selected ? _items[i].$2 : _items[i].$1,
+              size: 22,
+              color: selected ? accent : muted,
+              semanticLabel: _items[i].$3,
             ),
+          ),
+          // The name, folded away in the small form.
+          AnimatedSize(
+            duration: _motion,
+            curve: _curve,
+            child: compact
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      _items[i].$3,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                        color: selected ? ink : muted,
+                      ),
+                    ),
+                  ),
           ),
         ],
       ),
