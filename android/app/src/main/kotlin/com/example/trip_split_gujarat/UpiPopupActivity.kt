@@ -13,9 +13,10 @@ class UpiPopupActivity : FlutterActivity() {
     override fun getBackgroundMode(): BackgroundMode = BackgroundMode.transparent
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
         // Opened from the "Add" action, which (unlike a tap on the body) doesn't auto-cancel.
+        // Cancel before super.onCreate, which blocks while the Flutter engine starts.
         UpiNotifier.cancel(this, intent.getIntExtra(UpiNotifier.EXTRA_NOTIFICATION_ID, -1))
+        super.onCreate(savedInstanceState)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.7] - 2026-10-22 (build 44)
+
+### Fixed
+- Tapping "Add" or "Ignore" on a UPI payment alert now clears the
+  notification right away, instead of leaving it up for 3–4 seconds.
+
 ## [1.14.6] - 2026-10-22 (build 43)
 
 ### Added

@@ -217,7 +217,11 @@ object UpiNotifier {
         val ignore = PendingIntent.getBroadcast(
             context,
             id,
-            Intent(context, UpiIgnoreReceiver::class.java).putExtra(EXTRA_NOTIFICATION_ID, id),
+            // Foreground queue: a plain background broadcast can sit for seconds
+            // before the receiver runs, leaving the notification up after the tap.
+            Intent(context, UpiIgnoreReceiver::class.java)
+                .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)
+                .putExtra(EXTRA_NOTIFICATION_ID, id),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val amountText = if (txn.amount % 1.0 == 0.0) {
