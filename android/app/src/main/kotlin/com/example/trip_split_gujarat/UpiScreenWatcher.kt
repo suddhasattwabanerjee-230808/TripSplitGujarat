@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.HandlerThread
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -20,16 +22,42 @@ import android.view.accessibility.AccessibilityNodeInfo
  */
 class UpiScreenWatcher : AccessibilityService() {
     /** When a payment screen was last seen; 0 = not watching. */
-    private var payingSince = 0L
+    @Volatile private var payingSince = 0L
+
+    // Reading a screen is one binder call per view, which takes a while: it
+    // runs here, off the main thread, so TripSplit's own work (the alert's
+    // Add and Ignore) never waits behind it.
+    private val worker = HandlerThread("upi-screen-watcher").apply { start() }
+    private val reader = Handler(worker.looper)
+    @Volatile private var readQueued = false
+    private var nodesLeft = 0
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        // NPCI's UPI PIN screen, which every UPI app uses.
+        if (event?.className?.toString()?.contains("npci", ignoreCase = true) == true) {
+            payingSince = System.currentTimeMillis()
+        }
+        // A screen changes many times a second while it draws: read it once
+        // it settles, not on every change.
+        if (readQueued) return
+        readQueued = true
+        reader.postDelayed({
+            readQueued = false
+            try {
+                read()
+            } catch (e: Exception) {
+                // The window went away mid-read; the next change reads again.
+            }
+        }, READ_DELAY)
+    }
+
+    private fun read() {
         val root = rootInActiveWindow ?: return
         val app = root.packageName?.toString() ?: return
         if (app !in UpiScreenParser.apps) return
         val now = System.currentTimeMillis()
-        // NPCI's UPI PIN screen, which every UPI app uses.
-        if (event?.className?.toString()?.contains("npci", ignoreCase = true) == true) payingSince = now
         val lines = mutableListOf<String>()
+        nodesLeft = MAX_NODES
         collect(root, lines, 0)
         val screen = lines.joinToString("\n")
         if (UpiScreenParser.isPaying(screen)) {
@@ -46,9 +74,14 @@ class UpiScreenWatcher : AccessibilityService() {
 
     override fun onInterrupt() {}
 
+    override fun onDestroy() {
+        worker.quitSafely()
+        super.onDestroy()
+    }
+
     /** Every text on screen, top to bottom. */
     private fun collect(node: AccessibilityNodeInfo?, out: MutableList<String>, depth: Int) {
-        if (node == null || depth > 40 || out.size > 400) return
+        if (node == null || depth > 40 || out.size > 400 || nodesLeft-- <= 0) return
         val text = node.text?.toString()?.trim()
         if (!text.isNullOrEmpty()) out += text
         val description = node.contentDescription?.toString()?.trim()
@@ -59,6 +92,8 @@ class UpiScreenWatcher : AccessibilityService() {
     companion object {
         /** From the payment screen to its success screen: the PIN, the bank, a slow network. */
         private const val WATCH = 10 * 60 * 1000L
+        private const val READ_DELAY = 300L
+        private const val MAX_NODES = 1500
 
         fun isAllowed(context: Context): Boolean {
             val enabled = Settings.Secure.getString(

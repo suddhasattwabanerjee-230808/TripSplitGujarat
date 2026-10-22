@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.9] - 2026-10-22 (build 46)
+
+### Fixed
+- "Add" and "Ignore" on a UPI payment alert now work the moment you tap
+  them. Spotting payments on the GPay/PhonePe screen used to keep TripSplit
+  busy, so the tap waited its turn for a few seconds.
+- The "Add" popup is ready as soon as the alert comes, with your trip
+  already loaded, instead of taking a few seconds to start.
+
 ## [1.14.8] - 2026-10-22 (build 45)
 
 ### Fixed

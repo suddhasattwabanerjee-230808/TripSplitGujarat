@@ -363,15 +363,18 @@ object UpiNotifier {
             .setContentIntent(add)
             .addAction(0, "Add", add)
             .addAction(0, "Ignore", ignore)
+            .setDeleteIntent(ignore)
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
+        UpiPopupEngine.prewarm(context)
         return null
     }
 }
 
-/** "Ignore" action on the UPI notification — just dismisses it. */
+/** "Ignore" on the UPI notification (or swiping it away): dismisses it and frees the waiting popup. */
 class UpiIgnoreReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         UpiNotifier.cancel(context, intent.getIntExtra(UpiNotifier.EXTRA_NOTIFICATION_ID, -1))
+        UpiPopupEngine.drop()
     }
 }

@@ -88,11 +88,17 @@ class _UpiPopupState extends State<_UpiPopup> {
   }
 
   Future<void> _init() async {
+    // The engine is started when the UPI alert goes up (UpiPopupEngine), and
+    // the payment only arrives once "Add" is tapped: load the trips meanwhile,
+    // so the popup is ready the moment it opens.
+    final trips = _loadTrips();
     final data = await _channel.invokeMapMethod<String, dynamic>('getTransaction') ?? {};
     _amount = (data['amount'] as num?)?.toDouble() ?? 0;
     _payee = data['payee'] as String?;
     _time = DateTime.fromMillisecondsSinceEpoch(data['time'] as int? ?? DateTime.now().millisecondsSinceEpoch);
-    if (!await ApiClient.instance.restoreSession()) {
+    final loaded = await trips;
+    if (!mounted) return;
+    if (loaded == null) {
       setState(() {
         _loading = false;
         _error = 'Log in to TripSplit first, then try again.';
@@ -100,19 +106,27 @@ class _UpiPopupState extends State<_UpiPopup> {
       return;
     }
     _fillCurrentLocation();
+    setState(() {
+      _loading = false;
+      switch (loaded) {
+        case ApiException(:final message):
+          _error = message;
+        case (List<Trip> trips, String? last):
+          _trip = _pickTrip(trips, last);
+          if (_trip == null) _error = 'Create or join a trip in TripSplit first.';
+      }
+    });
+  }
+
+  /// The trips and the last-opened one; null when not logged in. An
+  /// [ApiException] is returned, not thrown, since nothing awaits this until
+  /// the popup opens.
+  Future<Object?> _loadTrips() async {
+    if (!await ApiClient.instance.restoreSession()) return null;
     try {
-      final trips = await ApiClient.instance.listTrips();
-      final last = await ApiClient.instance.lastTripId();
-      setState(() {
-        _trip = _pickTrip(trips, last);
-        _loading = false;
-        if (_trip == null) _error = 'Create or join a trip in TripSplit first.';
-      });
+      return (await ApiClient.instance.listTrips(), await ApiClient.instance.lastTripId());
     } on ApiException catch (e) {
-      setState(() {
-        _loading = false;
-        _error = e.message;
-      });
+      return e;
     }
   }
 
