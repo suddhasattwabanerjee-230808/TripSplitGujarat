@@ -70,7 +70,7 @@ class _NicknameScreenState extends State<NicknameScreen> {
               ),
               const SizedBox(height: 26),
               Text(
-                'What should your\ntripmates call you?',
+                'What Should Your\nTripmates Call You?',
                 style: TextStyle(color: ink, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -1, height: 1.1),
               ),
               const SizedBox(height: 10),
@@ -98,7 +98,7 @@ class _NicknameScreenState extends State<NicknameScreen> {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Photo and email from Google · ${user!.email}',
+                        'Photo And Email From Google · ${user!.email}',
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(color: muted, fontSize: 12),
                       ),

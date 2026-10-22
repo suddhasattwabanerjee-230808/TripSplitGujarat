@@ -22,7 +22,7 @@ class SettleScreen extends StatelessWidget {
       actions: const [ThemeToggle()],
       backgroundColor: paper,
       surfaceTintColor: paper,
-      title: const Text('Settle up', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+      title: const Text('Settle Up', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
     ),
     body: ListenableBuilder(
       listenable: TripStore.instance,
@@ -84,7 +84,7 @@ class SettleScreen extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            debt == null ? 'All square with $first' : (iOwe ? 'You owe $first' : '$first owes you'),
+            debt == null ? 'All Square With $first' : (iOwe ? 'You Owe $first' : '$first Owes You'),
             style: TextStyle(color: muted, fontSize: 14, fontWeight: FontWeight.w600),
           ),
           if (debt != null) ...[

@@ -103,7 +103,7 @@ ThemeData appThemeData() {
     colorScheme: scheme,
     scaffoldBackgroundColor: paper,
     canvasColor: paper,
-    fontFamily: 'Manrope',
+    fontFamily: 'Inter',
     dividerColor: line,
     appBarTheme: AppBarTheme(backgroundColor: paper, foregroundColor: ink, surfaceTintColor: paper),
     dialogTheme: DialogThemeData(backgroundColor: surface, surfaceTintColor: Colors.transparent),
@@ -312,10 +312,10 @@ String formatDateAndTime(DateTime dt) =>
 /// "just now", "5m ago", "3h ago", "2d ago", then a date.
 String timeAgo(DateTime dt) {
   final diff = DateTime.now().difference(dt);
-  if (diff.inMinutes < 1) return 'just now';
-  if (diff.inHours < 1) return '${diff.inMinutes}m ago';
-  if (diff.inDays < 1) return '${diff.inHours}h ago';
-  if (diff.inDays < 7) return '${diff.inDays}d ago';
+  if (diff.inMinutes < 1) return 'Just Now';
+  if (diff.inHours < 1) return '${diff.inMinutes}m Ago';
+  if (diff.inDays < 1) return '${diff.inHours}h Ago';
+  if (diff.inDays < 7) return '${diff.inDays}d Ago';
   return formatDate(dt);
 }
 

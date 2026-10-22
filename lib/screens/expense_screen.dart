@@ -91,8 +91,8 @@ class ExpenseScreen extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 e.isSettlement
-                    ? '${name(e.paidBy)} paid back ${e.shares.isEmpty ? '' : name(e.shares.first.userId)}'
-                    : '${name(e.paidBy)} paid',
+                    ? '${name(e.paidBy)} Paid Back ${e.shares.isEmpty ? '' : name(e.shares.first.userId)}'
+                    : '${name(e.paidBy)} Paid',
                 style: TextStyle(color: muted, fontSize: 13.5, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 2),
@@ -112,7 +112,7 @@ class ExpenseScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(color: negative.withValues(alpha: .08), borderRadius: BorderRadius.circular(20)),
                   child: Text(
-                    'Your share ${money(myShare)}',
+                    'Your Share ${money(myShare)}',
                     style: TextStyle(color: negative, fontSize: 13, fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -125,11 +125,11 @@ class ExpenseScreen extends StatelessWidget {
           decoration: cardDecoration(),
           child: Column(
             children: [
-              _info(Icons.sell_outlined, 'Category', e.isSettlement ? 'Settle-up payment' : (e.category ?? 'Other'), catColor),
+              _info(Icons.sell_outlined, 'Category', e.isSettlement ? 'Settle-Up Payment' : (e.category ?? 'Other'), catColor),
               Divider(height: 1, indent: 50, color: line),
               _info(Icons.schedule_outlined, 'When', formatDateAndTime(e.dateTime), accent),
               Divider(height: 1, indent: 50, color: line),
-              _info(Icons.location_on_outlined, 'Where', e.location ?? 'No location', accent),
+              _info(Icons.location_on_outlined, 'Where', e.location ?? 'No Location', accent),
               if (trip != null) ...[
                 Divider(height: 1, indent: 50, color: line),
                 _info(trip.tripKind.icon, 'Trip', trip.name, trip.tripKind.color),
@@ -140,7 +140,7 @@ class ExpenseScreen extends StatelessWidget {
         const SizedBox(height: 22),
         Padding(
           padding: const EdgeInsets.only(left: 2, bottom: 10),
-          child: SectionHeader(title: e.isSettlement ? 'Paid to' : 'Split between ${e.shares.length}'),
+          child: SectionHeader(title: e.isSettlement ? 'Paid To' : 'Split Between ${e.shares.length}'),
         ),
         Container(
           decoration: cardDecoration(),

@@ -210,7 +210,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                             focusNode: _searchFocus,
                             onChanged: _onSearchChanged,
                             decoration: InputDecoration(
-                              hintText: 'Search for a place',
+                              hintText: 'Search For A Place',
                               hintStyle: TextStyle(color: muted, fontSize: 13),
                               prefixIcon: Icon(Icons.search_rounded, size: 19, color: muted),
                               suffixIcon: _searching
@@ -340,7 +340,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            _resolvingLabel ? 'Finding address…' : (_label ?? 'Unknown location'),
+                            _resolvingLabel ? 'Finding Address…' : (_label ?? 'Unknown Location'),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700),
@@ -366,7 +366,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                           foregroundColor: paper,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17)),
                         ),
-                        child: const Text('Confirm location', style: TextStyle(fontWeight: FontWeight.w700)),
+                        child: const Text('Confirm Location', style: TextStyle(fontWeight: FontWeight.w700)),
                       ),
                     ),
                   ],

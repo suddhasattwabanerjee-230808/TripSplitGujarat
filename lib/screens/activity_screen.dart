@@ -5,12 +5,12 @@ import '../models.dart';
 import '../theme.dart';
 import '../trip_store.dart';
 import '../widgets.dart';
+import 'expense_screen.dart';
 
 /// The bell's feed: expenses added on any of the user's trips, newest first.
-/// Opening it marks everything read.
+/// Opening it marks everything read; tapping one opens that expense.
 class ActivityScreen extends StatefulWidget {
-  const ActivityScreen({super.key, this.onOpenTrip});
-  final void Function(String tripId)? onOpenTrip;
+  const ActivityScreen({super.key});
 
   @override
   State<ActivityScreen> createState() => _ActivityScreenState();
@@ -72,7 +72,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                   const SizedBox(height: 14),
                   Center(
                     child: Text(
-                      _store.activityError == null ? 'No activity yet' : 'Couldn’t load notifications',
+                      _store.activityError == null ? 'No Activity Yet' : 'Couldn’t Load Notifications',
                       style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -104,20 +104,18 @@ class _ActivityScreenState extends State<ActivityScreen> {
     final who = mine ? 'You' : a.paidByName;
     final String text;
     if (settlement) {
-      text = a.myShare > 0 ? '$who paid you back ${money(a.amount)}' : '$who settled up ${money(a.amount)}';
+      text = a.myShare > 0 ? '$who Paid You Back ${money(a.amount)}' : '$who Settled Up ${money(a.amount)}';
     } else {
-      text = '$who added “${a.description}”';
+      text = '$who Added “${a.description}”';
     }
     final double impact = settlement ? 0 : (mine ? a.amount - a.myShare : -a.myShare);
     final trip = _store.trips?.where((t) => t.id == a.tripId).firstOrNull;
     final payer = trip?.member(a.paidBy);
     return AppCard(
-      onTap: widget.onOpenTrip == null
-          ? null
-          : () {
-              Navigator.pop(context);
-              widget.onOpenTrip!(a.tripId);
-            },
+      // The expense itself, with everything about it.
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ExpenseScreen(tripId: a.tripId, expenseId: a.expenseId)),
+      ),
       padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
       child: Row(
         children: [

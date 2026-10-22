@@ -48,7 +48,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
         onRefresh: _store.refresh,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+          padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.paddingOf(context).bottom + 24),
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 0, 0, 8),
@@ -72,7 +72,7 @@ class _BalanceScreenState extends State<BalanceScreen> {
                       const IconCircle(icon: Icons.account_balance_outlined, size: 40),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: Text('Net balance', style: TextStyle(color: muted, fontSize: 13, fontWeight: FontWeight.w500)),
+                        child: Text('Net Balance', style: TextStyle(color: muted, fontSize: 13, fontWeight: FontWeight.w500)),
                       ),
                       AmountPill(value: net, fontSize: 15),
                     ],
@@ -80,10 +80,10 @@ class _BalanceScreenState extends State<BalanceScreen> {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      Expanded(child: _stat('You are owed', totals.owed, positive)),
+                      Expanded(child: _stat('You Are Owed', totals.owed, positive)),
                       Container(width: 1, height: 34, color: line),
                       const SizedBox(width: 14),
-                      Expanded(child: _stat('You owe', totals.owing, negative)),
+                      Expanded(child: _stat('You Owe', totals.owing, negative)),
                     ],
                   ),
                 ],
@@ -99,20 +99,20 @@ class _BalanceScreenState extends State<BalanceScreen> {
               _allSettled()
             else ...[
               if (iOwe.isNotEmpty) ...[
-                const SectionHeader(title: 'You owe'),
+                const SectionHeader(title: 'You Owe'),
                 const SizedBox(height: 8),
                 groupedCard([for (final d in iOwe) DebtRow(debt: d, showTrip: true)], indent: 60),
                 const SizedBox(height: 20),
               ],
               if (owedToMe.isNotEmpty) ...[
-                const SectionHeader(title: 'Owed to you'),
+                const SectionHeader(title: 'Owed To You'),
                 const SizedBox(height: 8),
                 groupedCard([for (final d in owedToMe) DebtRow(debt: d, showTrip: true)], indent: 60),
                 const SizedBox(height: 20),
               ],
             ],
             if (trips.isNotEmpty) ...[
-              const SectionHeader(title: 'By trip'),
+              const SectionHeader(title: 'By Trip'),
               const SizedBox(height: 8),
               groupedCard([
                 for (final t in trips)

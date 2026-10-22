@@ -157,7 +157,7 @@ Future<PlaceLocation?> fetchPlaceLocation(String placeId) async {
     if (name != null && city != null && name != city) {
       label = '$name, $city';
     } else {
-      label = name ?? city ?? address ?? 'Unknown location';
+      label = name ?? city ?? address ?? 'Unknown Location';
     }
 
     return PlaceLocation(

@@ -30,7 +30,7 @@ class ThemeToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = AppTheme.instance.dark;
     return IconButton(
-      tooltip: dark ? 'Light theme' : 'Dark theme',
+      tooltip: dark ? 'Light Theme' : 'Dark Theme',
       onPressed: AppTheme.instance.toggle,
       icon: AnimatedSwitcher(
         duration: const Duration(milliseconds: 350),
@@ -410,7 +410,7 @@ ButtonStyle primaryButton({double radius = 14}) => FilledButton.styleFrom(
   foregroundColor: onAccent,
   padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
-  textStyle: const TextStyle(fontFamily: 'Manrope', fontWeight: FontWeight.w700, fontSize: 14),
+  textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w700, fontSize: 14),
 );
 
 ButtonStyle secondaryButton({Color? color, double radius = 14}) => OutlinedButton.styleFrom(
@@ -419,7 +419,7 @@ ButtonStyle secondaryButton({Color? color, double radius = 14}) => OutlinedButto
   side: BorderSide(color: line),
   padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
-  textStyle: const TextStyle(fontFamily: 'Manrope', fontWeight: FontWeight.w700, fontSize: 14),
+  textStyle: const TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w700, fontSize: 14),
 );
 
 // --- Pay now ------------------------------------------------------------------
@@ -452,13 +452,24 @@ Future<bool> payDebt(BuildContext context, Debt debt) async {
   return settleDebt(context, debt, choice);
 }
 
-/// The ways to settle [debt], as [onChoose] values: `app:<package>` (a UPI
-/// app), `cash`, `other` (paid by UPI another way) and `remind`. Shown in the
-/// Pay sheet and on a balance's settle-up page.
+/// The ways to settle [debt], as [onChoose] values: `app:<package>` (pay in
+/// a UPI app), `scan:<package>` (open a UPI app's scanner on their QR),
+/// `cash`, `other` (paid some other way) and `remind`. Shown in the Pay sheet
+/// and on a balance's settle-up page.
 class SettleOptions extends StatelessWidget {
   const SettleOptions({super.key, required this.debt, required this.onChoose});
   final Debt debt;
   final ValueChanged<String> onChoose;
+
+  /// With their UPI ID an app opens on the payment, filled in; without it (or
+  /// for an app whose payment links are off) it opens on its scanner.
+  String _choiceFor(UpiApp app) =>
+      debt.other?.upiId != null && app.canPay ? 'app:${app.package}' : 'scan:${app.package}';
+
+  Future<void> _scan(BuildContext context) async {
+    final package = await pickUpiAppToScan(context, debt);
+    if (package != null) onChoose('scan:$package');
+  }
 
   @override
   Widget build(BuildContext context) => Column(
@@ -475,27 +486,34 @@ class SettleOptions extends StatelessWidget {
               return SizedBox(height: 76, child: Center(child: CircularProgressIndicator(color: accent)));
             }
             if (apps.isEmpty) {
-              return Text('No UPI app found on this phone.', style: TextStyle(color: muted, fontSize: 12.5));
+              return Text('No UPI App Found On This Phone', style: TextStyle(color: muted, fontSize: 12.5));
             }
             return Wrap(
               spacing: 10,
               runSpacing: 10,
-              children: [for (final app in apps.take(8)) _UpiAppButton(app: app, onTap: () => onChoose('app:${app.package}'))],
+              children: [for (final app in apps.take(8)) _UpiAppButton(app: app, onTap: () => onChoose(_choiceFor(app)))],
             );
           },
         ),
         const SizedBox(height: 16),
         FilledButton.icon(
-          onPressed: () => onChoose('cash'),
-          icon: const Icon(Icons.payments_outlined, size: 18),
-          label: const Text('I paid in cash'),
+          onPressed: () => _scan(context),
+          icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+          label: const Text('Scan Their QR Code'),
           style: primaryButton(),
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
+          onPressed: () => onChoose('cash'),
+          icon: const Icon(Icons.payments_outlined, size: 18),
+          label: const Text('I Paid In Cash'),
+          style: secondaryButton(),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
           onPressed: () => onChoose('other'),
-          icon: const Icon(Icons.qr_code_2_outlined, size: 18),
-          label: const Text('I paid by UPI another way'),
+          icon: const Icon(Icons.task_alt_rounded, size: 18),
+          label: const Text('I Already Paid Another Way'),
           style: secondaryButton(),
         ),
         const SizedBox(height: 8),
@@ -503,12 +521,59 @@ class SettleOptions extends StatelessWidget {
       OutlinedButton.icon(
         onPressed: () => onChoose('remind'),
         icon: const Icon(Icons.alarm_add_outlined, size: 18),
-        label: Text(debt.iOwe ? 'Remind me to settle later' : 'Remind me to follow up'),
+        label: Text(debt.iOwe ? 'Remind Me To Settle Later' : 'Remind Me To Follow Up'),
         style: secondaryButton(),
       ),
     ],
   );
 }
+
+/// "Scan their QR": which UPI app to open on its scanner. Google Pay and
+/// PhonePe come first. The package, or null if dismissed.
+Future<String?> pickUpiAppToScan(BuildContext context, Debt debt) => showAppSheet<String>(
+  context,
+  title: 'Scan With',
+  subtitle: 'The app opens on its scanner. Point it at ${debt.otherName}’s UPI QR and pay ${money(debt.amount)}.',
+  children: (ctx) => [
+    FutureBuilder<List<UpiApp>>(
+      future: UpiPay.apps(),
+      builder: (context, snap) {
+        final apps = snap.data;
+        if (apps == null) {
+          return SizedBox(height: 120, child: Center(child: CircularProgressIndicator(color: accent)));
+        }
+        if (apps.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: Text('No UPI App Found On This Phone', style: TextStyle(color: muted, fontSize: 13))),
+          );
+        }
+        return groupedCard([
+          for (final app in apps)
+            InkWell(
+              onTap: () => Navigator.pop(ctx, app.package),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(app.icon, width: 38, height: 38, gaplessPlayback: true),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(app.label, style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w600)),
+                    ),
+                    Icon(Icons.qr_code_scanner_rounded, size: 20, color: accent),
+                  ],
+                ),
+              ),
+            ),
+        ], indent: 66);
+      },
+    ),
+  ],
+);
 
 class _UpiAppButton extends StatelessWidget {
   const _UpiAppButton({required this.app, required this.onTap});
@@ -549,6 +614,8 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
     return false;
   }
   String method = choice == 'cash' ? 'Cash' : 'UPI';
+  // Nothing to fill a payment in with: scan their QR in that app instead.
+  if (choice.startsWith('app:') && debt.other?.upiId == null) choice = 'scan:${choice.substring(4)}';
   if (choice.startsWith('app:')) {
     final package = choice.substring(4);
     final upiId = debt.other?.upiId;
@@ -575,14 +642,14 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
         case UpiPayStatus.success:
           break;
       }
-    } else {
-      // No UPI ID to fill in: open the app to scan their QR, then confirm.
-      if (!await UpiPay.open(package)) {
-        messenger.showSnackBar(const SnackBar(content: Text('Couldn’t open that app.')));
-        return false;
-      }
-      if (!context.mounted || !await _askPaid(context, debt, scanned: true)) return false;
     }
+  } else if (choice.startsWith('scan:')) {
+    // Their QR: the app opens on its scanner; then confirm here.
+    if (!await UpiPay.scan(choice.substring(5))) {
+      messenger.showSnackBar(const SnackBar(content: Text('Couldn’t open that app.')));
+      return false;
+    }
+    if (!context.mounted || !await _askPaid(context, debt, scanned: true)) return false;
   }
   if (!context.mounted) return false;
   try {
@@ -607,15 +674,15 @@ Future<bool> _askPaid(BuildContext context, Debt debt, {bool scanned = false}) a
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: paper,
-        title: const Text('Did the payment go through?', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        title: const Text('Did The Payment Go Through?', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         content: Text(
           scanned
               ? 'Scan ${debt.otherName}’s UPI QR in the app you opened and pay ${money(debt.amount)}. Then mark it paid here so everyone’s balance updates.'
               : 'If you paid ${money(debt.amount)} to ${debt.otherName}, mark it paid so everyone’s balance updates.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not yet')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), style: primaryButton(radius: 12), child: const Text('Mark paid')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Not Yet')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), style: primaryButton(radius: 12), child: const Text('Mark Paid')),
         ],
       ),
     ) ==
@@ -628,7 +695,7 @@ Future<bool> pickSettleReminder(BuildContext context, Debt debt) async {
   final now = DateTime.now();
   final day = await showDatePicker(
     context: context,
-    helpText: 'Remind me on',
+    helpText: 'Remind Me On',
     initialDate: now.add(const Duration(days: 1)),
     firstDate: now,
     lastDate: now.add(const Duration(days: 365)),
@@ -648,6 +715,9 @@ Future<bool> pickSettleReminder(BuildContext context, Debt debt) async {
   }
   try {
     await ExpenseNotifier.remindToSettle(trip: debt.trip, other: other, amount: debt.amount, iOwe: debt.iOwe, when: when);
+  } on StateError {
+    messenger.showSnackBar(const SnackBar(content: Text('Notifications are off. Turn on All Notifications in your profile first.')));
+    return false;
   } catch (_) {
     messenger.showSnackBar(const SnackBar(content: Text('Couldn’t set the reminder. Allow notifications for TripSplit.')));
     return false;
@@ -707,7 +777,7 @@ class DebtRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  debt.iOwe ? 'You owe ${debt.otherName}' : '${debt.otherName} owes you',
+                  debt.iOwe ? 'You Owe ${debt.otherName}' : '${debt.otherName} Owes You',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: ink, fontSize: 13.5, fontWeight: FontWeight.w600),
@@ -750,7 +820,7 @@ class DebtRow extends StatelessWidget {
           else
             // They owe you: set a reminder to follow it up.
             IconButton(
-              tooltip: 'Remind me',
+              tooltip: 'Remind Me',
               onPressed: () => pickSettleReminder(context, debt),
               icon: Icon(Icons.alarm_add_outlined, color: accent, size: 22),
             ),

@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
 import '../category_guess.dart';
+import '../city_photo.dart';
 import '../ledger.dart';
 import '../location_service.dart';
 import '../models.dart';
@@ -17,6 +18,7 @@ import '../trip_store.dart';
 import '../widgets.dart';
 import 'activity_screen.dart';
 import 'location_picker_screen.dart';
+import 'profile_screen.dart';
 import 'stats_screen.dart';
 import 'trip_insights.dart';
 import 'trip_people.dart';
@@ -271,7 +273,8 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
                     sliver: SliverToBoxAdapter(child: _expensesLink()),
                   ),
-                const SliverToBoxAdapter(child: SizedBox(height: 110)),
+                // Clear of the floating nav bar and the Add expense button.
+                SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + 84)),
               ],
             ),
           ),
@@ -285,7 +288,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         elevation: 3,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Add expense', style: TextStyle(fontWeight: FontWeight.w700)),
+        label: const Text('Add Expense', style: TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -296,7 +299,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         TextButton.icon(
           onPressed: () => showTripSwitcher(context),
           icon: const Icon(Icons.swap_horiz_rounded, size: 20),
-          label: const Text('Switch trip'),
+          label: const Text('Switch Trip'),
           style: TextButton.styleFrom(
             foregroundColor: accent,
             textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -312,15 +315,11 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       const ThemeToggle(),
       if (widget.embedded) _bell(),
       IconButton(
-        tooltip: 'Trip details',
+        tooltip: 'Trip Details',
         onPressed: () => _openDetails(trip),
         icon: Icon(Icons.info_outline_rounded, color: ink),
       ),
-      IconButton(
-        tooltip: 'Invite people',
-        onPressed: () => showInviteSheet(context, trip),
-        icon: Icon(Icons.person_add_alt_outlined, color: ink),
-      ),
+      if (widget.embedded) const Padding(padding: EdgeInsets.only(left: 4, right: 6), child: ProfileButton()),
     ],
   );
 
@@ -329,7 +328,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     return IconButton(
       tooltip: 'Notifications',
       onPressed: () => Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ActivityScreen(onOpenTrip: _store.selectTrip)),
+        MaterialPageRoute(builder: (_) => const ActivityScreen()),
       ),
       icon: Badge(
         isLabelVisible: unread > 0,
@@ -413,15 +412,15 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   Widget _quickOperations(Trip trip) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Padding(padding: EdgeInsets.only(left: 2, bottom: 12), child: SectionHeader(title: 'Quick operations')),
+      const Padding(padding: EdgeInsets.only(left: 2, bottom: 12), child: SectionHeader(title: 'Quick Operations')),
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _operation('Balance', Icons.account_balance_wallet_outlined, () => _showBalances(trip)),
-          _operation('Add expense', Icons.post_add_rounded, _addExpense),
-          _operation('Scan receipt', Icons.document_scanner_outlined, () => _addExpense(scan: true)),
+          _operation('Invite', Icons.person_add_alt_outlined, () => showInviteSheet(context, trip)),
+          _operation('Add Expense', Icons.post_add_rounded, _addExpense),
+          _operation('Scan Receipt', Icons.document_scanner_outlined, () => _addExpense(scan: true)),
           _operation(
-            'View stats',
+            'View Stats',
             Icons.insights_outlined,
             () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => StatsScreen(trip: trip, expenses: _expenses)),
@@ -482,7 +481,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'All ${_expenses.length} expense${_expenses.length == 1 ? '' : 's'}',
+                  'All ${_expenses.length} Expense${_expenses.length == 1 ? '' : 's'}',
                   style: TextStyle(color: ink, fontSize: 14.5, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 2),
@@ -493,7 +492,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
                   style: TextStyle(color: muted, fontSize: 12),
                 ),
                 Text(
-                  '$mine added by you · search, filter, per person',
+                  '$mine Added By You · Search, Filter, Trip Mates',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: muted, fontSize: 12),
@@ -511,7 +510,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     children: [
       const IconCircle(icon: Icons.receipt_long_outlined, size: 64),
       const SizedBox(height: 14),
-      Text('No expenses yet', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
+      Text('No Expenses Yet', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
       const SizedBox(height: 4),
       Text(
         'Add the first one — or scan a bill — and it’s split with everyone on the trip.',
@@ -529,7 +528,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         _sheetCard([
           ListTile(
             leading: Icon(Icons.check_circle_outline_rounded, color: positive),
-            title: Text('Everyone’s settled up', style: TextStyle(fontWeight: FontWeight.w700, color: ink)),
+            title: Text('Everyone’s Settled Up', style: TextStyle(fontWeight: FontWeight.w700, color: ink)),
           ),
         ])
       else ...[
@@ -597,11 +596,11 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isMe ? '${member.name} (you)' : member.name,
+                  isMe ? '${member.name} (You)' : member.name,
                   style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  'paid ${money(b.totalPaid)} · share ${money(b.totalOwed)}',
+                  'Paid ${money(b.totalPaid)} · Share ${money(b.totalOwed)}',
                   style: TextStyle(color: muted, fontSize: 12),
                 ),
               ],
@@ -616,8 +615,9 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
 }
 
 
-/// The trip's hero card (brand gradient): the trip total with everyone's
-/// faces beside it, your share and what you paid, and where you stand.
+/// The trip's hero card (the city photo on the brand gradient): the trip
+/// total with everyone's faces beside it, your share and what you paid, and
+/// where you stand.
 class TripHeroCard extends StatelessWidget {
   const TripHeroCard({
     super.key,
@@ -639,13 +639,10 @@ class TripHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final settled = net.abs() < 0.5;
     final count = expenseCount;
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        gradient: brandGradient,
-        boxShadow: [BoxShadow(color: wine.withValues(alpha: .3), blurRadius: 30, offset: const Offset(0, 14))],
-      ),
+    // The city the phone is in, blended into the brand gradient.
+    return CityBackdrop(
+      borderRadius: BorderRadius.circular(26),
+      boxShadow: [BoxShadow(color: wine.withValues(alpha: .3), blurRadius: 30, offset: const Offset(0, 14))],
       child: Stack(
         children: [
           Positioned(right: -60, top: -70, child: _glow(200)),
@@ -658,11 +655,11 @@ class TripHeroCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      'Trip total',
+                      'Trip Total',
                       style: TextStyle(color: Colors.white.withValues(alpha: .75), fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                     const Spacer(),
-                    _heroChip('${trip.memberCount} people · $count expense${count == 1 ? '' : 's'}'),
+                    _heroChip('${trip.memberCount} People · $count Expense${count == 1 ? '' : 's'}'),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -703,9 +700,9 @@ class TripHeroCard extends StatelessWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Expanded(child: _glass('Your share', money(share))),
+                    Expanded(child: _glass('Your Share', money(share))),
                     const SizedBox(width: 10),
-                    Expanded(child: _glass('You paid', money(paid))),
+                    Expanded(child: _glass('You Paid', money(paid))),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -722,7 +719,7 @@ class TripHeroCard extends StatelessWidget {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          settled ? 'You’re all settled up' : (net > 0 ? 'You get back ${money(net)}' : 'You owe ${money(-net)}'),
+                          settled ? 'You’re All Settled Up' : (net > 0 ? 'You Get Back ${money(net)}' : 'You Owe ${money(-net)}'),
                           style: const TextStyle(color: Color(0xFF0F1222), fontSize: 14, fontWeight: FontWeight.w800),
                         ),
                       ),
@@ -735,7 +732,7 @@ class TripHeroCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: const Text('Settle up', style: TextStyle(fontWeight: FontWeight.w800)),
+                        child: const Text('Settle Up', style: TextStyle(fontWeight: FontWeight.w800)),
                       ),
                     ],
                   ),
@@ -884,7 +881,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: surface,
-        title: const Text('New category', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        title: const Text('New Category', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -1054,7 +1051,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     );
   }
 
-  /// "₹600 each · 2 of 3 people", or who alone owes it.
+  /// "₹600 Each · 2 Of 3 People", or who alone owes it.
   String _splitSummary(List<TripMember> members, Set<String> chosen) {
     final me = ApiClient.instance.currentUser?.id;
     if (chosen.length == 1) {
@@ -1063,12 +1060,16 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
           ? 'Only you — this won’t change anyone’s balance.'
           : 'Only ${only.name.trim().split(RegExp(r'\s+')).first} owes this — you’re paying on their behalf.';
     }
-    final who = chosen.length == members.length ? 'everyone' : '${chosen.length} of ${members.length} people';
-    final notMe = me != null && !chosen.contains(me) ? ' (not you)' : '';
+    final everyone = chosen.length == members.length;
+    final notMe = me != null && !chosen.contains(me);
     final amount = double.tryParse(_amount.text.trim().replaceAll(',', ''));
-    return amount == null || amount <= 0
-        ? 'Split equally between $who$notMe.'
-        : '${money(amount / chosen.length)} each · $who$notMe';
+    // A sentence before there's an amount, a Title Case phrase after.
+    if (amount == null || amount <= 0) {
+      final who = everyone ? 'everyone' : '${chosen.length} of ${members.length} people';
+      return 'Split equally between $who${notMe ? ' (not you)' : ''}.';
+    }
+    final who = everyone ? 'Everyone' : '${chosen.length} Of ${members.length} People';
+    return '${money(amount / chosen.length)} Each · $who${notMe ? ' (Not You)' : ''}';
   }
 
   Future<void> _pickDateTime() async {
@@ -1180,7 +1181,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.isEditing ? 'Edit expense' : 'Add an expense',
+                          widget.isEditing ? 'Edit Expense' : 'Add An Expense',
                           style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
                         ),
                         const SizedBox(height: 3),
@@ -1190,13 +1191,13 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                   ),
                   if (!widget.isEditing)
                     PopupMenuButton<bool>(
-                      tooltip: 'Scan receipt',
+                      tooltip: 'Scan Receipt',
                       enabled: !_scanning,
                       color: surface,
                       onSelected: (fromCamera) => _scan(fromCamera: fromCamera),
                       itemBuilder: (_) => const [
-                        PopupMenuItem(value: true, child: Text('Take a photo of the bill')),
-                        PopupMenuItem(value: false, child: Text('Choose from gallery')),
+                        PopupMenuItem(value: true, child: Text('Take A Photo Of The Bill')),
+                        PopupMenuItem(value: false, child: Text('Choose From Gallery')),
                       ],
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1299,7 +1300,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
               _pickerRow(
                 icon: Icons.location_on_outlined,
                 iconColor: accent,
-                text: _locatingNow ? 'Finding your location…' : (_location ?? 'Tap to choose on map'),
+                text: _locatingNow ? 'Finding Your Location…' : (_location ?? 'Tap To Choose On Map'),
                 onTap: _openLocationPicker,
                 trailing: _locatingNow
                     ? SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: accent))
@@ -1323,7 +1324,7 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: onAccent),
                         )
-                      : Text(widget.isEditing ? 'Save changes' : 'Save expense'),
+                      : Text(widget.isEditing ? 'Save Changes' : 'Save Expense'),
                 ),
               ),
             ],

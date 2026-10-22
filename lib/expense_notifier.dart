@@ -62,19 +62,20 @@ abstract final class ExpenseNotifier {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static const _channel = AndroidNotificationChannel(
     'trip_expenses',
-    'Trip expenses',
-    description: 'When someone on your trips adds an expense',
+    'Trip Expenses',
+    description: 'When Someone On Your Trips Adds An Expense',
     importance: Importance.high,
   );
   static const _reminders = AndroidNotificationChannel(
     'settle_reminders',
-    'Settle-up reminders',
-    description: 'Reminders you set to settle a balance',
+    'Settle-Up Reminders',
+    description: 'Reminders You Set To Settle A Balance',
     importance: Importance.high,
   );
   static const _task = 'trip_split.check_expenses';
   static const _sinceKey = 'trip_split.notify_since.v1';
   static const _shownKey = 'trip_split.notified_expenses.v1';
+  static const _enabledKey = 'trip_split.notifications_on.v1';
   static final _prefs = SharedPreferencesAsync();
 
   /// Opens an expense when a notification is tapped while the app is running.
@@ -121,6 +122,21 @@ abstract final class ExpenseNotifier {
     return null;
   }
 
+  /// The profile's "All notifications" switch (on unless switched off).
+  /// Read wherever a notification is about to go up, the background included.
+  static Future<bool> enabled() async =>
+      await _prefs.getBool(_enabledKey).catchError((Object _) => null) ?? true;
+
+  /// Switching off also clears what's showing and any settle-up reminders
+  /// still to come.
+  static Future<void> setEnabled(bool on) async {
+    await _prefs.setBool(_enabledKey, on);
+    if (!on) {
+      await init();
+      await _plugin.cancelAll();
+    }
+  }
+
   static int _reminderId(String tripId, String otherId) => 'settle|$tripId|$otherId'.hashCode & 0x7fffffff;
 
   /// Sets (or moves) a reminder at [when] to settle the balance with
@@ -132,10 +148,11 @@ abstract final class ExpenseNotifier {
     required bool iOwe,
     required DateTime when,
   }) async {
+    if (!await enabled()) throw StateError('Notifications are off');
     await init();
     tzdata.initializeTimeZones();
     final first = other.name.trim().split(RegExp(r'\s+')).first;
-    final title = iOwe ? 'Time to settle up with $first' : 'Remind $first to settle up';
+    final title = iOwe ? 'Time To Settle Up With $first' : 'Remind $first To Settle Up';
     final body = iOwe
         ? 'You owe $first ${money(amount)} on ${trip.name}. Tap to pay.'
         : '$first owes you ${money(amount)} on ${trip.name}.';
@@ -269,7 +286,7 @@ abstract final class ExpenseNotifier {
     }
     final trip = Trip(
       id: tripId,
-      name: blank(data['tripName']) ?? 'Your trip',
+      name: blank(data['tripName']) ?? 'Your Trip',
       destination: null,
       inviteCode: '',
       members: [TripMember(id: paidBy, name: payerName, photoUrl: payerPhoto)],
@@ -277,7 +294,7 @@ abstract final class ExpenseNotifier {
     final expense = TripExpense(
       id: expenseId,
       tripId: tripId,
-      description: blank(data['description']) ?? 'An expense',
+      description: blank(data['description']) ?? 'An Expense',
       amount: double.tryParse(data['amount'] as String? ?? '') ?? 0,
       paidBy: paidBy,
       paidByName: payerName,
@@ -359,14 +376,15 @@ abstract final class ExpenseNotifier {
   }
 
   static Future<void> _show(Trip trip, TripExpense e, String me) async {
+    if (!await enabled()) return;
     final payer = trip.member(e.paidBy) ?? TripMember(id: e.paidBy, name: e.payerName(trip));
     final first = payer.name.trim().split(RegExp(r'\s+')).first;
     final myShare = e.shareOf(me);
     final String title;
     if (e.isSettlement) {
-      title = myShare > 0 ? '$first paid you back ${money(e.amount)}' : '$first settled up ${money(e.amount)}';
+      title = myShare > 0 ? '$first Paid You Back ${money(e.amount)}' : '$first Settled Up ${money(e.amount)}';
     } else {
-      title = '$first added ${money(e.amount)}';
+      title = '$first Added ${money(e.amount)}';
     }
     final category = e.isSettlement ? 'Settle-up' : (e.category ?? 'Other');
     final lines = <String>[
@@ -376,8 +394,8 @@ abstract final class ExpenseNotifier {
       '🕒 ${formatDateTime(e.dateTime)}',
       if (!e.isSettlement)
         myShare > 0
-            ? '<b>Your share ${money(myShare)}</b> (split ${e.shares.length} way${e.shares.length == 1 ? '' : 's'})'
-            : 'You’re not part of this one',
+            ? '<b>Your Share ${money(myShare)}</b> (Split ${e.shares.length} Way${e.shares.length == 1 ? '' : 's'})'
+            : 'You’re Not Part Of This One',
     ];
     final avatar = await _avatar(payer);
     await _plugin.show(

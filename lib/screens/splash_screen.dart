@@ -4,12 +4,13 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../ajrakh.dart';
 import '../theme.dart';
 
-/// Cinematic brand intro, in the spirit of Netflix's "ta-dum": the logo is
-/// unveiled by a feathered diagonal wipe, the wordmark settles beneath it, a
-/// light sweep crosses the logo, then the camera dives into the logo's centre,
-/// which bursts into streaks of light before fading to black.
+/// Cinematic brand intro, in the spirit of Netflix's "ta-dum", on an ajrakh
+/// print: the logo is unveiled by a feathered diagonal wipe, the wordmark
+/// settles beneath it, a light sweep crosses the logo, then the camera dives
+/// into the logo's centre, which bursts into streaks of light.
 /// Tapping anywhere skips straight to [onDone].
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, required this.onDone});
@@ -23,6 +24,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   // Shared across replays so returning to the app starts the intro instantly.
   static Future<ui.Image?>? _logoFuture;
   static ui.Image? _strandSprite;
+  static ui.Image? _logoShadow;
 
   late final AnimationController _controller;
   final _strands = _Strand.generate(64);
@@ -41,6 +43,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       });
     (_logoFuture ??= _loadLogo()).then((image) {
       if (!mounted || _done) return;
+      if (image != null) _logoShadow ??= _buildShadow(image);
       setState(() => _logo = image);
       _controller.forward();
     });
@@ -54,6 +57,22 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     } catch (_) {
       return null; // the rest of the intro still plays
     }
+  }
+
+  /// The logo's silhouette, blurred: a soft shadow that seats the sticker
+  /// on the print. Rendered once, at [_shadowPad] around the logo.
+  static ui.Image _buildShadow(ui.Image logo) {
+    final pad = logo.width * _shadowPad;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.saveLayer(null, Paint()..imageFilter = ui.ImageFilter.blur(sigmaX: pad / 3, sigmaY: pad / 3));
+    canvas.drawImage(
+      logo,
+      Offset(pad, pad),
+      Paint()..colorFilter = const ColorFilter.mode(Colors.black, BlendMode.srcIn),
+    );
+    canvas.restore();
+    return recorder.endRecording().toImageSync((logo.width + 2 * pad).round(), (logo.height + 2 * pad).round());
   }
 
   /// One soft, blurred white streak, rendered once and tinted per strand at draw
@@ -103,7 +122,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
-        systemNavigationBarColor: Colors.black,
+        systemNavigationBarColor: ajrakhBlack,
         systemNavigationBarIconBrightness: Brightness.light,
       ),
       child: GestureDetector(
@@ -112,15 +131,16 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           _controller.stop();
           _finish();
         },
-        child: ColoredBox(
-          color: Colors.black,
-          child: SizedBox.expand(
-            child: RepaintBoundary(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const ColoredBox(color: ajrakhBlack, child: AjrakhBackground()),
+            RepaintBoundary(
               child: CustomPaint(
-                painter: _IntroPainter(_controller, _strands, _logo, _strandSprite!),
+                painter: _IntroPainter(_controller, _strands, _logo, _logoShadow, _strandSprite!),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -133,6 +153,9 @@ abstract final class _T {
   static const zoomStart = 0.58;
   static const zoomEnd = 0.84;
 }
+
+/// The shadow image's margin around the logo, as a fraction of its width.
+const _shadowPad = 0.08;
 
 double _seg(double t, double a, double b) => ((t - a) / (b - a)).clamp(0.0, 1.0);
 
@@ -187,11 +210,12 @@ class _Strand {
 }
 
 class _IntroPainter extends CustomPainter {
-  _IntroPainter(this.animation, this.strands, this.logo, this.strandSprite) : super(repaint: animation);
+  _IntroPainter(this.animation, this.strands, this.logo, this.shadow, this.strandSprite) : super(repaint: animation);
 
   final Animation<double> animation;
   final List<_Strand> strands;
   final ui.Image? logo;
+  final ui.Image? shadow;
   final ui.Image strandSprite;
 
   @override
@@ -248,26 +272,47 @@ class _IntroPainter extends CustomPainter {
 
     final src = Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
     final reveal = Curves.easeInOutCubic.transform(_seg(t, 0.03, _T.land));
+
+    // Its shadow, seating it on the print.
+    void drawShadow(double alpha) {
+      final shadow = this.shadow;
+      if (shadow == null) return;
+      final pad = rect.width * _shadowPad;
+      canvas.drawImageRect(
+        shadow,
+        Rect.fromLTWH(0, 0, shadow.width.toDouble(), shadow.height.toDouble()),
+        rect.inflate(pad).shift(Offset(0, rect.height * .03)),
+        Paint()..color = Colors.white.withValues(alpha: .8 * alpha),
+      );
+    }
+
+    void drawLogo(double alpha) => canvas.drawImageRect(
+      image,
+      src,
+      rect,
+      Paint()
+        ..filterQuality = FilterQuality.medium
+        ..color = Colors.white.withValues(alpha: alpha),
+    );
+
     final sheen = _seg(t, 0.40, 0.60);
     final sheenActive = sheen > 0 && sheen < 1;
 
     // Offscreen layers only while the wipe or sweep needs one; the zoom draws direct.
     if (reveal >= 1 && !sheenActive) {
-      canvas.drawImageRect(
-        image,
-        src,
-        rect,
-        Paint()
-          ..filterQuality = FilterQuality.medium
-          ..color = Colors.white.withValues(alpha: opacity),
-      );
+      drawShadow(opacity);
+      drawLogo(opacity);
       canvas.restore();
       return;
     }
 
-    final bounds = rect.inflate(4);
+    // While the wipe runs the shadow is revealed with the logo; after it, the
+    // shadow stays out of the layer so the sweep lights the logo only.
+    if (reveal >= 1) drawShadow(opacity);
+    final bounds = rect.inflate(rect.width * _shadowPad * 1.5);
     canvas.saveLayer(bounds, Paint()..color = Colors.white.withValues(alpha: opacity));
-    canvas.drawImageRect(image, src, rect, Paint()..filterQuality = FilterQuality.medium);
+    if (reveal < 1) drawShadow(1);
+    drawLogo(1);
 
     // Feathered diagonal wipe: the lion appears first, then the pattern panel.
     if (reveal < 1) {
@@ -324,20 +369,28 @@ class _IntroPainter extends CustomPainter {
     final painter = TextPainter(
       textDirection: TextDirection.ltr,
       text: TextSpan(
-        style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.w800, letterSpacing: spacing),
+        style: TextStyle(fontFamily: 'Inter', fontSize: fontSize, fontWeight: FontWeight.w800, letterSpacing: spacing),
         children: [
+          // Ivory and saffron, as on the print and the logo, with a dark halo
+          // so the letters sit clear of the pattern behind them.
           TextSpan(
             text: 'TRIP',
             style: TextStyle(
-              color: Colors.white.withValues(alpha: opacity),
-              shadows: [Shadow(color: Colors.white.withValues(alpha: 0.3 * opacity), blurRadius: glow)],
+              color: ajrakhIvory.withValues(alpha: opacity),
+              shadows: [
+                Shadow(color: ajrakhBlack.withValues(alpha: 0.9 * opacity), blurRadius: glow),
+                Shadow(color: ajrakhIvory.withValues(alpha: 0.18 * opacity), blurRadius: glow * 1.6),
+              ],
             ),
           ),
           TextSpan(
             text: 'SPLIT',
             style: TextStyle(
-              color: accentGlow.withValues(alpha: opacity),
-              shadows: [Shadow(color: accentGlow.withValues(alpha: 0.5 * opacity), blurRadius: glow)],
+              color: ajrakhSaffron.withValues(alpha: opacity),
+              shadows: [
+                Shadow(color: ajrakhBlack.withValues(alpha: 0.9 * opacity), blurRadius: glow),
+                Shadow(color: logoOrange.withValues(alpha: 0.45 * opacity), blurRadius: glow * 1.6),
+              ],
             ),
           ),
         ],
@@ -399,5 +452,5 @@ class _IntroPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_IntroPainter oldDelegate) => oldDelegate.logo != logo;
+  bool shouldRepaint(_IntroPainter oldDelegate) => oldDelegate.logo != logo || oldDelegate.shadow != shadow;
 }

@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
 import 'expense_notifier.dart';
@@ -19,6 +20,7 @@ import 'upi_popup.dart';
 Future<void> main() async {
   await _initFirebase();
   await AppTheme.instance.load();
+  _introOnStart = await _awayLongEnough();
   // Instant expense pushes while the app is closed (see ExpenseNotifier).
   if (Firebase.apps.isNotEmpty) FirebaseMessaging.onBackgroundMessage(expensePushHandler);
   runApp(const TripSplitApp());
@@ -31,6 +33,21 @@ Future<void> upiPopupMain() async {
   await _initFirebase();
   await AppTheme.instance.load();
   runApp(const UpiPopupApp());
+}
+
+/// The intro plays only when the app opens [_introGap] or more after it was
+/// last closed; a quick hop out and back (a UPI app, the camera) skips it.
+const _introGap = Duration(seconds: 30);
+const _closedAtKey = 'trip_split.closed_at.v1';
+bool _introOnStart = true;
+
+Future<bool> _awayLongEnough() async {
+  final closed = await SharedPreferencesAsync()
+      .getInt(_closedAtKey)
+      .timeout(const Duration(seconds: 2))
+      .catchError((Object _) => null);
+  if (closed == null) return true;
+  return DateTime.now().millisecondsSinceEpoch - closed >= _introGap.inMilliseconds;
 }
 
 /// Reads the project settings google-services.json compiled into the APK.
@@ -55,8 +72,10 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
   final _navigatorKey = GlobalKey<NavigatorState>();
   final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   Key _splashKey = UniqueKey();
-  bool _showSplash = true;
+  bool _showSplash = _introOnStart;
   bool _splashFadingOut = false;
+  DateTime? _closedAt;
+  bool _toldUpdate = false;
 
   @override
   void initState() {
@@ -70,9 +89,12 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
     );
     // A change saved offline that the server later refused.
     ApiClient.instance.onWriteError = (error) =>
-        _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('Not saved: ${error.message}')));
+        _messengerKey.currentState?.showSnackBar(SnackBar(content: Text('Not Saved: ${error.message}')));
     // Light/dark: redraw every screen in place with the new colours.
     AppTheme.instance.addListener(_onTheme);
+    // A new version: say so once, after the intro.
+    Updates.instance.addListener(_tellUpdate);
+    Updates.instance.launchCheck();
     // A tapped expense notification, while the app is running: open it.
     ExpenseNotifier.appVisible = true;
     ExpenseNotifier.onOpen = (tripId, expenseId) {
@@ -97,8 +119,16 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
     });
   }
 
+  void _tellUpdate() {
+    final messenger = _messengerKey.currentState;
+    if (_toldUpdate || _showSplash || !Updates.instance.available || messenger == null) return;
+    _toldUpdate = true;
+    showUpdateBanner(messenger, () => _navigatorKey.currentState!.overlay!.context);
+  }
+
   @override
   void dispose() {
+    Updates.instance.removeListener(_tellUpdate);
     AppTheme.instance.removeListener(_onTheme);
     WidgetsBinding.instance.removeObserver(this);
     ApiClient.instance.onSessionExpired = null;
@@ -109,14 +139,23 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // System notifications only while the app isn't on screen.
     ExpenseNotifier.appVisible = state == AppLifecycleState.resumed;
-    // Re-arm the intro whenever the app leaves the screen, so it plays on every
-    // return. Arming it while hidden means the first frame back is already the intro.
+    // Re-arm the intro whenever the app leaves the screen, so the first frame
+    // back is already the intro; back within [_introGap], it's dropped again
+    // before that frame is drawn.
     if (state == AppLifecycleState.hidden || state == AppLifecycleState.paused) {
+      if (_closedAt == null) {
+        _closedAt = DateTime.now();
+        SharedPreferencesAsync().setInt(_closedAtKey, _closedAt!.millisecondsSinceEpoch).catchError((Object _) {});
+      }
       setState(() {
         _splashKey = UniqueKey();
         _showSplash = true;
         _splashFadingOut = false;
       });
+    } else if (state == AppLifecycleState.resumed) {
+      final away = _closedAt == null ? Duration.zero : DateTime.now().difference(_closedAt!);
+      _closedAt = null;
+      if (away < _introGap && _showSplash && !_splashFadingOut) setState(() => _showSplash = false);
     }
   }
 
@@ -155,7 +194,9 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
                 duration: const Duration(milliseconds: 450),
                 curve: Curves.easeOut,
                 onEnd: () {
-                  if (_splashFadingOut) setState(() => _showSplash = false);
+                  if (!_splashFadingOut) return;
+                  setState(() => _showSplash = false);
+                  _tellUpdate();
                 },
                 child: SplashScreen(onDone: () => setState(() => _splashFadingOut = true)),
               ),
@@ -182,12 +223,6 @@ class _AppRootState extends State<_AppRoot> {
     ApiClient.instance.restoreSession().then((loggedIn) {
       if (mounted) setState(() => _loggedIn = loggedIn);
     });
-    _checkForUpdate();
-  }
-
-  Future<void> _checkForUpdate() async {
-    final info = await UpdateService.checkForUpdate();
-    if (info != null && mounted) showUpdateDialog(context, info);
   }
 
   @override

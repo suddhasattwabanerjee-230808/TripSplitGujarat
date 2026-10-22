@@ -118,19 +118,19 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                             _Feature(
                               icon: Icons.groups_outlined,
                               color: accent,
-                              title: 'Shared with your group',
+                              title: 'Shared With Your Group',
                               subtitle: 'Join with an invite code; everyone sees the same expenses.',
                             ),
                             const _Feature(
                               icon: Icons.bolt_outlined,
                               color: Color(0xFFE0A96D),
-                              title: 'UPI payments, auto-added',
+                              title: 'UPI Payments, Auto-Added',
                               subtitle: 'Pay with any UPI app and add it to the trip in one tap.',
                             ),
                             const _Feature(
                               icon: Icons.handshake_outlined,
                               color: Color(0xFF7FA8D1),
-                              title: 'Settle up simply',
+                              title: 'Settle Up Simply',
                               subtitle: 'Balances and suggested payments, worked out for you.',
                             ),
                           ],
@@ -315,7 +315,7 @@ class _GoogleButton extends StatelessWidget {
                       GoogleLogo(size: 20),
                       SizedBox(width: 12),
                       Text(
-                        'Continue with Google',
+                        'Continue With Google',
                         style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: .1),
                       ),
                     ],

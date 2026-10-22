@@ -81,7 +81,7 @@ class TripDetailsScreen extends StatelessWidget {
       actions: const [ThemeToggle()],
       backgroundColor: paper,
       surfaceTintColor: paper,
-      title: const Text('Trip details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+      title: const Text('Trip Details', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
     ),
     body: _TripData(tripId: tripId, builder: (_, trip, expenses) => TripDetailsView(trip: trip, expenses: expenses)),
   );
@@ -131,7 +131,7 @@ class TripDetailsView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 22),
-        const Padding(padding: EdgeInsets.only(left: 2, bottom: 10), child: SectionHeader(title: 'Settle up')),
+        const Padding(padding: EdgeInsets.only(left: 2, bottom: 10), child: SectionHeader(title: 'Settle Up')),
         Container(
           decoration: cardDecoration(),
           child: settlements.isEmpty
@@ -139,7 +139,7 @@ class TripDetailsView extends StatelessWidget {
                   type: MaterialType.transparency,
                   child: ListTile(
                     leading: Icon(Icons.check_circle_outline_rounded, color: positive),
-                    title: Text('Everyone’s settled up', style: TextStyle(color: ink, fontWeight: FontWeight.w700)),
+                    title: Text('Everyone’s Settled Up', style: TextStyle(color: ink, fontWeight: FontWeight.w700)),
                   ),
                 )
               : Column(
@@ -200,7 +200,7 @@ class TripDetailsView extends StatelessWidget {
         const SizedBox(height: 14),
         Row(
           children: [
-            Expanded(child: _Stat('Total spent', money(total))),
+            Expanded(child: _Stat('Total Spent', money(total))),
             Expanded(child: _Stat('People', '${trip.memberCount}')),
             Expanded(child: _Stat('Expenses', '$count')),
           ],
@@ -266,7 +266,7 @@ class TripDetailsView extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              '${_firstName(from.name)} pays ${_firstName(to.name)}',
+              '${_firstName(from.name)} Pays ${_firstName(to.name)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(color: ink, fontSize: 13.5, fontWeight: FontWeight.w500),
@@ -288,7 +288,7 @@ Future<void> editPrivateName(BuildContext context, TripMember member) async {
     builder: (ctx) => AlertDialog(
       backgroundColor: paper,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      title: Text('Your name for them', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+      title: Text('Your Name For Them', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -312,7 +312,7 @@ Future<void> editPrivateName(BuildContext context, TripMember member) async {
         if (member.renamed)
           TextButton(
             onPressed: () => Navigator.pop(ctx, ''),
-            child: Text('Use their name', style: TextStyle(color: muted)),
+            child: Text('Use Their Name', style: TextStyle(color: muted)),
           ),
         FilledButton(
           onPressed: () => Navigator.pop(ctx, controller.text.trim()),
@@ -392,7 +392,7 @@ class MemberView extends StatelessWidget {
         const SizedBox(height: 2),
         Center(
           child: Text(
-            isMe ? 'You · ${trip.name}' : (member.renamed ? 'Calls themselves ${member.ownName}' : trip.name),
+            isMe ? 'You · ${trip.name}' : (member.renamed ? 'Calls Themselves ${member.ownName}' : trip.name),
             style: TextStyle(color: muted, fontSize: 13),
           ),
         ),
@@ -406,9 +406,9 @@ class MemberView extends StatelessWidget {
               type: MaterialType.transparency,
               child: ListTile(
               leading: Icon(Icons.badge_outlined, color: accent),
-              title: Text('Your name for them', style: TextStyle(color: muted, fontSize: 12)),
+              title: Text('Your Name For Them', style: TextStyle(color: muted, fontSize: 12)),
               subtitle: Text(
-                member.renamed ? member.name : 'Not set · only you will see it',
+                member.renamed ? member.name : 'Not Set · Only You Will See It',
                 style: TextStyle(color: ink, fontSize: 14.5, fontWeight: FontWeight.w600),
               ),
               trailing: Icon(Icons.edit_outlined, size: 18, color: muted),
@@ -443,7 +443,7 @@ class MemberView extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _Tile(
-                net == 0 ? 'Balance' : (net > 0 ? 'Gets back' : 'Owes'),
+                net == 0 ? 'Balance' : (net > 0 ? 'Gets Back' : 'Owes'),
                 net == 0 ? 'Settled' : money(net.abs()),
                 color: net == 0 ? muted : (net > 0 ? positive : negative),
               ),
@@ -452,7 +452,7 @@ class MemberView extends StatelessWidget {
         ),
         if (theirs.isNotEmpty) ...[
           const SizedBox(height: 22),
-          const Padding(padding: EdgeInsets.only(left: 2, bottom: 10), child: SectionHeader(title: 'Settle up')),
+          const Padding(padding: EdgeInsets.only(left: 2, bottom: 10), child: SectionHeader(title: 'Settle Up')),
           Container(
             decoration: cardDecoration(),
             child: Column(
@@ -506,7 +506,7 @@ class MemberView extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                pays ? 'Pays ${_firstName(other.name)}' : 'Gets from ${_firstName(other.name)}',
+                pays ? 'Pays ${_firstName(other.name)}' : 'Gets From ${_firstName(other.name)}',
                 style: TextStyle(color: ink, fontSize: 13.5, fontWeight: FontWeight.w500),
               ),
             ),
@@ -556,11 +556,11 @@ class MemberView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  paid ? 'paid ${money(e.amount)}' : 'share ${money(share)}',
+                  paid ? 'Paid ${money(e.amount)}' : 'Share ${money(share)}',
                   style: TextStyle(color: paid ? ink : negative, fontSize: 13, fontWeight: FontWeight.w700),
                 ),
                 if (paid && share > 0)
-                  Text('share ${money(share)}', style: TextStyle(color: muted, fontSize: 11.5)),
+                  Text('Share ${money(share)}', style: TextStyle(color: muted, fontSize: 11.5)),
               ],
             ),
           ],

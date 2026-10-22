@@ -7,6 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../api_client.dart';
+import '../city_photo.dart';
 import '../expense_notifier.dart';
 import '../google_auth.dart';
 import '../ledger.dart';
@@ -58,6 +59,73 @@ class UserAvatar extends StatelessWidget {
   }
 }
 
+/// The way into the profile from the top of the app: the user's photo in a
+/// ring of the brand's orange-to-wine gradient.
+class ProfileButton extends StatefulWidget {
+  const ProfileButton({super.key, this.size = 34});
+  final double size;
+
+  @override
+  State<ProfileButton> createState() => _ProfileButtonState();
+}
+
+class _ProfileButtonState extends State<ProfileButton> {
+  Future<void> _open() async {
+    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
+    if (mounted) setState(() {}); // a new photo or nickname
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = ApiClient.instance.currentUser;
+    if (user == null) return const SizedBox.shrink();
+    return Semantics(
+      button: true,
+      label: 'Profile',
+      child: GestureDetector(
+        onTap: _open,
+        child: Container(
+          padding: const EdgeInsets.all(2),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const SweepGradient(colors: [logoOrange, wineBright, wine, logoOrange]),
+            boxShadow: [BoxShadow(color: wine.withValues(alpha: .25), blurRadius: 10, offset: const Offset(0, 3))],
+          ),
+          child: Container(
+            padding: const EdgeInsets.all(2),
+            decoration: BoxDecoration(shape: BoxShape.circle, color: paper),
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                UserAvatar(user: user, size: widget.size),
+                // A new version is out: its way in is on the profile.
+                ListenableBuilder(
+                  listenable: Updates.instance,
+                  builder: (context, _) => !Updates.instance.available
+                      ? const SizedBox.shrink()
+                      : Positioned(
+                          right: -1,
+                          top: -1,
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: accent,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: paper, width: 1.5),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.embedded = false});
 
@@ -73,6 +141,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
 
   bool _upiDetection = true;
   bool _upiAlertsOn = true;
+  bool _notificationsOn = true;
+  final _updates = Updates.instance;
   bool _deleting = false;
   bool _savingPhoto = false;
   AppUser? _user = ApiClient.instance.currentUser;
@@ -95,6 +165,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     TripStore.instance.removeListener(_onStore);
+    _updates.removeListener(_onStore);
+    CityPhoto.instance.removeListener(_onStore);
     super.dispose();
   }
 
@@ -154,7 +226,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       backgroundColor: paper,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Text(
-        'Allow SMS access',
+        'Allow SMS Access',
         style: TextStyle(color: ink, fontWeight: FontWeight.w800, fontSize: 18),
       ),
       content: Text(
@@ -170,7 +242,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: Text('Not now', style: TextStyle(color: muted)),
+          child: Text('Not Now', style: TextStyle(color: muted)),
         ),
         FilledButton(
           onPressed: () {
@@ -182,7 +254,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
             foregroundColor: paper,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          child: const Text('Open settings'),
+          child: const Text('Open Settings'),
         ),
       ],
     ),
@@ -193,7 +265,12 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     TripStore.instance.addListener(_onStore);
+    _updates.addListener(_onStore);
+    CityPhoto.instance.addListener(_onStore);
     _checkUpiDetection();
+    ExpenseNotifier.enabled().then((on) {
+      if (mounted) setState(() => _notificationsOn = on);
+    });
     PackageInfo.fromPlatform().then((info) {
       if (mounted) setState(() => _packageInfo = info);
     });
@@ -218,24 +295,24 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     if (user == null) return;
     final choice = await showAppSheet<String>(
       context,
-      title: 'Profile photo',
+      title: 'Profile Photo',
       subtitle: 'What your tripmates see next to your name.',
       children: (ctx) => [
         groupedCard([
           ListTile(
             leading: Icon(Icons.photo_library_outlined, color: accent),
-            title: const Text('Choose from gallery'),
+            title: const Text('Choose From Gallery'),
             onTap: () => Navigator.pop(ctx, 'gallery'),
           ),
           ListTile(
             leading: Icon(Icons.photo_camera_outlined, color: accent),
-            title: const Text('Take a photo'),
+            title: const Text('Take A Photo'),
             onTap: () => Navigator.pop(ctx, 'camera'),
           ),
           if (user.customPhoto && user.hasGoogle)
             ListTile(
               leading: const GoogleLogo(size: 20),
-              title: const Text('Use my Google photo'),
+              title: const Text('Use My Google Photo'),
               onTap: () => Navigator.pop(ctx, 'google'),
             ),
         ]),
@@ -333,13 +410,15 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
     }
   }
 
-  Future<void> _checkForUpdate() async {
-    final info = await UpdateService.checkForUpdate();
-    if (!mounted) return;
-    if (info != null) {
-      showUpdateDialog(context, info);
-    } else {
-      _toast("You're on the latest version.");
+  /// The master switch: off silences expense alerts, settle-up reminders
+  /// and UPI payment alerts alike.
+  Future<void> _setNotifications(bool on) async {
+    setState(() => _notificationsOn = on);
+    await ExpenseNotifier.setEnabled(on);
+    try {
+      await _upiSettings.invokeMethod<void>('setAllEnabled', on);
+    } on Exception {
+      // The UPI receiver keeps its own switch.
     }
   }
 
@@ -349,7 +428,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
       builder: (context) => AlertDialog(
         backgroundColor: paper,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Sign out?', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+        title: Text('Sign Out?', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
         content: Text(
           _user?.hasGoogle == true
               ? 'Your trips stay safe on the server. Sign back in with the same Google account to see them again.'
@@ -364,7 +443,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
             style: FilledButton.styleFrom(backgroundColor: _owe),
-            child: const Text('Sign out'),
+            child: const Text('Sign Out'),
           ),
         ],
       ),
@@ -446,78 +525,66 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                           _sectionLabel('YOUR TRIPS'),
                           ..._trips(),
                           const SizedBox(height: 22),
-                          _sectionLabel('ACCOUNT'),
-                          _card([
-                            _row(
-                              icon: Icons.account_circle_outlined,
-                              label: 'Profile photo',
-                              value: user.customPhoto ? 'Your own photo' : 'From your Google account',
-                              trailing: Icon(Icons.edit_outlined, size: 17, color: muted),
-                              onTap: _editPhoto,
-                            ),
-                            _row(
-                              icon: Icons.badge_outlined,
-                              label: 'Nickname',
-                              value: user.name,
-                              trailing: Icon(Icons.edit_outlined, size: 17, color: muted),
-                              onTap: _editName,
-                            ),
-                            _row(
-                              icon: Icons.qr_code_2_outlined,
-                              label: 'UPI ID',
-                              value: user.upiId ?? 'Add one so friends can pay you',
-                              trailing: Icon(Icons.edit_outlined, size: 17, color: muted),
-                              onTap: _editUpiId,
-                            ),
-                            if (user.email != null)
-                              _row(
-                                icon: Icons.alternate_email_rounded,
-                                label: 'Email',
-                                value: user.email!,
-                                trailing: const GoogleLogo(size: 16),
-                              ),
-                            if (user.phone != null)
-                              _row(icon: Icons.phone_outlined, label: 'Phone', value: user.phone!),
-                            _row(
-                              icon: Icons.verified_user_outlined,
-                              label: 'Sign-in',
-                              value: user.hasGoogle ? 'Google · stays signed in' : 'Phone (legacy)',
-                              trailing: user.hasGoogle ? const GoogleLogo(size: 16) : null,
-                            ),
-                          ]),
-                          const SizedBox(height: 22),
                           _sectionLabel('APP'),
                           _card([
                             _row(
-                              icon: _upiDetection && _upiAlertsOn
-                                  ? Icons.notifications_active_outlined
-                                  : Icons.notifications_off_outlined,
-                              label: 'UPI payment alerts',
-                              value: !_upiDetection
-                                  ? 'Needs SMS access — switch on'
-                                  : _upiAlertsOn
-                                  ? 'On for every UPI payment'
-                                  : 'Off',
+                              icon: _notificationsOn ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
+                              label: 'All Notifications',
+                              value: _notificationsOn ? 'Expenses, Reminders And UPI Alerts' : 'Off: TripSplit Stays Quiet',
                               trailing: Switch(
-                                value: _upiDetection && _upiAlertsOn,
-                                onChanged: _setUpiAlerts,
+                                value: _notificationsOn,
+                                onChanged: _setNotifications,
                                 activeThumbColor: Colors.white,
                                 activeTrackColor: accent,
                               ),
                             ),
                             _row(
-                              icon: Icons.info_outline_rounded,
-                              label: 'Version',
-                              value: _packageInfo == null
-                                  ? '…'
-                                  : 'v${_packageInfo!.version} · build ${_packageInfo!.buildNumber}',
+                              icon: _notificationsOn && _upiDetection && _upiAlertsOn
+                                  ? Icons.notifications_active_outlined
+                                  : Icons.notifications_off_outlined,
+                              label: 'UPI Payment Alerts',
+                              value: !_upiDetection
+                                  ? 'Needs SMS Access — Switch On'
+                                  : _upiAlertsOn
+                                  ? 'On For Every UPI Payment'
+                                  : 'Off',
+                              trailing: Switch(
+                                value: _notificationsOn && _upiDetection && _upiAlertsOn,
+                                onChanged: _notificationsOn ? _setUpiAlerts : null,
+                                activeThumbColor: Colors.white,
+                                activeTrackColor: accent,
+                              ),
+                            ),
+                            _row(
+                              icon: Icons.update_rounded,
+                              label: 'Check For Updates At Launch',
+                              value: _updates.atLaunch ? 'Tells You When A New Version Is Out' : 'Off',
+                              trailing: Switch(
+                                value: _updates.atLaunch,
+                                onChanged: _updates.setAtLaunch,
+                                activeThumbColor: Colors.white,
+                                activeTrackColor: accent,
+                              ),
                             ),
                             _row(
                               icon: Icons.system_update_outlined,
-                              label: 'Updates',
-                              value: 'Check for a new version',
-                              trailing: Icon(Icons.chevron_right_rounded, color: muted),
-                              onTap: _checkForUpdate,
+                              label: _updates.available ? 'Update To ${_updates.latest!.versionName}' : 'Check For Updates',
+                              value: _packageInfo == null
+                                  ? '…'
+                                  : 'This Phone Has v${_packageInfo!.version} · Build ${_packageInfo!.buildNumber}',
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (_updates.available)
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                                    ),
+                                  Icon(Icons.chevron_right_rounded, color: muted),
+                                ],
+                              ),
+                              onTap: () => showUpdateSheet(context),
                             ),
                           ]),
                           const SizedBox(height: 26),
@@ -526,7 +593,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                             child: OutlinedButton.icon(
                               onPressed: _signOut,
                               icon: const Icon(Icons.logout_rounded, size: 18),
-                              label: const Text('Sign out', style: TextStyle(fontWeight: FontWeight.w700)),
+                              label: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w700)),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: _owe,
                                 backgroundColor: surface,
@@ -547,7 +614,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                                     )
                                   : const Icon(Icons.delete_forever_outlined, size: 18),
                               label: Text(
-                                _deleting ? 'Deleting your account…' : 'Delete account',
+                                _deleting ? 'Deleting Your Account…' : 'Delete Account',
                                 style: const TextStyle(fontWeight: FontWeight.w600),
                               ),
                               style: TextButton.styleFrom(foregroundColor: _owe),
@@ -565,153 +632,177 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
 
   Widget _header(AppUser user) {
     final top = MediaQuery.paddingOf(context).top;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: EdgeInsets.fromLTRB(8, top + 4, 8, 26),
-      decoration: const BoxDecoration(
-        gradient: brandGradient,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
-      ),
-      child: Column(
-        children: [
-          Row(
+    // The city the phone is in, blended into the brand gradient.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: CityBackdrop(
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(8, top + 4, 8, 26),
+          child: Column(
             children: [
-              if (widget.embedded)
-                const SizedBox(width: 48)
-              else
-                IconButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-                ),
-              const Expanded(
-                child: Text(
-                  'Profile',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-              ),
-              const ThemeToggle(color: Colors.white),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Tap the photo to change it.
-          GestureDetector(
-            onTap: _savingPhoto ? null : _editPhoto,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: accentGlow,
-                    boxShadow: [BoxShadow(color: accentGlow.withValues(alpha: .35), blurRadius: 22)],
-                  ),
-                  child: UserAvatar(user: user, size: 88),
-                ),
-                Positioned(
-                  right: -2,
-                  bottom: -2,
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .18), blurRadius: 8)],
+              Row(
+                children: [
+                  if (widget.embedded)
+                    const SizedBox(width: 48)
+                  else
+                    IconButton(
+                      onPressed: () => Navigator.of(context).maybePop(),
+                      icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
                     ),
-                    child: _savingPhoto
-                        ? Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: CircularProgressIndicator(strokeWidth: 2, color: accent),
-                          )
-                        : Icon(Icons.photo_camera_outlined, size: 17, color: accent),
+                  const Expanded(
+                    child: Text(
+                      'Profile',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          // The nickname: tap it (or the pencil) to change it.
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: InkWell(
-              onTap: _editName,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  const ThemeToggle(color: Colors.white),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Tap the photo to change it.
+              GestureDetector(
+                onTap: _savingPhoto ? null : _editPhoto,
+                child: Stack(
+                  clipBehavior: Clip.none,
                   children: [
-                    Flexible(
-                      child: Text(
-                        user.name,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: accentGlow,
+                        boxShadow: [BoxShadow(color: accentGlow.withValues(alpha: .35), blurRadius: 22)],
+                      ),
+                      child: UserAvatar(user: user, size: 88),
+                    ),
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
                           color: Colors.white,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -.5,
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: .18), blurRadius: 8)],
                         ),
+                        child: _savingPhoto
+                            ? Padding(
+                                padding: const EdgeInsets.all(8),
+                                child: CircularProgressIndicator(strokeWidth: 2, color: accent),
+                              )
+                            : Icon(Icons.photo_camera_outlined, size: 17, color: accent),
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Icon(Icons.edit_outlined, size: 18, color: Colors.white.withValues(alpha: .75)),
                   ],
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // The email comes from Google: say so with its logo.
-              if (user.email != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  child: const GoogleLogo(size: 12),
-                ),
-                const SizedBox(width: 6),
-              ],
-              Flexible(
-                child: Text(
-                  user.email ?? user.phone ?? '',
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(color: Colors.white.withValues(alpha: .72), fontSize: 13),
+              const SizedBox(height: 14),
+              // The nickname: tap it (or the pencil) to change it.
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: InkWell(
+                  onTap: _editName,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            user.name,
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Icon(Icons.edit_outlined, size: 18, color: Colors.white.withValues(alpha: .75)),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .12),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              child: Row(
+              const SizedBox(height: 4),
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
-                    user.hasGoogle ? Icons.verified_outlined : Icons.phone_iphone_outlined,
-                    size: 14,
-                    color: accentGlow,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    user.hasGoogle ? 'Signed in with Google' : 'Phone account',
-                    style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700),
+                  // The email comes from Google: say so with its logo.
+                  if (user.email != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                      child: const GoogleLogo(size: 12),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  Flexible(
+                    child: Text(
+                      user.email ?? user.phone ?? '',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white.withValues(alpha: .72), fontSize: 13),
+                    ),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 14),
+              // Their UPI ID, so tripmates who owe them can pay it: tap to change.
+              Material(
+                color: Colors.white.withValues(alpha: .14),
+                shape: StadiumBorder(side: BorderSide(color: Colors.white.withValues(alpha: .18))),
+                child: InkWell(
+                  onTap: _editUpiId,
+                  customBorder: const StadiumBorder(),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 7, 10, 7),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.qr_code_2_rounded, size: 15, color: accentGlow),
+                        const SizedBox(width: 7),
+                        Flexible(
+                          child: Text(
+                            user.upiId == null ? 'Add Your UPI ID' : 'UPI · ${user.upiId}',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          user.upiId == null ? Icons.add_rounded : Icons.edit_outlined,
+                          size: 14,
+                          color: Colors.white.withValues(alpha: .8),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (CityPhoto.instance.city != null && CityPhoto.instance.image != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.place_outlined, size: 12, color: Colors.white.withValues(alpha: .6)),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${CityPhoto.instance.city} · Photo Wikimedia Commons',
+                      style: TextStyle(color: Colors.white.withValues(alpha: .6), fontSize: 10.5),
+                    ),
+                  ],
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -737,8 +828,8 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
                 ? Icons.check_circle_outline_rounded
                 : (owed ? Icons.south_west_rounded : Icons.north_east_rounded),
             color: settled ? accent : (owed ? positive : _owe),
-            value: net == null ? '–' : (settled ? 'All square' : money(net.abs())),
-            label: settled ? 'Across all trips' : (owed ? 'You\'re owed' : 'You owe'),
+            value: net == null ? '–' : (settled ? 'All Square' : money(net.abs())),
+            label: settled ? 'Across All Trips' : (owed ? 'You\'re Owed' : 'You Owe'),
           ),
         ),
       ],
@@ -791,7 +882,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Connect your Google account',
+            'Connect Your Google Account',
             style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 4),
@@ -857,7 +948,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
             child: OutlinedButton.icon(
               onPressed: () => showJoinTrip(context),
               icon: const Icon(Icons.group_add_outlined, size: 18),
-              label: const Text('Join trip'),
+              label: const Text('Join Trip'),
               style: secondaryButton(),
             ),
           ),
@@ -866,7 +957,7 @@ class _ProfileScreenState extends State<ProfileScreen> with WidgetsBindingObserv
             child: FilledButton.icon(
               onPressed: () => showCreateTrip(context),
               icon: const Icon(Icons.add_rounded, size: 18),
-              label: const Text('New trip'),
+              label: const Text('New Trip'),
               style: primaryButton(),
             ),
           ),
@@ -1095,7 +1186,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   Widget build(BuildContext context) => AlertDialog(
     backgroundColor: paper,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-    title: Text('Delete your account?', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+    title: Text('Delete Your Account?', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
     content: SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -1118,7 +1209,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
             autofocus: true,
             textCapitalization: TextCapitalization.characters,
             onChanged: (_) => setState(() {}),
-            decoration: appInputDecoration('Type DELETE to confirm', Icons.warning_amber_rounded),
+            decoration: appInputDecoration('Type DELETE To Confirm', Icons.warning_amber_rounded),
           ),
         ],
       ),
@@ -1147,7 +1238,7 @@ class _SettleFirstDialog extends StatelessWidget {
   Widget build(BuildContext context) => AlertDialog(
     backgroundColor: paper,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-    title: Text('Settle up first', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+    title: Text('Settle Up First', style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1171,7 +1262,7 @@ class _SettleFirstDialog extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  o.amount < 0 ? 'you owe ${money(-o.amount)}' : 'owed to you ${money(o.amount)}',
+                  o.amount < 0 ? 'You Owe ${money(-o.amount)}' : 'Owed To You ${money(o.amount)}',
                   style: TextStyle(color: o.amount < 0 ? _owe : positive, fontWeight: FontWeight.w700, fontSize: 13),
                 ),
               ],

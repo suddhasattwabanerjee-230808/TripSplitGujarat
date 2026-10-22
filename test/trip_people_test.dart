@@ -52,7 +52,7 @@ void main() {
     // Priya: paid 600, share 900, owes 300. Kabir: share 900, owes 900.
     expect(find.text('-₹300'), findsOneWidget);
     expect(find.text('-₹900'), findsOneWidget);
-    expect(find.text('Kabir pays Aarav'), findsOneWidget);
+    expect(find.text('Kabir Pays Aarav'), findsOneWidget);
     // Each person is a tappable row (it opens their live page, which needs Firebase).
     expect(find.ancestor(of: find.text('Priya'), matching: find.byType(InkWell)), findsOneWidget);
   });
@@ -65,9 +65,9 @@ void main() {
 
     expect(find.text('Aarav Mehta'), findsOneWidget);
     expect(find.text('aarav@okaxis'), findsOneWidget);
-    expect(find.text('Gets back'), findsOneWidget);
+    expect(find.text('Gets Back'), findsOneWidget);
     expect(find.text('₹1,200'), findsWidgets);
     expect(find.text('Expenses (1)'), findsOneWidget); // Aarav isn't on the cab
-    expect(find.text('paid ₹1,800'), findsOneWidget);
+    expect(find.text('Paid ₹1,800'), findsOneWidget);
   });
 }

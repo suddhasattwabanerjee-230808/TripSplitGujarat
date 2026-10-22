@@ -74,7 +74,7 @@ class _StatsScreenState extends State<StatsScreen> {
       onRefresh: _single ? () async {} : _load,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+        padding: EdgeInsets.fromLTRB(16, 8, 16, MediaQuery.paddingOf(context).bottom + 24),
         children: [
           if (!_single) ...[
             Padding(
@@ -100,19 +100,19 @@ class _StatsScreenState extends State<StatsScreen> {
           else ...[
             _heroTiles(total, myShare, iPaid, rows.length),
             const SizedBox(height: 14),
-            _chartCard('Spending over time', _timeChart(rows)),
+            _chartCard('Spending Over Time', _timeChart(rows)),
             const SizedBox(height: 12),
-            _chartCard('By category', HBarChart(data: _byCategory(rows))),
+            _chartCard('By Category', HBarChart(data: _byCategory(rows))),
             const SizedBox(height: 12),
-            _chartCard('Who paid', HBarChart(data: _byPayer(rows))),
+            _chartCard('Who Paid', HBarChart(data: _byPayer(rows))),
             if (_byCity(rows).isNotEmpty) ...[
               const SizedBox(height: 12),
-              _chartCard('By city', HBarChart(data: _byCity(rows))),
+              _chartCard('By City', HBarChart(data: _byCity(rows))),
             ],
             if (!_single && _tripFilter == null && _trips.length > 1) ...[
               const SizedBox(height: 12),
               _chartCard(
-                'By trip',
+                'By Trip',
                 HBarChart(
                   data: [
                     for (final t in _trips)
@@ -137,7 +137,7 @@ class _StatsScreenState extends State<StatsScreen> {
         actions: const [ThemeToggle()],
         backgroundColor: paper,
         surfaceTintColor: paper,
-        title: Text('${widget.trip!.name} · stats', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        title: Text('${widget.trip!.name} · Stats', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
       ),
       body: body,
     );
@@ -150,7 +150,7 @@ class _StatsScreenState extends State<StatsScreen> {
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          _filterChip('All trips', null),
+          _filterChip('All Trips', null),
           for (final t in _trips) _filterChip(t.name, t.id),
         ],
       ),
@@ -177,9 +177,9 @@ class _StatsScreenState extends State<StatsScreen> {
 
   Widget _heroTiles(double total, double myShare, double iPaid, int count) => Row(
     children: [
-      Expanded(child: _tile('Total spent', money(total), '$count expense${count == 1 ? '' : 's'}', Icons.account_balance_wallet_outlined)),
+      Expanded(child: _tile('Total Spent', money(total), '$count Expense${count == 1 ? '' : 's'}', Icons.account_balance_wallet_outlined)),
       const SizedBox(width: 10),
-      Expanded(child: _tile('Your share', money(myShare), 'you paid ${money(iPaid)}', Icons.person_outline_rounded)),
+      Expanded(child: _tile('Your Share', money(myShare), 'You Paid ${money(iPaid)}', Icons.person_outline_rounded)),
     ],
   );
 
@@ -231,7 +231,7 @@ class _StatsScreenState extends State<StatsScreen> {
       children: [
         const IconCircle(icon: Icons.insights_outlined, size: 64),
         const SizedBox(height: 14),
-        Text('Nothing to chart yet', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
+        Text('Nothing To Chart Yet', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
         Text('Add a few expenses and your spending shows up here.', style: TextStyle(color: muted, fontSize: 13)),
       ],

@@ -110,5 +110,22 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="upi"/>
         </intent>
+        <!-- The common UPI apps by name too (see UpiApps.preferred): their
+             upi:// handlers can be switched off, and "Scan their QR" opens
+             them directly. -->
+        <package android:name="com.google.android.apps.nbu.paisa.user"/>
+        <package android:name="com.phonepe.app"/>
+        <package android:name="net.one97.paytm"/>
+        <package android:name="in.org.npci.upiapp"/>
+        <package android:name="in.amazon.mShop.android.shopping"/>
+        <package android:name="com.dreamplug.androidapp"/>
+        <package android:name="money.super.payments"/>
+        <package android:name="com.naviapp"/>
+        <package android:name="com.mobikwik_new"/>
+        <package android:name="com.myairtelapp"/>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="phonepe"/>
+        </intent>
     </queries>
 </manifest>

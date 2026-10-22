@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../city_photo.dart';
 import '../expense_notifier.dart';
 import '../models.dart';
 import '../theme.dart';
@@ -18,7 +20,8 @@ import 'trip_home_screen.dart';
 import 'trips_ui.dart';
 
 /// The signed-in app: Trip (the current trip's dashboard — where the app
-/// opens), its Expenses, Add expense, Balance, Statistics, Profile.
+/// opens), its Expenses, Add expense, Balance, Statistics, on a floating bar.
+/// The profile opens from the user's photo at the top of the Trip page.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -29,7 +32,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   // Tab indexes into the bar; "Add expense" (2) is an action, not a page.
   // The app opens on the current trip's page, which is its dashboard.
-  static const _trip = 0, _expenses = 1, _add = 2, _balance = 3, _stats = 4, _profile = 5;
+  static const _trip = 0, _expenses = 1, _add = 2, _balance = 3, _stats = 4;
   int _tab = _trip;
 
   /// Tabs are built the first time they're opened, then kept alive.
@@ -45,6 +48,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _store.refresh();
     _acceptInvites();
     _startNotifications();
+    CityPhoto.instance.start();
   }
 
   static bool _launchHandled = false;
@@ -139,7 +143,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     Trip? trip = store.currentTrip ?? (trips.length == 1 ? trips.first : null);
     trip ??= await showAppSheet<Trip>(
       context,
-      title: 'Add an expense to…',
+      title: 'Add An Expense To…',
       children: (ctx) => [
         groupedCard([
           for (final t in trips)
@@ -182,7 +186,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _expenses => _expensesPage(),
     _balance => BalanceScreen(onOpenTrip: _store.selectTrip),
     _stats => const StatsScreen(),
-    _profile => const ProfileScreen(embedded: true),
     _ => const SizedBox.shrink(),
   };
 
@@ -210,17 +213,21 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (_store.trips == null) {
       return _store.error == null
           ? Center(child: CircularProgressIndicator(color: accent))
-          : _message(Icons.cloud_off_outlined, 'Can’t reach the server', _store.error!, retry: true);
+          : _message(Icons.cloud_off_outlined, 'Can’t Reach The Server', _store.error!, retry: true);
     }
     return _message(
       Icons.luggage_outlined,
-      'No trips yet',
+      'No Trips Yet',
       'Start a trip, or join one with an invite code from a friend.',
     );
   }
 
   Widget _message(IconData icon, String title, String body, {bool retry = false}) => SafeArea(
-    child: Center(
+    child: Stack(
+      children: [
+        // The profile (and sign-out) stays reachable without a trip.
+        const Positioned(top: 8, right: 14, child: ProfileButton()),
+        Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
         child: Column(
@@ -241,14 +248,14 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   OutlinedButton.icon(
                     onPressed: () => showJoinTrip(context),
                     icon: const Icon(Icons.group_add_outlined, size: 18),
-                    label: const Text('Join trip'),
+                    label: const Text('Join Trip'),
                     style: secondaryButton(),
                   ),
                   const SizedBox(width: 10),
                   FilledButton.icon(
                     onPressed: () => showCreateTrip(context),
                     icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('New trip'),
+                    label: const Text('New Trip'),
                     style: primaryButton(),
                   ),
                 ],
@@ -257,15 +264,19 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         ),
       ),
     ),
+      ],
+    ),
   );
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: paper,
+      // The pages run on under the floating bar.
+      extendBody: true,
       body: Stack(
         children: [
-          for (final index in [_trip, _expenses, _balance, _stats, _profile])
+          for (final index in [_trip, _expenses, _balance, _stats])
             if (_visited.contains(index))
               Offstage(
                 offstage: _tab != index,
@@ -278,6 +289,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 }
 
+/// The floating bar: a frosted pill above the bottom edge, with Add raised
+/// in the middle.
 class _NavBar extends StatelessWidget {
   const _NavBar({required this.current, required this.onSelect});
   final int current;
@@ -289,39 +302,57 @@ class _NavBar extends StatelessWidget {
     (Icons.add_rounded, Icons.add_rounded, 'Add'),
     (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Balance'),
     (Icons.insights_outlined, Icons.insights_rounded, 'Stats'),
-    (Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
   ];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: surface,
-        border: Border(top: BorderSide(color: line)),
-        boxShadow: softShadow(ink, .05),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 66,
-          child: Row(
-            children: [
-              for (var i = 0; i < _items.length; i++)
-                Expanded(child: i == 2 ? _addButton() : _item(i)),
+    final dark = AppTheme.instance.dark;
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(32),
+            boxShadow: [
+              BoxShadow(color: (dark ? Colors.black : wineDeep).withValues(alpha: dark ? .5 : .16), blurRadius: 28, offset: const Offset(0, 10)),
+              BoxShadow(color: (dark ? Colors.black : wineDeep).withValues(alpha: .06), blurRadius: 4, offset: const Offset(0, 1)),
             ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(32),
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+              child: Container(
+                height: 66,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  color: surface.withValues(alpha: dark ? .86 : .9),
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(color: dark ? Colors.white.withValues(alpha: .07) : line.withValues(alpha: .8)),
+                ),
+                child: Row(
+                  children: [
+                    for (var i = 0; i < _items.length; i++)
+                      Expanded(child: i == 2 ? _addButton() : _item(i)),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// The main action, raised in the middle of the bar.
+  /// The main action, in the middle of the bar.
   Widget _addButton() => Center(
     child: GestureDetector(
       onTap: () => onSelect(2),
       child: Container(
-        width: 52,
-        height: 52,
+        width: 50,
+        height: 50,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: const LinearGradient(
@@ -329,9 +360,9 @@ class _NavBar extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [logoOrange, wineBright],
           ),
-          boxShadow: [BoxShadow(color: wine.withValues(alpha: .35), blurRadius: 16, offset: const Offset(0, 6))],
+          boxShadow: [BoxShadow(color: wine.withValues(alpha: .35), blurRadius: 14, offset: const Offset(0, 5))],
         ),
-        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28, semanticLabel: 'Add expense'),
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28, semanticLabel: 'Add Expense'),
       ),
     ),
   );
@@ -340,7 +371,7 @@ class _NavBar extends StatelessWidget {
     final selected = current == i;
     return InkResponse(
       onTap: () => onSelect(i),
-      radius: 36,
+      radius: 32,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -352,16 +383,16 @@ class _NavBar extends StatelessWidget {
               color: selected ? accentSoft : Colors.transparent,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: Icon(selected ? _items[i].$2 : _items[i].$1, size: 23, color: selected ? accent : muted),
+            child: Icon(selected ? _items[i].$2 : _items[i].$1, size: 22, color: selected ? accent : muted),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 2),
           Text(
             _items[i].$3,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              fontSize: 10.5,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               color: selected ? ink : muted,
             ),
           ),

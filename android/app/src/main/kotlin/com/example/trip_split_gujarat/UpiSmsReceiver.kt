@@ -28,6 +28,16 @@ object UpiSettings {
     fun isEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ENABLED, true)
 
+    /** The app's "All notifications" switch, mirrored here for this receiver. */
+    private const val KEY_ALL = "all_notifications"
+
+    fun allEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_ALL, true)
+
+    fun setAllEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ALL, enabled).apply()
+    }
+
     fun setEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ENABLED, enabled).apply()
     }
@@ -37,7 +47,7 @@ object UpiSettings {
 class UpiSmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
-        if (!UpiSettings.isEnabled(context)) return
+        if (!UpiSettings.isEnabled(context) || !UpiSettings.allEnabled(context)) return
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (messages.isNullOrEmpty()) return
         // Banks send from alphanumeric sender IDs (e.g. "VM-HDFCBK"); personal numbers are all digits.

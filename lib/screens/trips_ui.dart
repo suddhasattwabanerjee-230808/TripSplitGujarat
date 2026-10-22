@@ -11,7 +11,7 @@ import '../widgets.dart';
 /// Picks which trip the Trip tab shows (same list as Profile → Your trips).
 Future<void> showTripSwitcher(BuildContext context) => showAppSheet<void>(
   context,
-  title: 'Switch trip',
+  title: 'Switch Trip',
   children: (ctx) => [
     for (final t in TripStore.instance.trips ?? const <Trip>[])
       Padding(
@@ -34,7 +34,7 @@ Future<void> showTripSwitcher(BuildContext context) => showAppSheet<void>(
               showJoinTrip(context);
             },
             icon: const Icon(Icons.group_add_outlined, size: 18),
-            label: const Text('Join trip'),
+            label: const Text('Join Trip'),
             style: secondaryButton(),
           ),
         ),
@@ -46,7 +46,7 @@ Future<void> showTripSwitcher(BuildContext context) => showAppSheet<void>(
               showCreateTrip(context);
             },
             icon: const Icon(Icons.add_rounded, size: 18),
-            label: const Text('New trip'),
+            label: const Text('New Trip'),
             style: primaryButton(),
           ),
         ),
@@ -85,21 +85,21 @@ Future<void> showInviteSheet(BuildContext context, Trip trip) => showModalBottom
 Future<void> showNewTripMenu(BuildContext context) async {
   final choice = await showAppSheet<String>(
     context,
-    title: 'New split',
+    title: 'New Split',
     children: (ctx) => [
       groupedCard([
         _menuRow(
           ctx,
           Icons.add_circle_outline_rounded,
-          'Start a new trip or group',
-          'Trip, flat, couple, event…',
+          'Start A New Trip Or Group',
+          'Trip, Flat, Couple, Event…',
           'new',
         ),
         _menuRow(
           ctx,
           Icons.group_add_outlined,
-          'Join with an invite code',
-          'Ask a friend for their 6-letter code',
+          'Join With An Invite Code',
+          'Ask A Friend For Their 6-Letter Code',
           'join',
         ),
       ], indent: 64),
@@ -236,7 +236,7 @@ class TripCard extends StatelessWidget {
                                   ? '…'
                                   : net.abs() < 0.5
                                   ? 'Settled'
-                                  : (net > 0 ? 'You’re owed' : 'You owe'),
+                                  : (net > 0 ? 'You’re Owed' : 'You Owe'),
                               style: TextStyle(color: ink, fontWeight: FontWeight.w600),
                             ),
                           ],
@@ -343,7 +343,7 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
               ),
               const SizedBox(height: 22),
               Text(
-                'Start a new split',
+                'Start A New Split',
                 style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
               ),
               const SizedBox(height: 23),
@@ -439,7 +439,7 @@ class _CreateTripSheetState extends State<_CreateTripSheet> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: onAccent),
                         )
-                      : const Text('Create trip', style: TextStyle(fontWeight: FontWeight.w700)),
+                      : const Text('Create Trip', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -513,7 +513,7 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
               ),
               const SizedBox(height: 22),
               Text(
-                'Join a trip',
+                'Join A Trip',
                 style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
               ),
               const SizedBox(height: 5),
@@ -547,7 +547,7 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
                           height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: onAccent),
                         )
-                      : const Text('Join trip', style: TextStyle(fontWeight: FontWeight.w700)),
+                      : const Text('Join Trip', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
             ],
@@ -615,7 +615,7 @@ class _InviteSheetState extends State<_InviteSheet> {
       final opened = await InviteEmail.compose(
         to: to,
         trip: widget.trip,
-        inviter: ApiClient.instance.currentUser?.name ?? 'A friend',
+        inviter: ApiClient.instance.currentUser?.name ?? 'A Friend',
       );
       if (!mounted) return;
       if (!opened) {
@@ -654,7 +654,7 @@ class _InviteSheetState extends State<_InviteSheet> {
               const SheetHandle(),
               const SizedBox(height: 22),
               Text(
-                'Invite to ${widget.trip.name}',
+                'Invite To ${widget.trip.name}',
                 style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
               ),
               const SizedBox(height: 5),
@@ -722,7 +722,7 @@ class _InviteSheetState extends State<_InviteSheet> {
                   onPressed: _busy ? null : _send,
                   style: primaryButton(radius: 16),
                   icon: const Icon(Icons.send_rounded, size: 18),
-                  label: const Text('Send invite', style: TextStyle(fontWeight: FontWeight.w700)),
+                  label: const Text('Send Invite', style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ),
             ],

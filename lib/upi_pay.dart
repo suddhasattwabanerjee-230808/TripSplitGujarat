@@ -4,9 +4,13 @@ enum UpiPayStatus { success, failed, unknown, noApp }
 
 /// An installed app that takes UPI payments (Google Pay, PhonePe, ...).
 class UpiApp {
-  const UpiApp({required this.package, required this.label, required this.icon});
+  const UpiApp({required this.package, required this.label, required this.icon, this.canPay = true});
   final String package;
   final String label;
+
+  /// Takes a filled-in upi://pay link. False for an app found by name whose
+  /// link handler is off (not set up yet): it can still be opened to scan.
+  final bool canPay;
 
   /// PNG bytes of its launcher icon.
   final Uint8List icon;
@@ -36,17 +40,23 @@ class UpiPay {
       final list = await _channel.invokeListMethod<Map<Object?, Object?>>('apps') ?? const [];
       return [
         for (final a in list)
-          UpiApp(package: a['package'] as String, label: a['label'] as String, icon: a['icon'] as Uint8List),
+          UpiApp(
+            package: a['package'] as String,
+            label: a['label'] as String,
+            icon: a['icon'] as Uint8List,
+            canPay: a['canPay'] as bool? ?? true,
+          ),
       ];
     } on PlatformException {
       return const [];
     }
   }
 
-  /// Opens [package] on its home screen, to scan a QR there.
-  static Future<bool> open(String package) async {
+  /// Opens [package] on its QR scanner (Google Pay, PhonePe), or on its
+  /// home screen for apps we can't take straight there.
+  static Future<bool> scan(String package) async {
     try {
-      return await _channel.invokeMethod<bool>('open', {'package': package}) ?? false;
+      return await _channel.invokeMethod<bool>('scan', {'package': package}) ?? false;
     } on PlatformException {
       return false;
     }

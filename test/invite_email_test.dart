@@ -45,11 +45,11 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Invite to Gir & Somnath'), findsOneWidget);
+    expect(find.text('Invite To Gir & Somnath'), findsOneWidget);
     expect(find.text('HVHKBJ'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField), 'not-an-email');
-    await tester.tap(find.text('Send invite'));
+    await tester.tap(find.text('Send Invite'));
     await tester.pump();
     expect(find.textContaining('Enter an email address'), findsOneWidget);
   });

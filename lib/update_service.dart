@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Metadata for a release: latest.json in the public TripSplit-releases repo.
 class UpdateInfo {
@@ -48,24 +50,6 @@ class UpdateService {
   static const _downloadShare = 0.85;
   static const _stagingShare = 0.08;
 
-  /// Returns update info if the server has a build newer than the one
-  /// currently installed, or null if up to date / unreachable.
-  static Future<UpdateInfo?> checkForUpdate() async {
-    try {
-      final response = await http
-          .get(Uri.parse('$_releases/latest.json'))
-          .timeout(const Duration(seconds: 8));
-      if (response.statusCode != 200) return null;
-
-      final info = UpdateInfo.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-      final current = await PackageInfo.fromPlatform();
-      final currentBuild = int.tryParse(current.buildNumber) ?? 0;
-      return info.versionCode > currentBuild ? info : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
   /// Downloads the latest APK and installs it, reporting one combined
   /// progress value in [0, 1] and whether the install phase has begun.
   /// Resumes a partial download (via HTTP Range) and retries through
@@ -74,8 +58,9 @@ class UpdateService {
   /// only ever returns by throwing.
   static Future<void> downloadAndInstall(
     UpdateInfo info,
-    void Function(double progress, bool installing) onProgress,
-  ) async {
+    void Function(double progress, bool installing) onProgress, {
+    void Function(int bytes)? onSize,
+  }) async {
     final dir = await getTemporaryDirectory();
     // Keyed by version so a partial download from a prior attempt at the
     // same release can be resumed, but a stale file from a different
@@ -85,7 +70,7 @@ class UpdateService {
     Object? lastError;
     for (var attempt = 1; attempt <= _maxAttempts; attempt++) {
       try {
-        await _downloadOnce(file, (p) => onProgress(p * _downloadShare, false));
+        await _downloadOnce(file, (p) => onProgress(p * _downloadShare, false), onSize);
         lastError = null;
         break;
       } catch (e) {
@@ -128,6 +113,7 @@ class UpdateService {
   static Future<void> _downloadOnce(
     File file,
     void Function(double progress) onProgress,
+    void Function(int bytes)? onSize,
   ) async {
     final existing = await file.exists() ? await file.length() : 0;
 
@@ -169,6 +155,7 @@ class UpdateService {
         throw Exception('Download failed (${streamed.statusCode})');
       }
 
+      if (total > 0) onSize?.call(total);
       final sink = file.openWrite(mode: resumed ? FileMode.append : FileMode.write);
       final completer = Completer<void>();
       Timer? stallTimer;
@@ -217,6 +204,94 @@ class UpdateService {
       }
     } finally {
       client.close();
+    }
+  }
+}
+
+/// The app's updates, for the screens: the check at launch (if switched on),
+/// what's available, and the download's progress. Screens listen to it for
+/// the "new version" banner, the dot on the profile and the update sheet.
+class Updates extends ChangeNotifier {
+  Updates._();
+  static final instance = Updates._();
+  static const _atLaunchKey = 'trip_split.check_updates_at_launch.v1';
+
+  /// The installed version ("1.11.0").
+  String current = '';
+  UpdateInfo? latest; // set when it's newer than this build
+  bool checking = false;
+  bool checkFailed = false;
+  double? progress; // 0..1 while updating
+  bool installing = false;
+  int? apkBytes; // the download's size, once known
+  String? error;
+
+  /// Check for a new version every time the app opens.
+  bool atLaunch = true;
+
+  bool get available => latest != null;
+
+  /// Reads the setting, then checks if it's on.
+  Future<void> launchCheck() async {
+    atLaunch = await SharedPreferencesAsync().getBool(_atLaunchKey).catchError((Object _) => null) ?? true;
+    notifyListeners();
+    if (atLaunch) await check();
+  }
+
+  Future<void> setAtLaunch(bool on) async {
+    atLaunch = on;
+    notifyListeners();
+    await SharedPreferencesAsync().setBool(_atLaunchKey, on).catchError((Object _) {});
+  }
+
+  Future<void> check() async {
+    if (checking) return;
+    checking = true;
+    checkFailed = false;
+    notifyListeners();
+    try {
+      current = (await PackageInfo.fromPlatform()).version;
+      final response = await http.get(Uri.parse('${UpdateService._releases}/latest.json')).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) throw HttpException('${response.statusCode}');
+      final info = UpdateInfo.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      final build = int.tryParse((await PackageInfo.fromPlatform()).buildNumber) ?? 0;
+      latest = info.versionCode > build ? info : null;
+    } catch (_) {
+      checkFailed = true;
+    } finally {
+      checking = false;
+      notifyListeners();
+    }
+  }
+
+  /// Downloads and installs [latest]; on success Android replaces the app and
+  /// it reopens on the new version, so this only returns on failure.
+  Future<void> install() async {
+    final info = latest;
+    if (info == null || progress != null) return;
+    progress = 0;
+    installing = false;
+    error = null;
+    notifyListeners();
+    try {
+      await UpdateService.downloadAndInstall(
+        info,
+        (p, installing) {
+          progress = p;
+          this.installing = installing;
+          notifyListeners();
+        },
+        onSize: (bytes) {
+          apkBytes = bytes;
+          notifyListeners();
+        },
+      );
+    } catch (e) {
+      error = '$e'.replaceFirst('Exception: ', '');
+    } finally {
+      progress = null;
+      installing = false;
+      notifyListeners();
     }
   }
 }

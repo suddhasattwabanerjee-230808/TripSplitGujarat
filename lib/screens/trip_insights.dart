@@ -53,13 +53,13 @@ class _TripInsightsState extends State<TripInsights> {
 
   static const _cards = [
     ('Overview', Icons.space_dashboard_outlined),
-    ('By date', Icons.calendar_month_outlined),
+    ('By Date', Icons.calendar_month_outlined),
     ('Category', Icons.donut_large_rounded),
     ('People', Icons.groups_outlined),
-    ('Who’s ahead', Icons.balance_rounded),
+    ('Who’s Ahead', Icons.balance_rounded),
     ('Places', Icons.place_outlined),
-    ('Time of day', Icons.schedule_rounded),
-    ('Top expenses', Icons.emoji_events_outlined),
+    ('Time Of Day', Icons.schedule_rounded),
+    ('Top Expenses', Icons.emoji_events_outlined),
   ];
 
   String get _me => ApiClient.instance.currentUser?.id ?? '';
@@ -103,12 +103,12 @@ class _TripInsightsState extends State<TripInsights> {
                       'Insights',
                       style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800, letterSpacing: -.3),
                     ),
-                    Text('Swipe the cards for more', style: TextStyle(color: muted, fontSize: 11.5)),
+                    Text('Swipe The Cards For More', style: TextStyle(color: muted, fontSize: 11.5)),
                   ],
                 ),
               ),
               _Segmented(
-                options: const ['Whole trip', 'My share'],
+                options: const ['Whole Trip', 'My Share'],
                 selected: _mine ? 1 : 0,
                 onSelect: (i) => setState(() => _mine = i == 1),
               ),
@@ -120,7 +120,7 @@ class _TripInsightsState extends State<TripInsights> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: _card(
-              title: 'Nothing to show yet',
+              title: 'Nothing To Show Yet',
               subtitle: _mine ? 'None of the expenses include you.' : 'Add an expense to see where the money goes.',
               child: const SizedBox.shrink(),
               inPage: false,
@@ -241,18 +241,18 @@ class _TripInsightsState extends State<TripInsights> {
     var running = 0.0;
     final cumulative = [for (final v in daily) running += v];
     return _card(
-      title: _mine ? 'Your trip at a glance' : 'The trip at a glance',
-      subtitle: '$span day${span == 1 ? '' : 's'} · ${spend.length} expense${spend.length == 1 ? '' : 's'}',
+      title: _mine ? 'Your Trip At A Glance' : 'The Trip At A Glance',
+      subtitle: '$span Day${span == 1 ? '' : 's'} · ${spend.length} Expense${spend.length == 1 ? '' : 's'}',
       trailing: cumulative.length > 1 ? Sparkline(values: cumulative, width: 70, height: 28) : null,
       child: Column(
         children: [
           Row(
             children: [
-              Expanded(child: _tile(_mine ? 'Your share' : 'Total spent', money(total), _mine
-                  ? '${wholeTotal == 0 ? 0 : (total / wholeTotal * 100).round()}% of the trip'
-                  : 'by ${widget.trip.memberCount} people')),
+              Expanded(child: _tile(_mine ? 'Your Share' : 'Total Spent', money(total), _mine
+                  ? '${wholeTotal == 0 ? 0 : (total / wholeTotal * 100).round()}% Of The Trip'
+                  : 'By ${widget.trip.memberCount} People')),
               const SizedBox(width: 8),
-              Expanded(child: _tile('Per day', money(total / span), 'over $span day${span == 1 ? '' : 's'}')),
+              Expanded(child: _tile('Per Day', money(total / span), 'Over $span Day${span == 1 ? '' : 's'}')),
             ],
           ),
           const SizedBox(height: 8),
@@ -260,21 +260,21 @@ class _TripInsightsState extends State<TripInsights> {
             children: [
               Expanded(
                 child: _mine
-                    ? _tile('Per expense', money(total / spend.length), '${spend.length} with you')
-                    : _tile('Per person', money(total / math.max(1, widget.trip.memberCount)), 'if split evenly'),
+                    ? _tile('Per Expense', money(total / spend.length), '${spend.length} With You')
+                    : _tile('Per Person', money(total / math.max(1, widget.trip.memberCount)), 'If Split Evenly'),
               ),
               const SizedBox(width: 8),
-              Expanded(child: _tile('Average bill', money(total / spend.length), '${spend.length} expenses')),
+              Expanded(child: _tile('Average Bill', money(total / spend.length), '${spend.length} Expenses')),
             ],
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(child: _tile(_mine ? 'Biggest share' : 'Biggest expense', money(_value(biggest)), biggest.description)),
+              Expanded(child: _tile(_mine ? 'Biggest Share' : 'Biggest Expense', money(_value(biggest)), biggest.description)),
               const SizedBox(width: 8),
               Expanded(
                 child: _tile(
-                  'Top category',
+                  'Top Category',
                   topCategory.key,
                   '${money(topCategory.value)} · ${total == 0 ? 0 : (topCategory.value / total * 100).round()}%',
                   icon: iconForCategory(topCategory.key),
@@ -310,18 +310,18 @@ class _TripInsightsState extends State<TripInsights> {
     final activeDays = days.toSet().length;
     String label(DateTime d) => '${d.day} ${_monthsShort[d.month - 1]}';
     return _card(
-      title: 'By date',
+      title: 'By Date',
       subtitle: weekly
-          ? 'Each week · $activeDays of $span days had spending'
-          : 'Each day · $activeDays of $span day${span == 1 ? '' : 's'} had spending',
+          ? 'Each Week · $activeDays Of $span Days Had Spending'
+          : 'Each Day · $activeDays Of $span Day${span == 1 ? '' : 's'} Had Spending',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(child: _fact(weekly ? 'Busiest week' : 'Busiest day', '${label(busiest.$1)} · ${compactMoney(busiest.$2)}')),
+              Expanded(child: _fact(weekly ? 'Busiest Week' : 'Busiest Day', '${label(busiest.$1)} · ${compactMoney(busiest.$2)}')),
               const SizedBox(width: 8),
-              Expanded(child: _fact('Daily average', money(total / span))),
+              Expanded(child: _fact('Daily Average', money(total / span))),
             ],
           ),
           const SizedBox(height: 12),
@@ -367,8 +367,8 @@ class _TripInsightsState extends State<TripInsights> {
     final otherCount = counts.entries.where((e) => !shown.contains(e.key)).fold(0, (s, e) => s + e.value);
     if (other > 0.5) slices.add(DonutSlice('Other', other, otherSliceColor, icon: Icons.more_horiz_rounded));
     return _card(
-      title: 'By category',
-      subtitle: '${now.length} categor${now.length == 1 ? 'y' : 'ies'} · tap a slice',
+      title: 'By Category',
+      subtitle: '${now.length} Categor${now.length == 1 ? 'y' : 'ies'} · Tap A Slice',
       child: Column(
         children: [
           Center(child: DonutChart(slices: slices, total: total, size: 132)),
@@ -425,14 +425,14 @@ class _TripInsightsState extends State<TripInsights> {
     final data = <BarDatum>[
       for (final m in widget.trip.members)
         BarDatum(
-          m.id == _me ? '${m.name} (you)' : m.name,
+          m.id == _me ? '${m.name} (You)' : m.name,
           _spend.fold(0.0, (s, e) => s + (_byShare ? e.shareOf(m.id) : (e.paidBy == m.id ? e.amount : 0))),
           leading: MemberAvatar.of(m, size: 24, tripId: widget.trip.id),
         ),
     ];
     return _card(
-      title: 'By person',
-      subtitle: _byShare ? 'Each person’s share of the trip' : 'Who paid for the trip',
+      title: 'By Person',
+      subtitle: _byShare ? 'Each Person’s Share Of The Trip' : 'Who Paid For The Trip',
       trailing: _Segmented(
         options: const ['Paid', 'Share'],
         selected: _byShare ? 1 : 0,
@@ -448,10 +448,10 @@ class _TripInsightsState extends State<TripInsights> {
     final balances = balancesFor(widget.trip.members, totals.paid, totals.owed);
     final settled = balances.where((b) => b.netBalance.abs() < 0.5).length;
     return _card(
-      title: 'Who’s ahead',
+      title: 'Who’s Ahead',
       subtitle: settled == balances.length
-          ? 'Everyone is settled up'
-          : '+ gets money back · − owes · after settle-ups',
+          ? 'Everyone Is Settled Up'
+          : '+ Gets Money Back · − Owes · After Settle-Ups',
       child: DivergingBarChart(
         maxRows: 8,
         data: [
@@ -473,24 +473,24 @@ class _TripInsightsState extends State<TripInsights> {
   Widget _byPlace(List<TripExpense> spend) {
     final sums = <String, double>{};
     for (final e in spend) {
-      final city = cityFromLocation(e.location) ?? 'No location';
+      final city = cityFromLocation(e.location) ?? 'No Location';
       sums[city] = (sums[city] ?? 0) + _value(e);
     }
-    final places = sums.keys.where((k) => k != 'No location').length;
-    final top = sums.entries.where((e) => e.key != 'No location').fold<MapEntry<String, double>?>(
+    final places = sums.keys.where((k) => k != 'No Location').length;
+    final top = sums.entries.where((e) => e.key != 'No Location').fold<MapEntry<String, double>?>(
       null,
       (best, e) => best == null || e.value > best.value ? e : best,
     );
     return _card(
-      title: 'By location',
-      subtitle: 'Spending in each city',
+      title: 'By Location',
+      subtitle: 'Spending In Each City',
       child: Column(
         children: [
           Row(
             children: [
               Expanded(child: _fact('Cities', '$places')),
               const SizedBox(width: 8),
-              Expanded(flex: 2, child: _fact('Most spent in', top == null ? '—' : '${top.key} · ${compactMoney(top.value)}')),
+              Expanded(flex: 2, child: _fact('Most Spent In', top == null ? '—' : '${top.key} · ${compactMoney(top.value)}')),
             ],
           ),
           const SizedBox(height: 8),
@@ -498,7 +498,7 @@ class _TripInsightsState extends State<TripInsights> {
             maxRows: 4,
             data: [
               for (final e in sums.entries)
-                BarDatum(e.key, e.value, icon: e.key == 'No location' ? Icons.location_off_outlined : Icons.place_outlined),
+                BarDatum(e.key, e.value, icon: e.key == 'No Location' ? Icons.location_off_outlined : Icons.place_outlined),
             ],
           ),
         ],
@@ -519,15 +519,15 @@ class _TripInsightsState extends State<TripInsights> {
     final peak = List.generate(sums.length, (i) => i).reduce((a, b) => sums[b] > sums[a] ? b : a);
     final busiest = List.generate(counts.length, (i) => i).reduce((a, b) => counts[b] > counts[a] ? b : a);
     return _card(
-      title: 'Time of day',
-      subtitle: 'When the money goes',
+      title: 'Time Of Day',
+      subtitle: 'When The Money Goes',
       child: Column(
         children: [
           Row(
             children: [
-              Expanded(child: _fact('Most spent', dayParts[peak].$1)),
+              Expanded(child: _fact('Most Spent', dayParts[peak].$1)),
               const SizedBox(width: 8),
-              Expanded(child: _fact('Most expenses', '${dayParts[busiest].$1} · ${counts[busiest]}')),
+              Expanded(child: _fact('Most Expenses', '${dayParts[busiest].$1} · ${counts[busiest]}')),
             ],
           ),
           const SizedBox(height: 8),
@@ -549,8 +549,8 @@ class _TripInsightsState extends State<TripInsights> {
     final total = spend.fold(0.0, (s, e) => s + _value(e));
     final topSum = top.fold(0.0, (s, e) => s + _value(e));
     return _card(
-      title: _mine ? 'Your biggest shares' : 'Biggest expenses',
-      subtitle: 'The top ${top.length} are ${total == 0 ? 0 : (topSum / total * 100).round()}% of the spending',
+      title: _mine ? 'Your Biggest Shares' : 'Biggest Expenses',
+      subtitle: 'The Top ${top.length} Are ${total == 0 ? 0 : (topSum / total * 100).round()}% Of The Spending',
       child: Column(
         children: [
           for (final (i, e) in top.indexed)

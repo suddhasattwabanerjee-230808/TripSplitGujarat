@@ -40,7 +40,7 @@ class _HBarChartState extends State<HBarChart> {
         : [
             ...sorted.take(widget.maxRows - 1),
             BarDatum(
-              'Everything else',
+              'Everything Else',
               sorted.skip(widget.maxRows - 1).fold(0.0, (s, d) => s + d.value),
               icon: Icons.more_horiz_rounded,
             ),
@@ -184,7 +184,7 @@ class _TimeBarChartState extends State<TimeBarChart> {
                   left: 0,
                   right: 0,
                   bottom: widget.height * (widget.average! / peak).clamp(0.0, 1.0),
-                  child: _AverageLine(label: 'avg ${compactMoney(widget.average!)}'),
+                  child: _AverageLine(label: 'Avg ${compactMoney(widget.average!)}'),
                 ),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -471,7 +471,7 @@ class _TrendPainter extends CustomPainter {
     final peak = points.fold(0.0, (m, p) => p.value > m ? p.value : m);
     final top = _niceCeil(peak <= 0 ? 100 : peak);
     TextPainter label(String s, {Color? color, FontWeight weight = FontWeight.w500, double size = 10.5}) => TextPainter(
-      text: TextSpan(text: s, style: TextStyle(color: color ?? colors.muted, fontSize: size, fontWeight: weight, fontFamily: 'Manrope')),
+      text: TextSpan(text: s, style: TextStyle(color: color ?? colors.muted, fontSize: size, fontWeight: weight, fontFamily: 'Inter')),
       textDirection: TextDirection.ltr,
     )..layout();
 

@@ -17,10 +17,10 @@ import 'trips_ui.dart';
 
 /// How the list is ordered.
 enum ExpenseSort {
-  newest('Newest first'),
-  oldest('Oldest first'),
-  highest('Highest amount'),
-  lowest('Lowest amount');
+  newest('Newest First'),
+  oldest('Oldest First'),
+  highest('Highest Amount'),
+  lowest('Lowest Amount');
 
   const ExpenseSort(this.label);
   final String label;
@@ -60,7 +60,7 @@ class ExpenseFilter {
   /// Settle-up payments are listed too unless this is off.
   bool settlements;
 
-  static const noPlace = 'No location';
+  static const noPlace = 'No Location';
 
   ExpenseFilter copy() => ExpenseFilter(
     dates: dates,
@@ -312,7 +312,8 @@ class _ExpensesViewState extends State<ExpensesView> {
                 SliverPadding(padding: const EdgeInsets.fromLTRB(24, 40, 24, 0), sliver: SliverToBoxAdapter(child: _empty()))
               else
                 ..._sections(shown),
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
+              // Clear of the floating nav bar.
+              SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + 24)),
             ],
           ),
         ),
@@ -353,7 +354,7 @@ class _ExpensesViewState extends State<ExpensesView> {
           ),
         ),
         IconButton(
-          tooltip: 'Switch trip',
+          tooltip: 'Switch Trip',
           onPressed: () => showTripSwitcher(context),
           icon: Icon(Icons.swap_horiz_rounded, color: ink),
         ),
@@ -364,8 +365,8 @@ class _ExpensesViewState extends State<ExpensesView> {
 
   Widget _viewSwitch() {
     const views = [
-      (_View.trip, 'Whole trip', Icons.luggage_outlined),
-      (_View.people, 'Per person', Icons.groups_outlined),
+      (_View.trip, 'Whole Trip', Icons.luggage_outlined),
+      (_View.people, 'Trip Mates', Icons.groups_outlined),
       (_View.me, 'Me', Icons.person_outline_rounded),
     ];
     return Container(
@@ -452,9 +453,9 @@ class _ExpensesViewState extends State<ExpensesView> {
   Widget _mineChips() => Row(
     children: [
       for (final (m, label) in const [
-        (_Mine.all, 'All mine'),
-        (_Mine.paid, 'I paid'),
-        (_Mine.share, 'Others paid for me'),
+        (_Mine.all, 'All Mine'),
+        (_Mine.paid, 'Paid By Me'),
+        (_Mine.share, 'Others Paid For Me'),
       ]) ...[
         _chip(label, selected: _mine == m, onTap: () => setState(() => _mine = m)),
         const SizedBox(width: 8),
@@ -471,7 +472,7 @@ class _ExpensesViewState extends State<ExpensesView> {
     final List<(String, String)> stats;
     if (focus == null) {
       final mine = spend.fold(0.0, (s, e) => s + e.shareOf(_meId));
-      stats = [('Expenses', '${shown.length}'), ('Spent', compactMoney(total)), ('Your share', compactMoney(mine))];
+      stats = [('Expenses', '${shown.length}'), ('Spent', compactMoney(total)), ('Your Share', compactMoney(mine))];
     } else {
       // Paid and share over everything listed, settle-ups included, so the
       // net is what this list moves.
@@ -495,9 +496,9 @@ class _ExpensesViewState extends State<ExpensesView> {
               Expanded(
                 child: Text(
                   switch (_view) {
-                    _View.trip => 'The whole trip',
-                    _View.people => person == null ? 'Per person' : '${_name(person.id)}${person.id == _meId ? '' : '’s expenses'}',
-                    _View.me => 'Your expenses',
+                    _View.trip => 'The Whole Trip',
+                    _View.people => person == null ? 'Trip Mates' : '${_name(person.id)}${person.id == _meId ? '' : '’s Expenses'}',
+                    _View.me => 'Your Expenses',
                   },
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -595,7 +596,7 @@ class _ExpensesViewState extends State<ExpensesView> {
                 ],
               ),
             if (ranked.length > 3)
-              Text('+${ranked.length - 3} more', style: TextStyle(color: muted, fontSize: 11.5)),
+              Text('+${ranked.length - 3} More', style: TextStyle(color: muted, fontSize: 11.5)),
           ],
         ),
       ],
@@ -613,12 +614,12 @@ class _ExpensesViewState extends State<ExpensesView> {
             controller: _search,
             onChanged: (_) => setState(() {}),
             style: TextStyle(color: ink, fontSize: 14),
-            decoration: appInputDecoration('Search description, place, category…', Icons.search_rounded).copyWith(
+            decoration: appInputDecoration('Search Description, Place, Category…', Icons.search_rounded).copyWith(
               contentPadding: EdgeInsets.zero,
               suffixIcon: _search.text.isEmpty
                   ? null
                   : IconButton(
-                      tooltip: 'Clear search',
+                      tooltip: 'Clear Search',
                       onPressed: () => setState(_search.clear),
                       icon: Icon(Icons.close_rounded, size: 18, color: muted),
                     ),
@@ -692,19 +693,19 @@ class _ExpensesViewState extends State<ExpensesView> {
       for (final p in f.dayParts) (dayParts[p].$1, () => f.dayParts.remove(p)),
       for (final c in f.categories) (c, () => f.categories.remove(c)),
       for (final p in f.places) (p, () => f.places.remove(p)),
-      for (final id in f.payers) ('Paid by ${_name(id)}', () => f.payers.remove(id)),
+      for (final id in f.payers) ('Paid By ${_name(id)}', () => f.payers.remove(id)),
       if (f.minAmount != null || f.maxAmount != null)
         (
           f.minAmount != null && f.maxAmount != null
               ? '${money(f.minAmount!)} – ${money(f.maxAmount!)}'
               : f.minAmount != null
               ? 'From ${money(f.minAmount!)}'
-              : 'Up to ${money(f.maxAmount!)}',
+              : 'Up To ${money(f.maxAmount!)}',
           () => f
             ..minAmount = null
             ..maxAmount = null,
         ),
-      if (!f.settlements) ('No settle-ups', () => f.settlements = true),
+      if (!f.settlements) ('No Settle-Ups', () => f.settlements = true),
     ];
     return SizedBox(
       height: 34,
@@ -729,7 +730,7 @@ class _ExpensesViewState extends State<ExpensesView> {
           TextButton(
             onPressed: () => setState(() => _filter = ExpenseFilter()),
             style: TextButton.styleFrom(foregroundColor: accent, visualDensity: VisualDensity.compact),
-            child: const Text('Clear all', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('Clear All', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -780,7 +781,7 @@ class _ExpensesViewState extends State<ExpensesView> {
       const IconCircle(icon: Icons.receipt_long_outlined, size: 64),
       const SizedBox(height: 14),
       Text(
-        widget.expenses.isEmpty ? 'No expenses yet' : 'Nothing matches',
+        widget.expenses.isEmpty ? 'No Expenses Yet' : 'Nothing Matches',
         style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
       ),
       const SizedBox(height: 4),
@@ -854,11 +855,11 @@ class _ExpensesViewState extends State<ExpensesView> {
     final String detail;
     if (expense.isSettlement) {
       final to = expense.shares.isEmpty ? null : expense.shares.first.userId;
-      title = '${_name(expense.paidBy)} paid ${to == null ? 'back' : _name(to)}';
+      title = '${_name(expense.paidBy)} Paid ${to == null ? 'Back' : _name(to)}';
       detail = expense.description;
     } else {
       title = expense.description;
-      detail = '${iPaid ? 'You' : expense.payerName(_trip)} paid${city == null ? '' : ' · $city'}';
+      detail = '${iPaid ? 'You' : expense.payerName(_trip)} Paid${city == null ? '' : ' · $city'}';
     }
     // In the per-person view, that person's part of it; elsewhere, yours.
     final String? note;
@@ -869,11 +870,11 @@ class _ExpensesViewState extends State<ExpensesView> {
     } else if (focus != null && focus != me) {
       final theirs = expense.shareOf(focus);
       note = expense.paidBy == focus
-          ? '${_name(focus)} paid${theirs > 0 ? ' · share ${money(theirs)}' : ''}'
-          : '${_name(focus)}’s share ${money(theirs)}';
+          ? '${_name(focus)} Paid${theirs > 0 ? ' · Share ${money(theirs)}' : ''}'
+          : '${_name(focus)}’s Share ${money(theirs)}';
       noteColor = accent;
     } else {
-      note = involved ? (iPaid ? 'you lent ${money(delta)}' : 'you owe ${money(delta)}') : null;
+      note = involved ? (iPaid ? 'You Lent ${money(delta)}' : 'You Owe ${money(delta)}') : null;
       noteColor = iPaid ? positive : negative;
     }
     return AppCard(
@@ -979,7 +980,7 @@ class _ExpensesViewState extends State<ExpensesView> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete this expense?'),
+        title: const Text('Delete This Expense?'),
         content: Text('“${expense.description}” — ${money(expense.amount)} will be removed for everyone on the trip.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
@@ -1075,12 +1076,12 @@ class _ExpensesViewState extends State<ExpensesView> {
               const SizedBox(height: 10),
               ListTile(
                 leading: Icon(Icons.edit_outlined, color: ink),
-                title: Text('Edit expense', style: TextStyle(fontWeight: FontWeight.w700, color: ink)),
+                title: Text('Edit Expense', style: TextStyle(fontWeight: FontWeight.w700, color: ink)),
                 onTap: () => Navigator.pop(context, 'edit'),
               ),
               ListTile(
                 leading: Icon(Icons.delete_outline_rounded, color: negative),
-                title: Text('Delete expense', style: TextStyle(fontWeight: FontWeight.w700, color: negative)),
+                title: Text('Delete Expense', style: TextStyle(fontWeight: FontWeight.w700, color: negative)),
                 onTap: () => Navigator.pop(context, 'delete'),
               ),
             ],
@@ -1113,7 +1114,7 @@ class _ExpensesViewState extends State<ExpensesView> {
                   style: TextStyle(color: ink, fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -.6),
                 ),
                 Text(
-                  '${isOwn ? 'You' : expense.payerName(_trip)} paid · ${expense.category ?? 'Other'}',
+                  '${isOwn ? 'You' : expense.payerName(_trip)} Paid · ${expense.category ?? 'Other'}',
                   style: TextStyle(color: muted, fontSize: 12),
                 ),
               ],
@@ -1135,7 +1136,7 @@ class _ExpensesViewState extends State<ExpensesView> {
         ),
         _detailRow(
           Icons.location_on_outlined,
-          expense.location ?? 'No location',
+          expense.location ?? 'No Location',
           isOwn
               ? () {
                   Navigator.pop(context);
@@ -1160,8 +1161,8 @@ class _ExpensesViewState extends State<ExpensesView> {
                   Expanded(
                     child: Text(
                       s.userId == expense.paidBy
-                          ? '${_name(s.userId)} paid ${money(expense.amount)}, owe${s.userId == _meId ? '' : 's'} ${money(s.shareAmount)}'
-                          : '${_name(s.userId)} owe${s.userId == _meId ? '' : 's'} ${money(s.shareAmount)}',
+                          ? '${_name(s.userId)} Paid ${money(expense.amount)}, Owe${s.userId == _meId ? '' : 's'} ${money(s.shareAmount)}'
+                          : '${_name(s.userId)} Owe${s.userId == _meId ? '' : 's'} ${money(s.shareAmount)}',
                       style: TextStyle(
                         color: ink,
                         fontSize: 13,
@@ -1352,7 +1353,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                   _pickerButton(
                     Icons.date_range_rounded,
                     _f.dates == null
-                        ? 'Any date'
+                        ? 'Any Date'
                         : _f.dates!.start == _f.dates!.end
                         ? _shortDate(_f.dates!.start)
                         : '${_shortDate(_f.dates!.start)} – ${_shortDate(_f.dates!.end)}',
@@ -1365,7 +1366,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                       Expanded(
                         child: _pickerButton(
                           Icons.schedule_rounded,
-                          _f.timeFrom == null ? 'From any time' : 'From ${_time(_f.timeFrom!)}',
+                          _f.timeFrom == null ? 'From Any Time' : 'From ${_time(_f.timeFrom!)}',
                           () => _pickTime(true),
                           onClear: _f.timeFrom == null ? null : () => setState(() => _f.timeFrom = null),
                         ),
@@ -1374,7 +1375,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                       Expanded(
                         child: _pickerButton(
                           Icons.schedule_rounded,
-                          _f.timeTo == null ? 'To any time' : 'To ${_time(_f.timeTo!)}',
+                          _f.timeTo == null ? 'To Any Time' : 'To ${_time(_f.timeTo!)}',
                           () => _pickTime(false),
                           onClear: _f.timeTo == null ? null : () => setState(() => _f.timeTo = null),
                         ),
@@ -1447,8 +1448,8 @@ class _FilterSheetState extends State<_FilterSheet> {
                       value: _f.settlements,
                       onChanged: (v) => setState(() => _f.settlements = v),
                       activeThumbColor: accent,
-                      title: Text('Show settle-up payments', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600)),
-                      subtitle: Text('Money paid back between tripmates', style: TextStyle(color: muted, fontSize: 12)),
+                      title: Text('Show Settle-Up Payments', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600)),
+                      subtitle: Text('Money Paid Back Between Tripmates', style: TextStyle(color: muted, fontSize: 12)),
                     ),
                   ),
                 ],
@@ -1466,7 +1467,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                       Navigator.pop(context, _f);
                     },
                     style: primaryButton(),
-                    child: Text('Show $n expense${n == 1 ? '' : 's'}'),
+                    child: Text('Show $n Expense${n == 1 ? '' : 's'}'),
                   ),
                 ),
               ),

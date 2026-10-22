@@ -4,6 +4,37 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.12.0] - 2026-10-22 (build 35)
+
+### Added
+- Settle up: "Scan Their QR Code" lists your UPI apps (Google Pay and
+  PhonePe first) and opens the one you pick straight on its scanner, then
+  asks whether the payment went through.
+- A photo of the city you're in behind the profile header and the trip
+  card, blended into the app's colours. It asks for location once.
+- "All Notifications" in the profile's App section: one switch for expense
+  alerts, settle-up reminders and UPI payment alerts.
+- "Check For Updates At Launch", with a switch in the profile's App
+  section. A new version shows as a bar with an Update button, and the
+  update sheet shows what's new and the download's progress.
+- Tapping a notification on the bell's page opens that expense.
+
+### Changed
+- The bottom bar floats, and the Profile tab is gone: your photo at the top
+  of the Trip page opens your profile. Invite moved into Quick Operations.
+- The profile's Account section is gone. Your UPI ID is now a chip under
+  your name; tap the photo or the name to change them.
+- A new font, Inter, everywhere.
+- Labels, buttons and titles now capitalise every word.
+- On the Expenses tab: "Trip Mates", "All Mine", "Paid By Me" and "Others
+  Paid For Me".
+- The intro uses the new lion logo on an ajrakh print, and only plays when
+  the app was closed for 30 seconds or more.
+
+### Fixed
+- Settle up found no UPI apps on some phones (Google Pay and PhonePe hide
+  their payment links from other apps until they're set up).
+
 ## [1.11.0] - 2026-10-22 (build 34)
 
 ### Added

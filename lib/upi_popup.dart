@@ -175,7 +175,7 @@ class _UpiPopupState extends State<_UpiPopup> {
     final trip = _trip;
     if (trip == null) return;
     final typed = _description.text.trim();
-    final description = typed.isNotEmpty ? typed : (_payee ?? 'UPI payment');
+    final description = typed.isNotEmpty ? typed : (_payee ?? 'UPI Payment');
     final location = _location.text.trim();
     setState(() {
       _busy = true;
@@ -246,11 +246,11 @@ class _UpiPopupState extends State<_UpiPopup> {
         Lottie.asset('assets/success_check.json', width: 140, height: 140, repeat: false),
         const SizedBox(height: 4),
         Text(
-          'Expense added',
+          'Expense Added',
           style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
-        Text('Added to ${_trip?.name ?? 'your trip'}', style: TextStyle(color: muted, fontSize: 12)),
+        Text('Added To ${_trip?.name ?? 'Your Trip'}', style: TextStyle(color: muted, fontSize: 12)),
       ],
     ),
   );
@@ -281,7 +281,7 @@ class _UpiPopupState extends State<_UpiPopup> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _payee == null ? 'UPI payment detected' : 'Paid to $_payee',
+                  _payee == null ? 'UPI Payment Detected' : 'Paid To $_payee',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600),
@@ -334,7 +334,7 @@ class _UpiPopupState extends State<_UpiPopup> {
           onChanged: (_) => _locationEdited = true,
           onSubmitted: (_) => _busy ? null : _save(),
           decoration: appInputDecoration(
-            _locating ? 'Finding your location…' : 'Add a location',
+            _locating ? 'Finding Your Location…' : 'Add A Location',
             Icons.location_on_outlined,
           ).copyWith(
             suffixIcon: Row(
@@ -347,12 +347,12 @@ class _UpiPopupState extends State<_UpiPopup> {
                   )
                 else
                   IconButton(
-                    tooltip: 'Use current location',
+                    tooltip: 'Use Current Location',
                     onPressed: _busy ? null : _useCurrentLocation,
                     icon: Icon(Icons.my_location_outlined, size: 18, color: accent),
                   ),
                 IconButton(
-                  tooltip: 'Pick on map',
+                  tooltip: 'Pick On Map',
                   onPressed: _busy ? null : _openLocationPicker,
                   icon: Icon(Icons.map_outlined, size: 18, color: accent),
                 ),
@@ -407,7 +407,7 @@ class _UpiPopupState extends State<_UpiPopup> {
             ),
             child: _busy
                 ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: paper))
-                : const Text('Save expense', style: TextStyle(fontWeight: FontWeight.w700)),
+                : const Text('Save Expense', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ),
       ],

@@ -50,12 +50,12 @@ void main() {
     await tester.enterText(fields.at(1), '300');
     await tester.pump();
     expect(_selected(tester, 'Food'), isTrue);
-    expect(find.textContaining('each · everyone'), findsOneWidget);
+    expect(find.textContaining('Each · Everyone'), findsOneWidget);
 
     // Leave Kabir out: 150 each between two of three.
     await tester.tap(find.widgetWithText(FilterChip, 'Kabir'));
     await tester.pump();
-    expect(find.textContaining('150 each · 2 of 3 people'), findsOneWidget);
+    expect(find.textContaining('150 Each · 2 Of 3 People'), findsOneWidget);
     expect(find.text('Everyone'), findsOneWidget);
 
     // Only Priya: paying on her behalf.

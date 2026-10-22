@@ -50,6 +50,10 @@ class MainActivity : FlutterActivity() {
                     UpiSettings.setEnabled(this, call.arguments as? Boolean ?: true)
                     result.success(null)
                 }
+                "setAllEnabled" -> {
+                    UpiSettings.setAllEnabled(this, call.arguments as? Boolean ?: true)
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -80,10 +84,12 @@ class MainActivity : FlutterActivity() {
                         result.error("no_upi_app", "No UPI app is installed", null)
                     }
                 }
-                // The installed UPI apps: [{package, label, icon (PNG bytes)}].
+                // The installed UPI apps: [{package, label, icon (PNG bytes), canPay}].
                 "apps" -> result.success(UpiApps.list(this))
-                // Opens one on its home screen, to scan a QR there.
+                // Opens one on its home screen.
                 "open" -> result.success(UpiApps.open(this, call.argument<String>("package") ?: ""))
+                // Opens one on its QR scanner (or its home screen if we can't).
+                "scan" -> result.success(UpiApps.scan(this, call.argument<String>("package") ?: ""))
                 else -> result.notImplemented()
             }
         }
