@@ -41,7 +41,7 @@ class UpiScreenWatcher : AccessibilityService() {
         val paid = UpiScreenParser.parseSuccess(screen) ?: return
         payingSince = 0L
         if (paid.ref != null && !UpiScreenParser.firstTime(this, paid.ref)) return
-        UpiAlert.handle(this, paid.txn, now)
+        UpiAlert.handle(this, paid.txn, now, UpiAlert.SCREEN)
     }
 
     override fun onInterrupt() {}

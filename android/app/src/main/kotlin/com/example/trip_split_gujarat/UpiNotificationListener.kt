@@ -28,12 +28,28 @@ class UpiNotificationListener : NotificationListenerService() {
             extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT),
         ) + (extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.filterNotNull() ?: emptyList())
         val txn = UpiAppParser.parse(lines.joinToString("\n")) ?: return
-        UpiAlert.handle(this, txn, sbn.postTime)
+        UpiAlert.handle(this, txn, sbn.postTime, UpiAlert.APP_NOTIFICATION)
+    }
+
+    // Android unbinds a listener after an app update or under memory pressure,
+    // and doesn't always bring it back: ask for it straight away.
+    override fun onListenerDisconnected() {
+        rebind(this)
     }
 
     companion object {
         fun isAllowed(context: Context): Boolean =
             NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+
+        /** Reconnects the listener if access is allowed (a no-op while it's connected). */
+        fun rebind(context: Context) {
+            if (Build.VERSION.SDK_INT < 24 || !isAllowed(context)) return
+            try {
+                NotificationListenerService.requestRebind(ComponentName(context, UpiNotificationListener::class.java))
+            } catch (e: Exception) {
+                // Not allowed right now; the next app start tries again.
+            }
+        }
 
         /** Notification access for TripSplit (its own page where Android has one). */
         fun openSettings(context: Context): Boolean {

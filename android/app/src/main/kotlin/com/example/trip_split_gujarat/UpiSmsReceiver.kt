@@ -9,11 +9,15 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import android.provider.Telephony
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.Locale
 
 /**
@@ -117,30 +121,102 @@ class UpiSmsReceiver : BroadcastReceiver() {
         if (sender.none { it.isLetter() }) return
         val body = messages.joinToString("") { it.messageBody ?: "" }
         val txn = UpiParser.parse(body) ?: return
-        UpiAlert.handle(context, txn, messages.first().timestampMillis)
+        UpiAlert.handle(context, txn, messages.first().timestampMillis, UpiAlert.SMS)
     }
 }
 
 /**
- * A UPI payment made, from the bank's SMS or the UPI app's notification. The
- * same payment often comes from both, so a second report of the same amount
- * within [SAME_PAYMENT] is dropped.
+ * A UPI payment made, from the bank's SMS, the UPI app's notification or its
+ * success screen. One payment is often reported by two or three of them, so a
+ * report of the same amount from a *different* source within [SAME_PAYMENT]
+ * is the same payment and dropped. Two reports from the *same* source are two
+ * payments (paying the same friend ₹50 twice), unless they come within
+ * [REPOST] — a UPI app re-posting its notification, not a new payment.
+ * What happened to the last few is kept for App Settings' "Last Payment Spotted".
  */
 object UpiAlert {
     private const val PREFS = "upi_alert"
     private const val SAME_PAYMENT = 3 * 60 * 1000L
+    private const val REPOST = 15 * 1000L
 
-    fun handle(context: Context, txn: UpiTxn, time: Long) {
+    const val SMS = "Bank SMS"
+    const val APP_NOTIFICATION = "GPay/PhonePe Notification"
+    const val SCREEN = "GPay/PhonePe Screen"
+
+    @Synchronized
+    fun handle(context: Context, txn: UpiTxn, time: Long, source: String) {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()
-        val last = p.getString("amount", null)?.toDoubleOrNull()
-        if (last != null && kotlin.math.abs(last - txn.amount) <= 0.5 && now - p.getLong("at", 0) < SAME_PAYMENT) return
-        p.edit().putString("amount", txn.amount.toString()).putLong("at", now).commit()
+        // Recent payments: {amount, at, sources: {source: last seen}}.
+        val recent = try {
+            JSONArray(p.getString("recent", "[]"))
+        } catch (e: Exception) {
+            JSONArray()
+        }
+        val kept = JSONArray()
+        var same: JSONObject? = null
+        for (i in 0 until recent.length()) {
+            val entry = recent.optJSONObject(i) ?: continue
+            if (now - entry.optLong("at") > SAME_PAYMENT) continue
+            kept.put(entry)
+            if (same != null || kotlin.math.abs(entry.optDouble("amount") - txn.amount) > 0.5) continue
+            val sources = entry.optJSONObject("sources") ?: continue
+            val seenHere = sources.optLong(source, 0)
+            if (seenHere == 0L || now - seenHere < REPOST) same = entry
+        }
+        if (same != null) {
+            val from = same.optJSONObject("sources")?.keys()?.asSequence()?.firstOrNull { it != source }
+            same.getJSONObject("sources").put(source, now)
+            p.edit().putString("recent", kept.toString()).commit()
+            log(context, txn, source, if (from != null) "Same Payment As The $from" else "Same Payment, Posted Again")
+            return
+        }
+        kept.put(JSONObject().put("amount", txn.amount).put("at", now).put("sources", JSONObject().put(source, now)))
+        p.edit().putString("recent", kept.toString()).commit()
         // The settle-up payment TripSplit is waiting for: it's recorded as
         // that, not offered as a new expense (whatever the alerts switch says).
-        if (UpiSettle.match(context, txn, time)) return
-        if (!UpiSettings.isEnabled(context) || !UpiSettings.allEnabled(context)) return
-        UpiNotifier.show(context, txn, time)
+        if (UpiSettle.match(context, txn, time)) {
+            log(context, txn, source, "Recorded As Your Settle-Up")
+            return
+        }
+        if (!UpiSettings.allEnabled(context)) {
+            log(context, txn, source, "Not Shown — All Notifications Are Off")
+            return
+        }
+        if (!UpiSettings.isEnabled(context)) {
+            log(context, txn, source, "Not Shown — UPI Payment Alerts Are Off")
+            return
+        }
+        log(context, txn, source, UpiNotifier.show(context, txn, time) ?: "Alert Shown")
+    }
+
+    private fun log(context: Context, txn: UpiTxn, source: String, outcome: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString("last", JSONObject()
+                .put("amount", txn.amount)
+                .put("payee", txn.payee ?: JSONObject.NULL)
+                .put("source", source)
+                .put("outcome", outcome)
+                .put("at", System.currentTimeMillis())
+                .toString())
+            .apply()
+    }
+
+    /** The last payment spotted: {amount, payee, source, outcome, at}, or null. */
+    fun last(context: Context): Map<String, Any?>? {
+        val raw = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("last", null) ?: return null
+        return try {
+            val o = JSONObject(raw)
+            mapOf(
+                "amount" to o.optDouble("amount"),
+                "payee" to (if (o.isNull("payee")) null else o.optString("payee")),
+                "source" to o.optString("source"),
+                "outcome" to o.optString("outcome"),
+                "at" to o.optLong("at"),
+            )
+        } catch (e: Exception) {
+            null
+        }
     }
 }
 
@@ -191,18 +267,64 @@ object UpiNotifier {
         if (id != -1) NotificationManagerCompat.from(context).cancel(id)
     }
 
-    fun show(context: Context, txn: UpiTxn, time: Long) {
+    /** Why Android won't show the alert, or null when it can. */
+    fun blocked(context: Context): String? {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
-        ) return
+        ) return "Not Shown — TripSplit Isn’t Allowed To Notify"
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            return "Not Shown — TripSplit’s Notifications Are Blocked"
+        }
         if (Build.VERSION.SDK_INT >= 26) {
-            context.getSystemService(NotificationManager::class.java).createNotificationChannel(
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(
                 NotificationChannel(CHANNEL, "UPI payments", NotificationManager.IMPORTANCE_HIGH).apply {
                     description = "Payments spotted in your bank's SMS or your UPI app's notifications"
                 },
             )
+            if (manager.getNotificationChannel(CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE) {
+                return "Not Shown — The “UPI Payments” Notifications Are Off"
+            }
         }
+        return null
+    }
+
+    /** Android's notification settings for TripSplit's UPI alerts (the app's page if the channel's isn't there). */
+    fun openSettings(context: Context): Boolean {
+        val intents = mutableListOf<Intent>()
+        if (Build.VERSION.SDK_INT >= 26) {
+            val channelOff = context.getSystemService(NotificationManager::class.java)
+                .getNotificationChannel(CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE
+            val app = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            val channel = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL)
+            intents += if (channelOff && NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                listOf(channel, app)
+            } else {
+                listOf(app)
+            }
+        }
+        intents += Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+        for (intent in intents) {
+            try {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return true
+            } catch (e: Exception) {
+                // Try the next one.
+            }
+        }
+        return false
+    }
+
+    /** A sample alert from App Settings: null when it's up, else why not. */
+    fun test(context: Context): String? = show(context, UpiTxn(1.0, "TripSplit Test"), System.currentTimeMillis())
+
+    /** Posts the "add to trip" alert: null when it's up, else why Android won't show it. */
+    fun show(context: Context, txn: UpiTxn, time: Long): String? {
+        blocked(context)?.let { return it }
         val id = (time % Int.MAX_VALUE).toInt()
         val open = Intent(context, UpiPopupActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -243,6 +365,7 @@ object UpiNotifier {
             .addAction(0, "Ignore", ignore)
             .build()
         NotificationManagerCompat.from(context).notify(id, notification)
+        return null
     }
 }
 

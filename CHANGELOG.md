@@ -4,6 +4,22 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.8] - 2026-10-22 (build 45)
+
+### Fixed
+- UPI payment alerts no longer go missing when you pay the same amount
+  again within a few minutes: only the same payment reported twice (by the
+  GPay/PhonePe screen, their notification and your bank's SMS) is merged.
+- After an update, TripSplit reconnects to GPay's and PhonePe's
+  notifications by itself.
+
+### Added
+- App Settings → "Last Payment Spotted" shows the last UPI payment TripSplit
+  saw and what it did with it (alert shown, same payment, alerts off, ...).
+- App Settings → "Send Test Alert" shows a sample ₹1 alert right away, and
+  warns you (with a shortcut to fix it) when Android is hiding TripSplit's
+  UPI alerts.
+
 ## [1.14.7] - 2026-10-22 (build 44)
 
 ### Fixed

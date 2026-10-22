@@ -29,6 +29,27 @@ class UpiAlerts extends ChangeNotifier with WidgetsBindingObserver {
   bool screensOn = false; // reading GPay's and PhonePe's success screens
   bool enabled = true; // the switch itself, kept natively for the receiver
   bool notificationsOn = true; // the profile's "All notifications"
+  String? blocked; // why Android won't show the alert (permission, app or channel off), else null
+  Map<String, Object?>? last; // the last payment spotted and what happened to it
+
+  /// Why the last payment spotted did or didn't alert, e.g. "₹50 · GPay/PhonePe
+  /// screen · Alert Shown", with how long ago; null before the first.
+  String? get lastSummary {
+    final l = last;
+    if (l == null) return null;
+    final amount = (l['amount'] as num?)?.toDouble() ?? 0;
+    final at = DateTime.fromMillisecondsSinceEpoch((l['at'] as num?)?.toInt() ?? 0);
+    final ago = DateTime.now().difference(at);
+    final when = ago.inMinutes < 1
+        ? 'Just Now'
+        : ago.inHours < 1
+        ? '${ago.inMinutes} Min Ago'
+        : ago.inDays < 1
+        ? '${ago.inHours} H Ago'
+        : '${ago.inDays} D Ago';
+    final rupees = amount == amount.roundToDouble() ? amount.toStringAsFixed(0) : amount.toStringAsFixed(2);
+    return '₹$rupees · ${l['outcome']} · $when';
+  }
 
   /// Payments can be spotted at all: screen, SMS or notification access.
   bool get canSpot => screensOn || smsUsed || listenerOn;
@@ -55,7 +76,57 @@ class UpiAlerts extends ChangeNotifier with WidgetsBindingObserver {
       enabled = true;
     }
     notificationsOn = await ExpenseNotifier.enabled();
+    try {
+      // The native receivers keep their own copy of "All notifications".
+      await _settings.invokeMethod<void>('setAllEnabled', notificationsOn);
+      blocked = await _settings.invokeMethod<String>('alertsBlocked');
+      last = (await _settings.invokeMethod<Map<Object?, Object?>>('lastAlert'))?.cast<String, Object?>();
+    } on Exception {
+      // Older native side: nothing to show.
+    }
     notifyListeners();
+  }
+
+  /// Posts a sample ₹1 alert, so the user sees one comes through. When
+  /// Android blocks it, says why and opens the settings to allow it.
+  Future<void> sendTest(BuildContext context, {bool retry = true}) async {
+    String? reason;
+    try {
+      reason = await _settings.invokeMethod<String>('testAlert');
+    } on Exception {
+      reason = 'Couldn’t Post The Test Alert';
+    }
+    await refresh();
+    if (!context.mounted) return;
+    if (reason == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Test Alert Sent — Pull Down Your Notifications To See It.')),
+      );
+      return;
+    }
+    if (!notificationsOn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notifications are off. Turn on All Notifications first.')),
+      );
+      return;
+    }
+    if (!retry) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(reason)));
+      return;
+    }
+    // Blocked: Android's own prompt where it still offers one, else its settings.
+    if (await openAlertSettings() && context.mounted) await sendTest(context, retry: false);
+  }
+
+  /// Gets TripSplit allowed to notify: Android's prompt where it still offers
+  /// one (true once that's enough), else its notification settings.
+  Future<bool> openAlertSettings() async {
+    await Permission.notification.request();
+    await refresh();
+    if (blocked == null) return true;
+    AppResume.sendingOut();
+    await _settings.invokeMethod<bool>('openAlertSettings').catchError((Object _) => false);
+    return false;
   }
 
   /// The bank's SMS as a source, on or off. On without SMS access asks for it.

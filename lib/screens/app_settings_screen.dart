@@ -106,6 +106,15 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                 : 'Off',
             trailing: _switch(_notificationsOn && _upi.on, _notificationsOn ? (v) => _upi.set(context, v) : null),
           ),
+          // Spotted but not shown: Android is blocking TripSplit's notifications.
+          if (_notificationsOn && _upi.on && _upi.blocked != null)
+            _row(
+              icon: Icons.warning_amber_rounded,
+              label: 'Android Is Hiding UPI Alerts',
+              value: '${_upi.blocked!.replaceFirst('Not Shown — ', '')} — Tap To Allow',
+              trailing: Icon(Icons.chevron_right_rounded, color: muted),
+              onTap: _upi.openAlertSettings,
+            ),
           // Where payments are spotted: any one is enough.
           _row(
             icon: Icons.verified_outlined,
@@ -132,6 +141,18 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
             value: _upi.listenerOn ? 'Allowed — For Banks That Send No SMS' : 'Not Allowed — Tap To Allow',
             trailing: Icon(Icons.chevron_right_rounded, color: muted),
             onTap: () => _upi.askForAppNotifications(context),
+          ),
+          _row(
+            icon: Icons.history_rounded,
+            label: 'Last Payment Spotted',
+            value: _upi.lastSummary ?? 'None Yet',
+          ),
+          _row(
+            icon: Icons.notification_add_outlined,
+            label: 'Send Test Alert',
+            value: 'Shows A Sample ₹1 Alert Right Now',
+            trailing: Icon(Icons.chevron_right_rounded, color: muted),
+            onTap: () => _upi.sendTest(context),
           ),
         ]),
         const SizedBox(height: 22),

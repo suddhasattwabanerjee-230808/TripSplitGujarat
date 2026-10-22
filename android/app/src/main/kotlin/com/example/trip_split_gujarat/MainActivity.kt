@@ -18,6 +18,7 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         // We're open, so the "updated — tap to open" fallback is no longer needed.
         AppUpdater.clearUpdatedNotification(this)
+        UpiNotificationListener.rebind(this)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -63,6 +64,10 @@ class MainActivity : FlutterActivity() {
                 "openListenerSettings" -> result.success(UpiNotificationListener.openSettings(this))
                 "screensOn" -> result.success(UpiScreenWatcher.isAllowed(this))
                 "openScreenSettings" -> result.success(UpiScreenWatcher.openSettings(this))
+                "lastAlert" -> result.success(UpiAlert.last(this))
+                "alertsBlocked" -> result.success(UpiNotifier.blocked(this))
+                "testAlert" -> result.success(UpiNotifier.test(this))
+                "openAlertSettings" -> result.success(UpiNotifier.openSettings(this))
                 else -> result.notImplemented()
             }
         }

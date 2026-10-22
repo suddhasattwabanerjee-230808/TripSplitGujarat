@@ -178,6 +178,8 @@ class UpdateStatusReceiver : BroadcastReceiver() {
 /** Backup trigger for [AppUpdater.relaunch] in case the session result arrives before the new process can take it. */
 class PackageReplacedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) AppUpdater.relaunch(context)
+        if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        UpiNotificationListener.rebind(context)
+        AppUpdater.relaunch(context)
     }
 }
