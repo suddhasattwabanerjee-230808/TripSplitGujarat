@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="upi_screen_watcher_description">TripSplit reads only Google Pay and PhonePe screens, and only to spot a successful payment you just made, so it can offer to add it to your trip or confirm a settle-up. It reads no other app, and nothing it reads leaves your phone.</string>
+</resources>

@@ -11,8 +11,8 @@ import 'trip_store.dart';
 import 'upi_alerts.dart';
 
 /// A settle-up paid in a UPI app (picked, or opened on its QR scanner) is
-/// confirmed without asking: the bank's UPI debit SMS, or GPay's or PhonePe's
-/// "paid" notification, for the same amount (caught natively, like the UPI
+/// confirmed without asking: GPay's or PhonePe's success screen, the bank's
+/// UPI debit SMS, or the app's "paid" notification, for the same amount (caught natively, like the UPI
 /// payment alerts) marks it paid, and it's recorded here as soon as the app is
 /// back on screen. Without either access, or if nothing comes in time, a snack
 /// bar offers "Mark Paid".
@@ -105,7 +105,7 @@ class SettleWatch with WidgetsBindingObserver {
         _tell(
           pending['sms'] == true
               ? 'No payment alert for ${money(amount)} to $name arrived.'
-              : 'Paid ${money(amount)} to $name? Allow SMS or GPay & PhonePe alerts to confirm it by itself.',
+              : 'Paid ${money(amount)} to $name? Allow Payment Screens in App Settings to confirm it by itself.',
           action: SnackBarAction(label: 'Mark Paid', onPressed: () => _markPaid(pending)),
         );
       }

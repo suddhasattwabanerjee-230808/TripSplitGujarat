@@ -56,6 +56,8 @@ class MainActivity : FlutterActivity() {
                 }
                 "listenerOn" -> result.success(UpiNotificationListener.isAllowed(this))
                 "openListenerSettings" -> result.success(UpiNotificationListener.openSettings(this))
+                "screensOn" -> result.success(UpiScreenWatcher.isAllowed(this))
+                "openScreenSettings" -> result.success(UpiScreenWatcher.openSettings(this))
                 else -> result.notImplemented()
             }
         }

@@ -102,6 +102,22 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!-- UPI payments spotted on Google Pay's and PhonePe's own success
+             screen, for when neither the bank's SMS nor the app's
+             notification comes. Runs once the user turns it on in
+             Accessibility; it's limited to those two apps. -->
+        <service
+            android:name=".UpiScreenWatcher"
+            android:exported="true"
+            android:label="TripSplit Payment Detection"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/upi_screen_watcher" />
+        </service>
         <receiver
             android:name=".UpiSmsReceiver"
             android:exported="true"

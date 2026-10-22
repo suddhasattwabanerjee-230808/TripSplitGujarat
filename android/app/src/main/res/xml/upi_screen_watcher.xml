@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only Google Pay and PhonePe: TripSplit never sees any other app's screen. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagIncludeNotImportantViews"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/upi_screen_watcher_description"
+    android:isAccessibilityTool="false"
+    android:notificationTimeout="400"
+    android:packageNames="com.google.android.apps.nbu.paisa.user,com.phonepe.app" />

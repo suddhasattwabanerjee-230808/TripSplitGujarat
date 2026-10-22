@@ -76,6 +76,12 @@ object UpiSettle {
         return true
     }
 
+    /** A settle-up payment is being waited for. */
+    fun isWaiting(context: Context): Boolean {
+        val p = prefs(context)
+        return p.getString("amount", null) != null && System.currentTimeMillis() - p.getLong("started", 0) <= WINDOW
+    }
+
     /** {waiting, paid (amount or null), paidAt}. */
     fun status(context: Context): Map<String, Any?> {
         val p = prefs(context)

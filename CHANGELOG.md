@@ -4,6 +4,16 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.5] - 2026-10-22 (build 42)
+
+### Added
+- UPI payments are now spotted on Google Pay's and PhonePe's own "Payment
+  successful" screen, so alerts and settle-ups work even when neither the
+  bank's SMS nor the app's notification comes. Turn it on in App Settings →
+  "From GPay & PhonePe Screens" (Android lists it as "TripSplit Payment
+  Detection" under Accessibility). TripSplit reads only those two apps, only
+  after you start a payment, and nothing it reads leaves your phone.
+
 ## [1.14.4] - 2026-10-22 (build 41)
 
 ### Added
