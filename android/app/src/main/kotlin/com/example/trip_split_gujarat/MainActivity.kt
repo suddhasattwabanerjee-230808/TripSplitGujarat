@@ -54,6 +54,11 @@ class MainActivity : FlutterActivity() {
                     UpiSettings.setAllEnabled(this, call.arguments as? Boolean ?: true)
                     result.success(null)
                 }
+                "smsOn" -> result.success(UpiSettings.smsEnabled(this))
+                "setSmsOn" -> {
+                    UpiSettings.setSmsEnabled(this, call.arguments as? Boolean ?: true)
+                    result.success(null)
+                }
                 "listenerOn" -> result.success(UpiNotificationListener.isAllowed(this))
                 "openListenerSettings" -> result.success(UpiNotificationListener.openSettings(this))
                 "screensOn" -> result.success(UpiScreenWatcher.isAllowed(this))

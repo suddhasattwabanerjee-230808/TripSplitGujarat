@@ -24,13 +24,17 @@ class UpiAlerts extends ChangeNotifier with WidgetsBindingObserver {
   static const _settings = MethodChannel('tripsplit/upi_settings');
 
   bool smsGranted = true;
+  bool smsOn = true; // App Settings' "From Bank SMS" switch, kept natively for the receiver
   bool listenerOn = false; // reading GPay's and PhonePe's notifications
   bool screensOn = false; // reading GPay's and PhonePe's success screens
   bool enabled = true; // the switch itself, kept natively for the receiver
   bool notificationsOn = true; // the profile's "All notifications"
 
   /// Payments can be spotted at all: screen, SMS or notification access.
-  bool get canSpot => screensOn || smsGranted || listenerOn;
+  bool get canSpot => screensOn || smsUsed || listenerOn;
+
+  /// The bank's SMS is read: allowed, and its switch on.
+  bool get smsUsed => smsGranted && smsOn;
 
   bool get on => canSpot && enabled && notificationsOn;
 
@@ -44,6 +48,7 @@ class UpiAlerts extends ChangeNotifier with WidgetsBindingObserver {
     smsGranted = await Permission.sms.isGranted.catchError((Object _) => false);
     try {
       enabled = await _settings.invokeMethod<bool>('isEnabled') ?? true;
+      smsOn = await _settings.invokeMethod<bool>('smsOn') ?? true;
       listenerOn = await _settings.invokeMethod<bool>('listenerOn') ?? false;
       screensOn = await _settings.invokeMethod<bool>('screensOn') ?? false;
     } on Exception {
@@ -51,6 +56,19 @@ class UpiAlerts extends ChangeNotifier with WidgetsBindingObserver {
     }
     notificationsOn = await ExpenseNotifier.enabled();
     notifyListeners();
+  }
+
+  /// The bank's SMS as a source, on or off. On without SMS access asks for it.
+  Future<void> setSms(BuildContext context, bool value) async {
+    smsOn = value;
+    notifyListeners();
+    try {
+      await _settings.invokeMethod<void>('setSmsOn', value);
+    } on Exception {
+      // Stays as it was; the next refresh re-syncs.
+    }
+    if (value && !smsGranted && context.mounted) await askForSms(context);
+    await refresh();
   }
 
   /// Switching on without any access runs the set-up (payment screens or bank
@@ -112,7 +130,7 @@ class UpiAlerts extends ChangeNotifier with WidgetsBindingObserver {
     );
     if (!context.mounted) return;
     if (choice == 'sms') {
-      await askForSms(context);
+      await setSms(context, true);
     } else if (choice == 'screens') {
       await askForScreens(context);
     }

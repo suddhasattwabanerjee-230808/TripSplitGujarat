@@ -4,6 +4,13 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.6] - 2026-10-22 (build 43)
+
+### Added
+- App Settings → "From Bank SMS" is now a switch: turn it off and TripSplit
+  stops reading your bank's SMS for UPI alerts and settle-ups, while the
+  GPay & PhonePe screen and notification detection keep working.
+
 ## [1.14.5] - 2026-10-22 (build 42)
 
 ### Added

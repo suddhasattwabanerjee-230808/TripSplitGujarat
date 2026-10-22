@@ -119,9 +119,12 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
           _row(
             icon: Icons.sms_outlined,
             label: 'From Bank SMS',
-            value: _upi.smsGranted ? 'Allowed' : 'Not Allowed — Tap To Allow',
-            trailing: _upi.smsGranted ? null : Icon(Icons.chevron_right_rounded, color: muted),
-            onTap: _upi.smsGranted ? null : () => _upi.askForSms(context),
+            value: !_upi.smsOn
+                ? 'Off — Bank SMS Isn’t Read'
+                : _upi.smsGranted
+                ? 'On — Reads Your Bank’s UPI SMS'
+                : 'Needs SMS Access — Switch On',
+            trailing: _switch(_upi.smsUsed, (v) => _upi.setSms(context, v)),
           ),
           _row(
             icon: Icons.account_balance_wallet_outlined,

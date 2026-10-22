@@ -41,6 +41,16 @@ object UpiSettings {
     fun setEnabled(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_ENABLED, enabled).apply()
     }
+
+    /** App Settings' "From Bank SMS" switch: off, the bank's SMS isn't read at all. */
+    private const val KEY_SMS = "sms_enabled"
+
+    fun smsEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_SMS, true)
+
+    fun setSmsEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_SMS, enabled).apply()
+    }
 }
 
 /**
@@ -99,6 +109,7 @@ object UpiSettle {
 class UpiSmsReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        if (!UpiSettings.smsEnabled(context)) return
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (messages.isNullOrEmpty()) return
         // Banks send from alphanumeric sender IDs (e.g. "VM-HDFCBK"); personal numbers are all digits.
