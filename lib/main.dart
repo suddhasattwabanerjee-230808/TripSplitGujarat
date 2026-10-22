@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_client.dart';
 import 'app_fonts.dart';
+import 'app_resume.dart';
 import 'expense_notifier.dart';
 import 'screens/expense_screen.dart';
 import 'screens/settle_screen.dart';
@@ -155,6 +156,7 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
       if (_closedAt == null) {
         _closedAt = DateTime.now();
         SharedPreferencesAsync().setInt(_closedAtKey, _closedAt!.millisecondsSinceEpoch).catchError((Object _) {});
+        AppResume.left();
       }
       setState(() {
         _splashKey = UniqueKey();
@@ -164,6 +166,8 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
     } else if (state == AppLifecycleState.resumed) {
       final away = _closedAt == null ? Duration.zero : DateTime.now().difference(_closedAt!);
       _closedAt = null;
+      // Away 10 seconds or more: back on the Trip page, at the top.
+      AppResume.cameBack(away);
       if (away < _introGap && _showSplash && !_splashFadingOut) setState(() => _showSplash = false);
     }
   }
@@ -174,6 +178,7 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
     return MaterialApp(
       title: 'TripSplit',
       navigatorKey: _navigatorKey,
+      navigatorObservers: [AppResume.observer],
       scaffoldMessengerKey: _messengerKey,
       debugShowCheckedModeBanner: false,
       theme: appThemeData(),

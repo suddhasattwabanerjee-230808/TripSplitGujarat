@@ -4,6 +4,27 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.4] - 2026-10-22 (build 41)
+
+### Added
+- UPI payment alerts without bank SMS: TripSplit can read the "paid"
+  notification Google Pay or PhonePe shows when you pay, and offer to add it
+  to your trip (or confirm a settle-up). Turn it on in App Settings → "From
+  GPay & PhonePe Notifications". If you get both an SMS and a notification
+  for one payment, you only get one alert.
+
+### Changed
+- After you add an expense, TripSplit opens the Expenses page at the top,
+  where the new expense is.
+- On the Expenses page, the photo of the person who paid comes first and is
+  shown in full, with everyone else tucked under it. The payer's name is in
+  bold.
+- Back in TripSplit within 10 seconds, it's just as you left it; after
+  longer, it opens at the top of the Trip page. Trips out to a UPI app, the
+  camera or email always come back to where you were.
+- "Continue With Google" is now black text with a soft shadow, easy to read
+  on the white button.
+
 ## [1.14.3] - 2026-10-22 (build 40)
 
 ### Added

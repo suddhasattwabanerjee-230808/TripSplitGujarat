@@ -45,7 +45,8 @@ object UpiSettings {
 
 /**
  * A settle-up payment TripSplit sent the user off to make in a UPI app. The
- * bank's debit SMS for the same amount, within [WINDOW], confirms it; the app
+ * bank's debit SMS (or the UPI app's notification) for the same amount,
+ * within [WINDOW], confirms it; the app
  * reads the result when it's back on screen and records the payment.
  */
 object UpiSettle {
@@ -99,7 +100,25 @@ class UpiSmsReceiver : BroadcastReceiver() {
         if (sender.none { it.isLetter() }) return
         val body = messages.joinToString("") { it.messageBody ?: "" }
         val txn = UpiParser.parse(body) ?: return
-        val time = messages.first().timestampMillis
+        UpiAlert.handle(context, txn, messages.first().timestampMillis)
+    }
+}
+
+/**
+ * A UPI payment made, from the bank's SMS or the UPI app's notification. The
+ * same payment often comes from both, so a second report of the same amount
+ * within [SAME_PAYMENT] is dropped.
+ */
+object UpiAlert {
+    private const val PREFS = "upi_alert"
+    private const val SAME_PAYMENT = 3 * 60 * 1000L
+
+    fun handle(context: Context, txn: UpiTxn, time: Long) {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val last = p.getString("amount", null)?.toDoubleOrNull()
+        if (last != null && kotlin.math.abs(last - txn.amount) <= 0.5 && now - p.getLong("at", 0) < SAME_PAYMENT) return
+        p.edit().putString("amount", txn.amount.toString()).putLong("at", now).commit()
         // The settle-up payment TripSplit is waiting for: it's recorded as
         // that, not offered as a new expense (whatever the alerts switch says).
         if (UpiSettle.match(context, txn, time)) return
@@ -138,9 +157,9 @@ object UpiParser {
         return UpiTxn(value, payee)
     }
 
-    private fun cleanPayee(raw: String): String? {
+    fun cleanPayee(raw: String): String? {
         val name = raw.substringBefore('@').trim()
-        if (name.isEmpty() || name.startsWith("your", true) || name.contains("a/c", true) || name.none { it.isLetter() }) {
+        if (name.isEmpty() || name.startsWith("your", true) || name.equals("you", true) || name.contains("a/c", true) || name.none { it.isLetter() }) {
             return null
         }
         return name.take(30)
@@ -163,7 +182,7 @@ object UpiNotifier {
         if (Build.VERSION.SDK_INT >= 26) {
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(
                 NotificationChannel(CHANNEL, "UPI payments", NotificationManager.IMPORTANCE_HIGH).apply {
-                    description = "Payments detected from your bank's SMS alerts"
+                    description = "Payments spotted in your bank's SMS or your UPI app's notifications"
                 },
             )
         }

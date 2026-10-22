@@ -1,5 +1,7 @@
 import 'package:flutter/services.dart';
 
+import 'app_resume.dart';
+
 enum UpiPayStatus { success, failed, unknown, noApp }
 
 /// An installed app that takes UPI payments (Google Pay, PhonePe, ...).
@@ -53,6 +55,7 @@ class UpiPay {
 
   /// Shares [png] (a payment QR) with [package]; false if it doesn't take it.
   static Future<bool> shareQr(String package, Uint8List png) async {
+    AppResume.sendingOut();
     try {
       return await _channel.invokeMethod<bool>('shareQr', {'package': package, 'png': png}) ?? false;
     } on PlatformException {
@@ -63,6 +66,7 @@ class UpiPay {
   /// Opens [package] where a copied UPI ID can be pasted to pay (Google
   /// Pay's "Pay phone number / UPI ID"), or on its home screen.
   static Future<bool> payTo(String package) async {
+    AppResume.sendingOut();
     try {
       return await _channel.invokeMethod<bool>('payTo', {'package': package}) ?? false;
     } on PlatformException {
@@ -73,6 +77,7 @@ class UpiPay {
   /// Opens [package] on its QR scanner (Google Pay, PhonePe), or on its
   /// home screen for apps we can't take straight there.
   static Future<bool> scan(String package) async {
+    AppResume.sendingOut();
     try {
       return await _channel.invokeMethod<bool>('scan', {'package': package}) ?? false;
     } on PlatformException {
@@ -91,6 +96,7 @@ class UpiPay {
     String? package,
   }) async {
     final String response;
+    AppResume.sendingOut();
     try {
       response = await _channel.invokeMethod<String>(
             'pay',

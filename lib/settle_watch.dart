@@ -11,10 +11,11 @@ import 'trip_store.dart';
 import 'upi_alerts.dart';
 
 /// A settle-up paid in a UPI app (picked, or opened on its QR scanner) is
-/// confirmed without asking: the bank's UPI debit SMS for the same amount
-/// (caught by UpiSmsReceiver, like the UPI payment alerts) marks it paid, and
-/// it's recorded here as soon as the app is back on screen. Without SMS
-/// access, or if no SMS comes in time, a snack bar offers "Mark Paid".
+/// confirmed without asking: the bank's UPI debit SMS, or GPay's or PhonePe's
+/// "paid" notification, for the same amount (caught natively, like the UPI
+/// payment alerts) marks it paid, and it's recorded here as soon as the app is
+/// back on screen. Without either access, or if nothing comes in time, a snack
+/// bar offers "Mark Paid".
 class SettleWatch with WidgetsBindingObserver {
   SettleWatch._();
   static final instance = SettleWatch._();
@@ -51,7 +52,7 @@ class SettleWatch with WidgetsBindingObserver {
         'toUserId': debt.otherId,
         'name': debt.otherName,
         'amount': amount,
-        'sms': UpiAlerts.instance.smsGranted,
+        'sms': UpiAlerts.instance.canSpot,
       }),
     );
     try {
@@ -72,7 +73,7 @@ class SettleWatch with WidgetsBindingObserver {
     }
   }
 
-  /// Looks for the bank's SMS: records the payment if it came, keeps looking
+  /// Looks for the bank's SMS or UPI app alert: records the payment if it came, keeps looking
   /// (every few seconds while on screen) if it may still come, else offers
   /// "Mark Paid".
   Future<void> check({bool firstLook = true}) async {
@@ -95,16 +96,16 @@ class SettleWatch with WidgetsBindingObserver {
         await _record(pending);
         _tell(settledText(amount, name));
       } else if (pending['sms'] == true && status['waiting'] == true) {
-        if (firstLook) _tell('Waiting for your bank’s SMS to confirm ${money(amount)} to $name…');
+        if (firstLook) _tell('Waiting for the payment alert to confirm ${money(amount)} to $name…');
         _poll?.cancel();
         _poll = Timer(const Duration(seconds: 3), () => check(firstLook: false));
       } else {
-        // No SMS access, or none came in time.
+        // No SMS or notification access, or no alert came in time.
         await cancel();
         _tell(
           pending['sms'] == true
-              ? 'No bank SMS for ${money(amount)} to $name arrived.'
-              : 'Paid ${money(amount)} to $name? Allow SMS access to confirm it by itself.',
+              ? 'No payment alert for ${money(amount)} to $name arrived.'
+              : 'Paid ${money(amount)} to $name? Allow SMS or GPay & PhonePe alerts to confirm it by itself.',
           action: SnackBarAction(label: 'Mark Paid', onPressed: () => _markPaid(pending)),
         );
       }

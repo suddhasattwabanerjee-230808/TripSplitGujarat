@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
 
 import '../api_client.dart';
+import '../app_resume.dart';
 import '../category_guess.dart';
 import '../city_photo.dart';
 import '../ledger.dart';
@@ -32,6 +33,7 @@ class TripHomeScreen extends StatefulWidget {
     required this.tripName,
     this.embedded = false,
     this.onOpenExpenses,
+    this.onExpenseAdded,
   });
   final String tripId;
   final String tripName;
@@ -41,6 +43,9 @@ class TripHomeScreen extends StatefulWidget {
 
   /// Opens the Expenses tab (where this trip's expenses are listed).
   final VoidCallback? onOpenExpenses;
+
+  /// After an expense is added here (Scan Receipt): show it on the Expenses tab.
+  final VoidCallback? onExpenseAdded;
 
   @override
   State<TripHomeScreen> createState() => _TripHomeScreenState();
@@ -58,12 +63,16 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _expensesSub;
   bool _gotExpenses = false;
 
+  /// Back to the top when the app comes back after a while away.
+  final _scroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     ApiClient.instance.rememberTrip(widget.tripId);
     _trip = _store.trips?.where((t) => t.id == widget.tripId).firstOrNull;
     _store.addListener(_onStore);
+    AppResume.fresh.addListener(_toTop);
     _expensesSub = ApiClient.instance.watchExpenseSnapshots(widget.tripId).listen(_onExpenses, onError: _onError);
     if (_trip == null) _loadAll();
   }
@@ -72,7 +81,13 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   void dispose() {
     _expensesSub?.cancel();
     _store.removeListener(_onStore);
+    AppResume.fresh.removeListener(_toTop);
+    _scroll.dispose();
     super.dispose();
+  }
+
+  void _toTop() {
+    if (_scroll.hasClients) _scroll.jumpTo(0);
   }
 
   /// Trip details (members, name) arrive live through the store; the bell
@@ -148,6 +163,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     );
     if (created == true) {
       await _loadAll();
+      widget.onExpenseAdded?.call();
     }
   }
 
@@ -226,6 +242,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
           color: accent,
           onRefresh: _refreshEverything,
           child: CustomScrollView(
+            controller: _scroll,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverPadding(

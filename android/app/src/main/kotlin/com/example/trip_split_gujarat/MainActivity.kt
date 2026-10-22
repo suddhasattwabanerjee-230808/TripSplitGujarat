@@ -54,6 +54,8 @@ class MainActivity : FlutterActivity() {
                     UpiSettings.setAllEnabled(this, call.arguments as? Boolean ?: true)
                     result.success(null)
                 }
+                "listenerOn" -> result.success(UpiNotificationListener.isAllowed(this))
+                "openListenerSettings" -> result.success(UpiNotificationListener.openSettings(this))
                 else -> result.notImplemented()
             }
         }

@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import 'app_resume.dart';
 import 'models.dart';
 import 'update_service.dart';
 
@@ -34,6 +35,7 @@ See you on the trip!''';
     required Trip trip,
     required String inviter,
   }) async {
+    AppResume.sendingOut();
     try {
       await _channel.invokeMethod<void>('compose', {
         'to': to.trim(),

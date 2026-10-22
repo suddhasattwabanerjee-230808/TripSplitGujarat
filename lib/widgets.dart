@@ -166,10 +166,15 @@ class AvatarStack extends StatelessWidget {
     this.ringColor,
     this.extraColor,
     this.extraTextColor,
+    this.firstOnTop = false,
   });
   final List<TripMember> members;
   final double size;
   final int max;
+
+  /// The first photo shown whole, the rest tucked under it to the right
+  /// (an expense's payer, then everyone else in it).
+  final bool firstOnTop;
 
   /// For stacks on a coloured surface (the trip card): the rings, and the
   /// "+N" disc's fill and text. Default to [surface], [accentSoft], [accent].
@@ -183,13 +188,17 @@ class AvatarStack extends StatelessWidget {
     final step = size * .62;
     final count = shown.length + (extra > 0 ? 1 : 0);
     if (count == 0) return const SizedBox.shrink();
+    final avatars = [
+      for (var i = 0; i < shown.length; i++)
+        Positioned(left: step * i, child: MemberAvatar.of(shown[i], size: size, ring: 2, ringColor: ringColor)),
+    ];
     return SizedBox(
       width: outer + step * (count - 1),
       height: outer,
       child: Stack(
         children: [
-          for (var i = 0; i < shown.length; i++)
-            Positioned(left: step * i, child: MemberAvatar.of(shown[i], size: size, ring: 2, ringColor: ringColor)),
+          // Painted in order: the last one is on top.
+          if (!firstOnTop) ...avatars,
           if (extra > 0)
             Positioned(
               left: step * shown.length,
@@ -208,6 +217,7 @@ class AvatarStack extends StatelessWidget {
                 ),
               ),
             ),
+          if (firstOnTop) ...avatars.reversed,
         ],
       ),
     );

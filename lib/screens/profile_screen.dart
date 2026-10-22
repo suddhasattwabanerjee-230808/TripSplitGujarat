@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../api_client.dart';
+import '../app_resume.dart';
 import '../city_photo.dart';
 import '../expense_notifier.dart';
 import '../google_auth.dart';
@@ -214,6 +215,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String? dataUri;
     if (choice != 'google') {
       // Small and square-ish: it's stored in Firestore and copied onto trips.
+      AppResume.sendingOut();
       final picked = await ImagePicker().pickImage(
         source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
         maxWidth: 320,

@@ -99,12 +99,27 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
           _row(
             icon: _upi.on ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
             label: 'UPI Payment Alerts',
-            value: !_upi.smsGranted
-                ? 'Needs SMS Access — Switch On'
+            value: !_upi.canSpot
+                ? 'Needs SMS Or Notification Access — Switch On'
                 : _upi.enabled
                 ? 'On For Every UPI Payment'
                 : 'Off',
             trailing: _switch(_notificationsOn && _upi.on, _notificationsOn ? (v) => _upi.set(context, v) : null),
+          ),
+          // Where payments are spotted: either one is enough.
+          _row(
+            icon: Icons.sms_outlined,
+            label: 'From Bank SMS',
+            value: _upi.smsGranted ? 'Allowed' : 'Not Allowed — Tap To Allow',
+            trailing: _upi.smsGranted ? null : Icon(Icons.chevron_right_rounded, color: muted),
+            onTap: _upi.smsGranted ? null : () => _upi.askForSms(context),
+          ),
+          _row(
+            icon: Icons.account_balance_wallet_outlined,
+            label: 'From GPay & PhonePe Notifications',
+            value: _upi.listenerOn ? 'Allowed — For Banks That Send No SMS' : 'Not Allowed — Tap To Allow',
+            trailing: Icon(Icons.chevron_right_rounded, color: muted),
+            onTap: () => _upi.askForAppNotifications(context),
           ),
         ]),
         const SizedBox(height: 22),

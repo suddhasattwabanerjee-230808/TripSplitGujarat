@@ -293,7 +293,7 @@ class _GoogleButton extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: Colors.white,
             disabledBackgroundColor: Colors.white,
-            foregroundColor: ink,
+            foregroundColor: Colors.black,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
               side: BorderSide(color: line),
@@ -316,7 +316,17 @@ class _GoogleButton extends StatelessWidget {
                       SizedBox(width: 12),
                       Text(
                         'Continue With Google',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: .1),
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: .1,
+                          // Black on the white button, lifted a little.
+                          shadows: [
+                            Shadow(color: Color(0x40000000), blurRadius: 3, offset: Offset(0, 1.5)),
+                            Shadow(color: Color(0x1A000000), blurRadius: 8, offset: Offset(0, 3)),
+                          ],
+                        ),
                       ),
                     ],
                   ),

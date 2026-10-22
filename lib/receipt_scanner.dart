@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'app_resume.dart';
 import 'category_guess.dart';
 
 /// What could be read off a bill photo; any field may be missing.
@@ -20,6 +21,7 @@ class ReceiptScanner {
   /// Takes (or picks) a photo and reads it on the device. Returns null if the
   /// user backs out; throws [PlatformException] if recognition fails.
   static Future<ReceiptScan?> scan({required bool fromCamera}) async {
+    AppResume.sendingOut();
     final photo = await ImagePicker().pickImage(
       source: fromCamera ? ImageSource.camera : ImageSource.gallery,
       maxWidth: 2000,

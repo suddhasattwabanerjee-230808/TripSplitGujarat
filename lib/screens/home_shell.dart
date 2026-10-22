@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../app_resume.dart';
 import '../city_photo.dart';
 import '../expense_notifier.dart';
 import '../settle_watch.dart';
@@ -57,6 +58,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _store.addListener(_onStore);
+    AppResume.fresh.addListener(_openTrip);
     _store.refresh();
     _acceptInvites();
     _startNotifications();
@@ -89,7 +91,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _store.removeListener(_onStore);
+    AppResume.fresh.removeListener(_openTrip);
     _compact.dispose();
+    _expensesTop.dispose();
     super.dispose();
   }
 
@@ -143,6 +147,20 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     });
   }
 
+  /// Back after a while away: the Trip tab (its page scrolls itself to the top).
+  void _openTrip() => _select(_trip);
+
+  /// Fires to scroll the Expenses page to the top.
+  final _expensesTop = ValueNotifier(0);
+
+  /// A new expense saved: the Expenses tab, at the top where it's listed.
+  void _showNewExpense() {
+    _select(_expenses);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _expensesTop.value++;
+    });
+  }
+
   void _select(int index) {
     _compact.value = false;
     if (index == _tab) return;
@@ -172,11 +190,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         asPage: true,
         onSaved: () {
           if (!mounted) return;
-          setState(() {
-            _addRound++;
-            _tab = _trip;
-            _visited.add(_trip);
-          });
+          setState(() => _addRound++);
+          _showNewExpense();
         },
       ),
     );
@@ -191,6 +206,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         tripName: trip.name,
         embedded: true,
         onOpenExpenses: () => _select(_expenses),
+        onExpenseAdded: _showNewExpense,
       );
     }
     return _noTrip();
@@ -198,7 +214,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   Widget _expensesPage() {
     final trip = _store.currentTrip;
-    if (trip != null) return ExpensesScreen(key: ValueKey(trip.id), tripId: trip.id);
+    if (trip != null) return ExpensesScreen(key: ValueKey(trip.id), tripId: trip.id, toTop: _expensesTop);
     return _noTrip();
   }
 

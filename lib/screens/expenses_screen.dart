@@ -143,8 +143,11 @@ const _weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /// The Expenses tab: the current trip's expenses, live.
 class ExpensesScreen extends StatefulWidget {
-  const ExpensesScreen({super.key, required this.tripId});
+  const ExpensesScreen({super.key, required this.tripId, this.toTop});
   final String tripId;
+
+  /// Scrolls the list back to the top each time it fires (a new expense).
+  final Listenable? toTop;
 
   @override
   State<ExpensesScreen> createState() => _ExpensesScreenState();
@@ -196,17 +199,20 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
         ),
       );
     }
-    return ExpensesView(trip: trip, expenses: expenses, onRefresh: _store.refresh);
+    return ExpensesView(trip: trip, expenses: expenses, onRefresh: _store.refresh, toTop: widget.toTop);
   }
 }
 
 /// The list itself, for any trip and its expenses: three views (the whole
 /// trip, one person, you), search, filters and sorting.
 class ExpensesView extends StatefulWidget {
-  const ExpensesView({super.key, required this.trip, required this.expenses, this.onRefresh});
+  const ExpensesView({super.key, required this.trip, required this.expenses, this.onRefresh, this.toTop});
   final Trip trip;
   final List<TripExpense> expenses;
   final Future<void> Function()? onRefresh;
+
+  /// Scrolls the list back to the top each time it fires.
+  final Listenable? toTop;
 
   @override
   State<ExpensesView> createState() => _ExpensesViewState();
@@ -224,6 +230,26 @@ class _ExpensesViewState extends State<ExpensesView> {
   ExpenseFilter _filter = ExpenseFilter();
   ExpenseSort _sort = ExpenseSort.newest;
   final _search = TextEditingController();
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.toTop?.addListener(_scrollToTop);
+  }
+
+  @override
+  void didUpdateWidget(ExpensesView old) {
+    super.didUpdateWidget(old);
+    if (old.toTop != widget.toTop) {
+      old.toTop?.removeListener(_scrollToTop);
+      widget.toTop?.addListener(_scrollToTop);
+    }
+  }
+
+  void _scrollToTop() {
+    if (_scroll.hasClients) _scroll.jumpTo(0);
+  }
 
   Trip get _trip => widget.trip;
   String get _meId => ApiClient.instance.currentUser?.id ?? '';
@@ -231,6 +257,8 @@ class _ExpensesViewState extends State<ExpensesView> {
 
   @override
   void dispose() {
+    widget.toTop?.removeListener(_scrollToTop);
+    _scroll.dispose();
     _search.dispose();
     super.dispose();
   }
@@ -284,6 +312,7 @@ class _ExpensesViewState extends State<ExpensesView> {
           color: accent,
           onRefresh: widget.onRefresh ?? () async {},
           child: CustomScrollView(
+            controller: _scroll,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverToBoxAdapter(child: RepaintBoundary(child: _header())),
@@ -848,18 +877,24 @@ class _ExpensesViewState extends State<ExpensesView> {
     final catColor = colorForCategory(expense.category);
     final city = cityFromLocation(expense.location);
     final focus = _view == _View.people ? _personId : null;
+    // The payer first (shown whole), then everyone else in it, tucked under.
     final people = [
-      for (final s in expense.shares) _trip.member(s.userId) ?? TripMember(id: s.userId, name: _name(s.userId)),
+      _trip.member(expense.paidBy) ?? TripMember(id: expense.paidBy, name: expense.payerName(_trip)),
+      for (final s in expense.shares)
+        if (s.userId != expense.paidBy) _trip.member(s.userId) ?? TripMember(id: s.userId, name: _name(s.userId)),
     ];
     final String title;
+    final String? payer; // in bold, before [detail]
     final String detail;
     if (expense.isSettlement) {
       final to = expense.shares.isEmpty ? null : expense.shares.first.userId;
       title = '${_name(expense.paidBy)} Paid ${to == null ? 'Back' : _name(to)}';
+      payer = null;
       detail = expense.description;
     } else {
       title = expense.description;
-      detail = '${iPaid ? 'You' : expense.payerName(_trip)} Paid${city == null ? '' : ' · $city'}';
+      payer = iPaid ? 'You' : expense.payerName(_trip);
+      detail = ' Paid${city == null ? '' : ' · $city'}';
     }
     // In the per-person view, that person's part of it; elsewhere, yours.
     final String? note;
@@ -904,8 +939,14 @@ class _ExpensesViewState extends State<ExpensesView> {
                   style: TextStyle(color: muted, fontSize: 11.5, fontFeatures: const [FontFeature.tabularFigures()]),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  detail,
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      if (payer != null)
+                        TextSpan(text: payer, style: TextStyle(color: ink, fontWeight: FontWeight.w800)),
+                      TextSpan(text: detail),
+                    ],
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: muted, fontSize: 11.5),
@@ -936,13 +977,7 @@ class _ExpensesViewState extends State<ExpensesView> {
                 ),
               ),
               const SizedBox(height: 10),
-              AvatarStack(
-                members: expense.isSettlement
-                    ? [_trip.member(expense.paidBy) ?? TripMember(id: expense.paidBy, name: expense.payerName(_trip)), ...people]
-                    : people,
-                size: 20,
-                max: 3,
-              ),
+              AvatarStack(members: people, size: 20, max: 3, firstOnTop: true),
             ],
           ),
         ],
