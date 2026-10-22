@@ -42,7 +42,7 @@ class SettleScreen extends StatelessWidget {
             _hero(context, trip, other, debt),
             const SizedBox(height: 18),
             if (debt != null)
-              SettleOptions(debt: debt, onChoose: (choice) => settleDebt(context, debt, choice))
+              SettleOptions(debt: debt, onChoose: (choice, amount) => settleDebt(context, debt, choice, amount: amount))
             else
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),

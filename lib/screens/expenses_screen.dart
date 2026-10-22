@@ -286,30 +286,30 @@ class _ExpensesViewState extends State<ExpensesView> {
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              SliverToBoxAdapter(child: _header()),
+              SliverToBoxAdapter(child: RepaintBoundary(child: _header())),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                sliver: SliverToBoxAdapter(child: _viewSwitch()),
+                sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _viewSwitch())),
               ),
               if (_view == _View.people)
-                SliverPadding(padding: const EdgeInsets.only(top: 14), sliver: SliverToBoxAdapter(child: _personPicker())),
+                SliverPadding(padding: const EdgeInsets.only(top: 14), sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _personPicker()))),
               if (_view == _View.me)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                  sliver: SliverToBoxAdapter(child: _mineChips()),
+                  sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _mineChips())),
                 ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                sliver: SliverToBoxAdapter(child: _summary(shown)),
+                sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _summary(shown))),
               ),
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-                sliver: SliverToBoxAdapter(child: _searchRow()),
+                sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _searchRow())),
               ),
               if (_filter.active > 0)
-                SliverPadding(padding: const EdgeInsets.only(top: 10), sliver: SliverToBoxAdapter(child: _activeFilters())),
+                SliverPadding(padding: const EdgeInsets.only(top: 10), sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _activeFilters()))),
               if (shown.isEmpty)
-                SliverPadding(padding: const EdgeInsets.fromLTRB(24, 40, 24, 0), sliver: SliverToBoxAdapter(child: _empty()))
+                SliverPadding(padding: const EdgeInsets.fromLTRB(24, 40, 24, 0), sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _empty())))
               else
                 ..._sections(shown),
               // Clear of the floating nav bar.

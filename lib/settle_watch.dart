@@ -46,20 +46,20 @@ class SettleWatch with WidgetsBindingObserver {
     }
   }
 
-  /// Starts waiting for [debt]'s payment.
-  Future<void> start(Debt debt) async {
+  /// Starts waiting for a payment of [amount] (all or part of [debt]).
+  Future<void> start(Debt debt, double amount) async {
     await SharedPreferencesAsync().setString(
       _key,
       jsonEncode({
         'tripId': debt.trip.id,
         'toUserId': debt.otherId,
         'name': debt.otherName,
-        'amount': debt.amount,
+        'amount': amount,
         'sms': UpiAlerts.instance.smsGranted,
       }),
     );
     try {
-      await _channel.invokeMethod<void>('expectSettle', {'amount': debt.amount});
+      await _channel.invokeMethod<void>('expectSettle', {'amount': amount});
     } on PlatformException {
       // Then it times out into "Mark Paid".
     }

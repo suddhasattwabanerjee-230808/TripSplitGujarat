@@ -438,7 +438,7 @@ Future<bool> payDebt(BuildContext context, Debt debt) async {
     );
     return false;
   }
-  final choice = await showAppSheet<String>(
+  final choice = await showAppSheet<(String, double)>(
     context,
     title: 'Pay ${debt.otherName}',
     subtitle: debt.other?.upiId == null
@@ -447,21 +447,64 @@ Future<bool> payDebt(BuildContext context, Debt debt) async {
     children: (ctx) => [
       _payAmountCard(debt),
       const SizedBox(height: 16),
-      SettleOptions(debt: debt, onChoose: (c) => Navigator.pop(ctx, c)),
+      SettleOptions(debt: debt, onChoose: (c, amount) => Navigator.pop(ctx, (c, amount))),
     ],
   );
   if (choice == null || !context.mounted) return false;
-  return settleDebt(context, debt, choice);
+  return settleDebt(context, debt, choice.$1, amount: choice.$2);
 }
 
 /// The ways to settle [debt], as [onChoose] values: `app:<package>` (pay in
 /// a UPI app), `scan:<package>` (open a UPI app's scanner on their QR),
-/// `cash`, `other` (paid some other way) and `remind`. Shown in the Pay sheet
-/// and on a balance's settle-up page.
-class SettleOptions extends StatelessWidget {
+/// `cash`, `other` (paid some other way) and `remind`, with the amount being
+/// paid: all of it, or part (typed in). Shown in the Pay sheet and on a
+/// balance's settle-up page.
+class SettleOptions extends StatefulWidget {
   const SettleOptions({super.key, required this.debt, required this.onChoose});
   final Debt debt;
-  final ValueChanged<String> onChoose;
+  final void Function(String choice, double amount) onChoose;
+
+  @override
+  State<SettleOptions> createState() => _SettleOptionsState();
+}
+
+class _SettleOptionsState extends State<SettleOptions> {
+  Debt get debt => widget.debt;
+  late final _amount = TextEditingController(text: _plain(debt.amount));
+
+  static String _plain(double v) => v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(2);
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    super.dispose();
+  }
+
+  double? get _entered => double.tryParse(_amount.text.trim().replaceAll(',', ''));
+
+  bool get _part {
+    final v = _entered;
+    return v != null && v > 0 && v < debt.amount - 0.5;
+  }
+
+  /// The amount typed in, if it's a valid one (else says so, and null).
+  double? _valid() {
+    final v = _entered;
+    if (v == null || v <= 0 || v > debt.amount + 0.5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Enter an amount up to ${money(debt.amount)}.')),
+      );
+      return null;
+    }
+    return v > debt.amount ? debt.amount : v;
+  }
+
+  /// Hands [choice] on with the amount typed in.
+  void _choose(String choice) {
+    if (choice == 'remind') return widget.onChoose(choice, debt.amount);
+    final v = _valid();
+    if (v != null) widget.onChoose(choice, v);
+  }
 
   /// With their UPI ID an app opens on the payment, filled in; without it (or
   /// for an app whose payment links are off) it opens on its scanner.
@@ -469,8 +512,10 @@ class SettleOptions extends StatelessWidget {
       debt.other?.upiId != null && app.canPay ? 'app:${app.package}' : 'scan:${app.package}';
 
   Future<void> _scan(BuildContext context) async {
-    final package = await pickUpiAppToScan(context, debt);
-    if (package != null) onChoose('scan:$package');
+    final amount = _valid();
+    if (amount == null) return;
+    final package = await pickUpiAppToScan(context, debt, amount);
+    if (package != null) widget.onChoose('scan:$package', amount);
   }
 
   @override
@@ -478,6 +523,46 @@ class SettleOptions extends StatelessWidget {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       if (debt.iOwe) ...[
+        fieldLabel('AMOUNT TO PAY'),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _amount,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
+                style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w700),
+                decoration: appInputDecoration('₹  0', Icons.currency_rupee_rounded),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ChoiceChip(
+              label: Text('Full ${money(debt.amount)}'),
+              selected: !_part,
+              onSelected: (_) => setState(() => _amount.text = _plain(debt.amount)),
+              selectedColor: accentSoft,
+              backgroundColor: surface,
+              side: BorderSide(color: !_part ? accent : line),
+              labelStyle: TextStyle(color: !_part ? accent : ink, fontWeight: FontWeight.w700, fontSize: 12),
+              showCheckmark: false,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          child: _part
+              ? Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text(
+                    'Part Payment · ${money(debt.amount - _entered!)} Stays Owed',
+                    style: TextStyle(color: accent, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                )
+              : const SizedBox(width: double.infinity),
+        ),
+        const SizedBox(height: 16),
         fieldLabel('PAY WITH UPI'),
         const SizedBox(height: 10),
         FutureBuilder<List<UpiApp>>(
@@ -493,7 +578,7 @@ class SettleOptions extends StatelessWidget {
             return Wrap(
               spacing: 10,
               runSpacing: 10,
-              children: [for (final app in apps.take(8)) _UpiAppButton(app: app, onTap: () => onChoose(_choiceFor(app)))],
+              children: [for (final app in apps.take(8)) _UpiAppButton(app: app, onTap: () => _choose(_choiceFor(app)))],
             );
           },
         ),
@@ -506,14 +591,14 @@ class SettleOptions extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: () => onChoose('cash'),
+          onPressed: () => _choose('cash'),
           icon: const Icon(Icons.payments_outlined, size: 18),
           label: const Text('I Paid In Cash'),
           style: secondaryButton(),
         ),
         const SizedBox(height: 8),
         OutlinedButton.icon(
-          onPressed: () => onChoose('other'),
+          onPressed: () => _choose('other'),
           icon: const Icon(Icons.task_alt_rounded, size: 18),
           label: const Text('I Already Paid Another Way'),
           style: secondaryButton(),
@@ -521,7 +606,7 @@ class SettleOptions extends StatelessWidget {
         const SizedBox(height: 8),
       ],
       OutlinedButton.icon(
-        onPressed: () => onChoose('remind'),
+        onPressed: () => _choose('remind'),
         icon: const Icon(Icons.alarm_add_outlined, size: 18),
         label: Text(debt.iOwe ? 'Remind Me To Settle Later' : 'Remind Me To Follow Up'),
         style: secondaryButton(),
@@ -532,10 +617,10 @@ class SettleOptions extends StatelessWidget {
 
 /// "Scan their QR": which UPI app to open on its scanner. Google Pay and
 /// PhonePe come first. The package, or null if dismissed.
-Future<String?> pickUpiAppToScan(BuildContext context, Debt debt) => showAppSheet<String>(
+Future<String?> pickUpiAppToScan(BuildContext context, Debt debt, double amount) => showAppSheet<String>(
   context,
   title: 'Scan With',
-  subtitle: 'The app opens on its scanner. Point it at ${debt.otherName}’s UPI QR and pay ${money(debt.amount)}.',
+  subtitle: 'The app opens on its scanner. Point it at ${debt.otherName}’s UPI QR and pay ${money(amount)}.',
   children: (ctx) => [
     FutureBuilder<List<UpiApp>>(
       future: UpiPay.apps(),
@@ -610,9 +695,11 @@ class _UpiAppButton extends StatelessWidget {
 /// Carries out a [SettleOptions] choice for [debt]. True once a payment was
 /// recorded (a reminder isn't one). A payment made in a UPI app that doesn't
 /// report back is confirmed from the bank's SMS by [SettleWatch], not asked.
-Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
+Future<bool> settleDebt(BuildContext context, Debt debt, String choice, {double? amount}) async {
   final messenger = ScaffoldMessenger.of(context);
   final watch = SettleWatch.instance;
+  // All of it, or the part typed in.
+  final paying = amount ?? debt.amount;
   if (choice == 'remind') {
     await pickSettleReminder(context, debt);
     return false;
@@ -624,14 +711,14 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
     final package = choice.substring(4);
     final upiId = debt.other!.upiId!;
     // Their UPI ID is known: the app opens on the payment, filled in.
-    await watch.start(debt);
+    await watch.start(debt, paying);
     watch.paying = true;
     final UpiPayStatus status;
     try {
       status = await UpiPay.pay(
         upiId: upiId,
         name: debt.otherName,
-        amount: debt.amount,
+        amount: paying,
         note: 'TripSplit · ${debt.trip.name}',
         package: package,
       );
@@ -657,7 +744,7 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
     }
   } else if (choice.startsWith('scan:')) {
     // Their QR: the app opens on its scanner; the bank's SMS confirms it.
-    await watch.start(debt);
+    await watch.start(debt, paying);
     if (!await UpiPay.scan(choice.substring(5))) {
       await watch.cancel();
       messenger.showSnackBar(const SnackBar(content: Text('Couldn’t open that app.')));
@@ -670,10 +757,10 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice) async {
       tripId: debt.trip.id,
       trip: debt.trip,
       toUserId: debt.otherId!,
-      amount: debt.amount,
+      amount: paying,
       method: method,
     );
-    messenger.showSnackBar(SnackBar(content: Text('Paid ${money(debt.amount)} to ${debt.otherName} — balances updated.')));
+    messenger.showSnackBar(SnackBar(content: Text('Paid ${money(paying)} to ${debt.otherName} — balances updated.')));
     await TripStore.instance.refresh();
     return true;
   } on ApiException catch (e) {

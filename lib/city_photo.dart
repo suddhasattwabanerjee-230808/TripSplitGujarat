@@ -129,37 +129,29 @@ class CityPhoto extends ChangeNotifier {
   }
 }
 
-/// The brand gradient with the city photo blended in: the photo toned down
-/// and washed in wine and the logo's orange, darker where text sits, so it
-/// reads as one surface. Without a photo it's the plain gradient.
+/// The brand gradient with the city photo blended in: the photo washed in
+/// wine and the logo's orange, darker where text sits, so it reads as one
+/// surface. Without a photo it's the plain gradient. Its own layer, so a
+/// scroll moves it without painting it again.
 class CityBackdrop extends StatelessWidget {
   const CityBackdrop({super.key, required this.child, this.borderRadius = BorderRadius.zero, this.boxShadow});
   final Widget child;
   final BorderRadius borderRadius;
   final List<BoxShadow>? boxShadow;
 
-  // Slightly desaturated and warmed, so every city sits in the brand's palette.
-  static const _tone = ColorFilter.matrix([
-    0.78, 0.16, 0.06, 0, 6, //
-    0.08, 0.80, 0.06, 0, 0,
-    0.06, 0.12, 0.62, 0, -6,
-    0, 0, 0, 1, 0,
-  ]);
-
   @override
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: CityPhoto.instance,
     builder: (context, _) {
       final image = CityPhoto.instance.image;
-      return Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(gradient: brandGradient, borderRadius: borderRadius, boxShadow: boxShadow),
-        child: Stack(
-          children: [
-            if (image != null)
-              Positioned.fill(
-                child: ColorFiltered(
-                  colorFilter: _tone,
+      return RepaintBoundary(
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(gradient: brandGradient, borderRadius: borderRadius, boxShadow: boxShadow),
+          child: Stack(
+            children: [
+              if (image != null) ...[
+                Positioned.fill(
                   child: Image(
                     image: image,
                     fit: BoxFit.cover,
@@ -175,40 +167,39 @@ class CityBackdrop extends StatelessWidget {
                     errorBuilder: (_, _, _) => const SizedBox.shrink(),
                   ),
                 ),
-              ),
-            if (image != null) ...[
-              // The brand wash: wine from the top left into the logo's orange.
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        wineDeep.withValues(alpha: .86),
-                        wine.withValues(alpha: .5),
-                        const Color(0xFFE0691A).withValues(alpha: .3),
-                      ],
-                      stops: const [0, .55, 1],
+                // The brand wash: wine from the top left into the logo's orange.
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          wineDeep.withValues(alpha: .86),
+                          wine.withValues(alpha: .52),
+                          const Color(0xFFE0691A).withValues(alpha: .32),
+                        ],
+                        stops: const [0, .55, 1],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              // Depth: darker towards the bottom, where the figures sit.
-              Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [wineDeep.withValues(alpha: .1), wineDeep.withValues(alpha: .55)],
+                // Depth: darker towards the bottom, where the figures sit.
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [wineDeep.withValues(alpha: .1), wineDeep.withValues(alpha: .55)],
+                      ),
                     ),
                   ),
                 ),
-              ),
+              ],
+              child,
             ],
-            child,
-          ],
+          ),
         ),
       );
     },

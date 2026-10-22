@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
 import '../city_photo.dart';
 import '../expense_notifier.dart';
-import '../models.dart';
 import '../settle_watch.dart';
 import '../theme.dart';
 import '../trip_store.dart';
@@ -20,8 +17,8 @@ import 'trip_home_screen.dart';
 import 'trips_ui.dart';
 
 /// The signed-in app: Trip (the current trip's dashboard — where the app
-/// opens), Add expense and the trip's Expenses, on a floating bar that
-/// shrinks to its icons while a page is scrolled. The profile opens from the
+/// opens), Add expense (a page with the form) and the trip's Expenses, on a
+/// floating bar whose open tab drops its name while a page is scrolled. The profile opens from the
 /// user's photo at the top of the Trip page; balances and stats from the
 /// trip's quick actions.
 class HomeShell extends StatefulWidget {
@@ -32,18 +29,21 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
-  // Tab indexes into the bar; "Add expense" (1) is an action, not a page.
-  // The app opens on the current trip's page, which is its dashboard.
+  // Tab indexes into the bar. The app opens on the current trip's page,
+  // which is its dashboard.
   static const _trip = 0, _add = 1, _expenses = 2;
   int _tab = _trip;
 
-  /// The bar shows just its icons while the page is scrolled down.
-  bool _compact = false;
+  /// The bar shows just its icons while the page is scrolled down. A notifier,
+  /// so only the bar rebuilds, not the pages under it.
+  final _compact = ValueNotifier(false);
+
+  /// Bumped after each saved expense, for a fresh, empty form.
+  int _addRound = 0;
 
   bool _onScroll(ScrollUpdateNotification n) {
     if (n.depth != 0 || n.metrics.axis != Axis.vertical) return false;
-    final compact = n.metrics.pixels > 24;
-    if (compact != _compact) setState(() => _compact = compact);
+    _compact.value = n.metrics.pixels > 24;
     return false;
   }
 
@@ -89,6 +89,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _store.removeListener(_onStore);
+    _compact.dispose();
     super.dispose();
   }
 
@@ -119,11 +120,20 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
   }
 
+  /// What the shell itself shows from the store; only a change in it
+  /// rebuilds the shell (the pages follow the store on their own), so a
+  /// tripmate's new expense doesn't rebuild every page.
+  Object? _shown;
+
   /// Picking a trip anywhere (Profile, Balance, the bell) brings up the Trip
   /// tab; switching trips on the Expenses tab stays there.
   void _onStore() {
     if (!mounted) return;
     final id = _store.currentTripId;
+    final trips = _store.trips;
+    final shown = (id, _store.currentTrip?.name, trips == null, trips?.isEmpty, _store.error);
+    if (shown == _shown) return;
+    _shown = shown;
     setState(() {
       if (id != null && _shownTripId != null && id != _shownTripId && _tab != _expenses) {
         _tab = _trip;
@@ -134,73 +144,43 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   }
 
   void _select(int index) {
-    if (index == _add) {
-      _addExpense();
-      return;
-    }
+    _compact.value = false;
+    if (index == _tab) return;
     setState(() {
       _tab = index;
       _visited.add(index);
-      _compact = false;
     });
-  }
-
-  /// Adds to the current trip; asks which trip only if none is picked yet.
-  Future<void> _addExpense() async {
-    final store = TripStore.instance;
-    if (store.trips == null) await store.refresh();
-    if (!mounted) return;
-    final trips = store.trips ?? const <Trip>[];
-    if (trips.isEmpty) {
-      await showNewTripMenu(context);
-      return;
-    }
-    Trip? trip = store.currentTrip ?? (trips.length == 1 ? trips.first : null);
-    trip ??= await showAppSheet<Trip>(
-      context,
-      title: 'Add An Expense To…',
-      children: (ctx) => [
-        groupedCard([
-          for (final t in trips)
-            InkWell(
-              onTap: () => Navigator.pop(ctx, t),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                child: Row(
-                  children: [
-                    IconCircle(icon: t.tripKind.icon, color: t.tripKind.color, size: 38),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        t.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    AvatarStack(members: t.members, size: 20, max: 3),
-                  ],
-                ),
-              ),
-            ),
-        ], indent: 64),
-      ],
-    );
-    if (trip == null || !mounted) return;
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => ExpenseSheet(tripId: trip!.id),
-    );
-    if (saved == true) await store.refresh();
   }
 
   Widget _page(int index) => switch (index) {
     _trip => _tripPage(),
+    _add => _addPage(),
     _expenses => _expensesPage(),
     _ => const SizedBox.shrink(),
   };
+
+  /// The expense form for the current trip; once saved it says so and goes
+  /// back to the trip.
+  Widget _addPage() {
+    final trip = _store.currentTrip ?? _store.trips?.firstOrNull;
+    if (trip == null) return _noTrip();
+    return Scaffold(
+      backgroundColor: paper,
+      body: ExpenseSheet(
+        key: ValueKey('add-${trip.id}-$_addRound'),
+        tripId: trip.id,
+        asPage: true,
+        onSaved: () {
+          if (!mounted) return;
+          setState(() {
+            _addRound++;
+            _tab = _trip;
+            _visited.add(_trip);
+          });
+        },
+      ),
+    );
+  }
 
   Widget _tripPage() {
     final trip = _store.currentTrip;
@@ -291,7 +271,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         onNotification: _onScroll,
         child: Stack(
           children: [
-            for (final index in [_trip, _expenses])
+            for (final index in [_trip, _add, _expenses])
               if (_visited.contains(index))
                 Offstage(
                   offstage: _tab != index,
@@ -300,39 +280,28 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ],
         ),
       ),
-      bottomNavigationBar: _NavBar(
-        current: _tab,
-        compact: _compact,
-        onSelect: _select,
-        onExpand: () => setState(() => _compact = false),
+      bottomNavigationBar: ValueListenableBuilder<bool>(
+        valueListenable: _compact,
+        builder: (context, compact, _) => _NavBar(current: _tab, compact: compact, onSelect: _select),
       ),
     );
   }
 }
 
-/// The floating bar: a frosted pill above the bottom edge, with Add raised
-/// in the middle. Full width with names at the top of a page; while the page
-/// is scrolled it shrinks to a smaller pill of icons (tap it to open it out).
+/// The floating bar: a pill of its tabs, as in ShotDrop. Trip and Expenses
+/// are icons; the open one grows into a filled pill with its name, while ＋
+/// (Add expense) in the middle never changes. While a page is scrolled the
+/// open tab drops its name too. Out of the way while the keyboard is up.
 class _NavBar extends StatelessWidget {
-  const _NavBar({required this.current, required this.compact, required this.onSelect, required this.onExpand});
+  const _NavBar({required this.current, required this.compact, required this.onSelect});
   final int current;
   final bool compact;
   final ValueChanged<int> onSelect;
-  final VoidCallback onExpand;
-
-  static const _items = [
-    (Icons.luggage_outlined, Icons.luggage_rounded, 'Trip'),
-    (Icons.add_rounded, Icons.add_rounded, 'Add'),
-    (Icons.receipt_long_outlined, Icons.receipt_long_rounded, 'Expenses'),
-  ];
-
-  static const _motion = Duration(milliseconds: 320);
-  static const _curve = Curves.easeOutCubic;
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.viewInsetsOf(context).bottom > 0) return const SizedBox.shrink();
     final dark = AppTheme.instance.dark;
-    final full = math.min(MediaQuery.sizeOf(context).width - 32, 420.0);
     return SafeArea(
       top: false,
       minimum: const EdgeInsets.only(bottom: 10),
@@ -340,61 +309,67 @@ class _NavBar extends StatelessWidget {
         padding: const EdgeInsets.only(bottom: 4),
         child: Center(
           heightFactor: 1,
-          child: GestureDetector(
-            // In its small form, a tap between the icons opens it out again.
-            onTap: compact ? onExpand : null,
-            child: AnimatedContainer(
-              duration: _motion,
-              curve: _curve,
-              width: compact ? 196 : full,
-              height: compact ? 54 : 66,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(32),
-                boxShadow: [
-                  BoxShadow(
-                    color: (dark ? Colors.black : wineDeep).withValues(alpha: dark ? .5 : .16),
-                    blurRadius: 28,
-                    offset: const Offset(0, 10),
-                  ),
-                  BoxShadow(color: (dark ? Colors.black : wineDeep).withValues(alpha: .06), blurRadius: 4, offset: const Offset(0, 1)),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(32),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: surface.withValues(alpha: dark ? .86 : .9),
-                      borderRadius: BorderRadius.circular(32),
-                      border: Border.all(color: dark ? Colors.white.withValues(alpha: .07) : line.withValues(alpha: .8)),
-                    ),
-                    child: Row(
-                      children: [
-                        for (var i = 0; i < _items.length; i++)
-                          Expanded(child: i == 1 ? _addButton() : _item(i)),
-                      ],
-                    ),
-                  ),
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              // Solid, not a live blur: blurring what scrolls behind it on
+              // every frame made scrolling stutter.
+              color: surface,
+              borderRadius: BorderRadius.circular(34),
+              border: Border.all(color: dark ? Colors.white.withValues(alpha: .08) : line),
+              boxShadow: [
+                BoxShadow(
+                  color: (dark ? Colors.black : wineDeep).withValues(alpha: dark ? .5 : .16),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
                 ),
-              ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _NavItem(
+                  icon: Icons.luggage_outlined,
+                  activeIcon: Icons.luggage_rounded,
+                  label: 'Trip',
+                  selected: current == 0,
+                  showLabel: current == 0 && !compact,
+                  onTap: () => onSelect(0),
+                ),
+                const SizedBox(width: 6),
+                _AddButton(onTap: () => onSelect(1)),
+                const SizedBox(width: 6),
+                _NavItem(
+                  icon: Icons.receipt_long_outlined,
+                  activeIcon: Icons.receipt_long_rounded,
+                  label: 'Expenses',
+                  selected: current == 2,
+                  showLabel: current == 2 && !compact,
+                  onTap: () => onSelect(2),
+                ),
+              ],
             ),
           ),
         ),
       ),
     );
   }
+}
 
-  /// The main action, in the middle of the bar.
-  Widget _addButton() => Center(
+/// Add expense: the same round button whichever tab is open.
+class _AddButton extends StatelessWidget {
+  const _AddButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: 'Add Expense',
     child: GestureDetector(
-      onTap: () => onSelect(1),
-      child: AnimatedContainer(
-        duration: _motion,
-        curve: _curve,
-        width: compact ? 42 : 50,
-        height: compact ? 42 : 50,
+      onTap: onTap,
+      child: Container(
+        width: 52,
+        height: 52,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: const LinearGradient(
@@ -402,58 +377,71 @@ class _NavBar extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [logoOrange, wineBright],
           ),
-          boxShadow: [BoxShadow(color: wine.withValues(alpha: .35), blurRadius: 14, offset: const Offset(0, 5))],
+          boxShadow: [BoxShadow(color: wine.withValues(alpha: .35), blurRadius: 12, offset: const Offset(0, 4))],
         ),
-        child: const Icon(Icons.add_rounded, color: Colors.white, size: 26, semanticLabel: 'Add Expense'),
+        child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
       ),
     ),
   );
+}
 
-  Widget _item(int i) {
-    final selected = current == i;
-    return InkResponse(
-      onTap: () => onSelect(i),
-      radius: 32,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            decoration: BoxDecoration(
-              color: selected ? accentSoft : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Icon(
-              selected ? _items[i].$2 : _items[i].$1,
-              size: 22,
-              color: selected ? accent : muted,
-              semanticLabel: _items[i].$3,
-            ),
-          ),
-          // The name, folded away in the small form.
-          AnimatedSize(
-            duration: _motion,
-            curve: _curve,
-            child: compact
-                ? const SizedBox(width: double.infinity)
-                : Padding(
-                    padding: const EdgeInsets.only(top: 2),
-                    child: Text(
-                      _items[i].$3,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                        color: selected ? ink : muted,
+/// One tab: its icon, or, when it's the open one, a filled pill with the
+/// icon and its name (the name folds away while the page is scrolled).
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.selected,
+    required this.showLabel,
+    required this.onTap,
+  });
+
+  final IconData icon, activeIcon;
+  final String label;
+  final bool selected, showLabel;
+  final VoidCallback onTap;
+
+  static const _motion = Duration(milliseconds: 280);
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    label: label,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: _motion,
+        curve: Curves.easeOutCubic,
+        height: 52,
+        padding: EdgeInsets.symmetric(horizontal: showLabel ? 18 : 16),
+        decoration: BoxDecoration(
+          color: selected ? accent : Colors.transparent,
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(selected ? activeIcon : icon, color: selected ? onAccent : ink, size: 24),
+            AnimatedSize(
+              duration: _motion,
+              curve: Curves.easeOutCubic,
+              child: showLabel
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        style: TextStyle(color: onAccent, fontWeight: FontWeight.w800, fontSize: 15),
                       ),
-                    ),
-                  ),
-          ),
-        ],
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
       ),
-    );
-  }
+    ),
+  );
 }

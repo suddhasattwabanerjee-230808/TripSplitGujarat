@@ -192,9 +192,12 @@ class _TripSplitAppState extends State<TripSplitApp> with WidgetsBindingObserver
               systemNavigationBarColor: paper,
               systemNavigationBarIconBrightness: dark ? Brightness.light : Brightness.dark,
             ),
-            // "Bold text" from the profile: every Text in bold.
+            // Bold text and text size from App Settings, on top of the phone's own.
             child: MediaQuery(
-              data: MediaQuery.of(context).copyWith(boldText: AppFonts.instance.bold || MediaQuery.boldTextOf(context)),
+              data: MediaQuery.of(context).copyWith(
+                boldText: AppFonts.instance.bold || MediaQuery.boldTextOf(context),
+                textScaler: TextScaler.linear(MediaQuery.textScalerOf(context).scale(16) / 16 * AppFonts.instance.scale),
+              ),
               child: child!,
             ),
           ),

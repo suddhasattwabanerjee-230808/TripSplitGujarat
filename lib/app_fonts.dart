@@ -76,7 +76,7 @@ const appFonts = [
   AppFont('M PLUS Rounded 1c', FontKind.rounded, 'Soft Rounded Gothic'),
 ];
 
-/// The app's typeface and the bold-text option, remembered on the phone.
+/// The app's typeface, bold text and text size, remembered on the phone.
 /// Changing either redraws every screen in place (see main.dart).
 class AppFonts extends ChangeNotifier {
   AppFonts._();
@@ -84,10 +84,15 @@ class AppFonts extends ChangeNotifier {
 
   static const _familyKey = 'trip_split.font_family.v1';
   static const _boldKey = 'trip_split.bold_text.v1';
+  static const _scaleKey = 'trip_split.text_scale.v1';
+  static const minScale = 0.85, maxScale = 1.3;
   static const _weights = [400, 500, 600, 700, 800];
 
   String family = builtInFont;
   bool bold = false;
+
+  /// Text size, on top of the phone's own: 1 is as the phone has it.
+  double scale = 1;
 
   /// Families on the phone (downloaded, or built in).
   final downloaded = <String>{builtInFont};
@@ -104,6 +109,7 @@ class AppFonts extends ChangeNotifier {
     try {
       final prefs = SharedPreferencesAsync();
       bold = await prefs.getBool(_boldKey) ?? false;
+      scale = (await prefs.getDouble(_scaleKey) ?? 1).clamp(minScale, maxScale);
       final saved = await prefs.getString(_familyKey) ?? builtInFont;
       for (final font in appFonts) {
         if (await File('${(await _dir(font.family)).path}/400.ttf').exists()) downloaded.add(font.family);
@@ -115,6 +121,14 @@ class AppFonts extends ChangeNotifier {
     } catch (_) {
       family = builtInFont;
     }
+  }
+
+  Future<void> setScale(double value) async {
+    final v = (value * 20).round() / 20; // steps of 5%
+    if (v == scale) return;
+    scale = v;
+    notifyListeners();
+    await SharedPreferencesAsync().setDouble(_scaleKey, v).catchError((Object _) {});
   }
 
   Future<void> setBold(bool on) async {

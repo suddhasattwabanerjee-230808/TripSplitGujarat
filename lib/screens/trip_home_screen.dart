@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
@@ -53,7 +53,6 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
   List<Settlement> _settlements = [];
   bool _loading = true;
   String? _error;
-  bool _fabExtended = true;
 
   final _store = TripStore.instance;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _expensesSub;
@@ -186,17 +185,6 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     ];
   }
 
-  bool _onScroll(UserScrollNotification notification) {
-    if (notification.depth != 0) return false;
-    if (notification.direction == ScrollDirection.reverse && _fabExtended) {
-      setState(() => _fabExtended = false);
-    } else if ((notification.direction == ScrollDirection.forward || notification.metrics.pixels <= 0) &&
-        !_fabExtended) {
-      setState(() => _fabExtended = true);
-    }
-    return false;
-  }
-
   Future<void> _sheet(String title, List<Widget> children) =>
       showAppSheet<void>(context, title: title, children: (_) => children);
 
@@ -237,59 +225,46 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
         child: RefreshIndicator(
           color: accent,
           onRefresh: _refreshEverything,
-          child: NotificationListener<UserScrollNotification>(
-            onNotification: _onScroll,
-            child: CustomScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              slivers: [
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(4, 4, 6, 0),
+                sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _topBar(trip))),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
+                sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _title(trip))),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _balanceCard())),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+                sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _quickOperations(trip))),
+              ),
+              if (_expenses.any((e) => !e.isSettlement))
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(4, 4, 6, 0),
-                  sliver: SliverToBoxAdapter(child: _topBar(trip)),
+                  padding: const EdgeInsets.only(top: 26),
+                  sliver: SliverToBoxAdapter(child: RepaintBoundary(child: TripInsights(trip: trip, expenses: _expenses))),
                 ),
+              // The expenses themselves live on the Expenses tab.
+              if (_expenses.isEmpty)
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(20, 2, 20, 0),
-                  sliver: SliverToBoxAdapter(child: _title(trip)),
-                ),
+                  padding: const EdgeInsets.fromLTRB(16, 36, 16, 0),
+                  sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _emptyExpenses())),
+                )
+              else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                  sliver: SliverToBoxAdapter(child: _balanceCard()),
+                  padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
+                  sliver: SliverToBoxAdapter(child: RepaintBoundary(child: _expensesLink())),
                 ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
-                  sliver: SliverToBoxAdapter(child: _quickOperations(trip)),
-                ),
-                if (_expenses.any((e) => !e.isSettlement))
-                  SliverPadding(
-                    padding: const EdgeInsets.only(top: 26),
-                    sliver: SliverToBoxAdapter(child: TripInsights(trip: trip, expenses: _expenses)),
-                  ),
-                // The expenses themselves live on the Expenses tab.
-                if (_expenses.isEmpty)
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 36, 16, 0),
-                    sliver: SliverToBoxAdapter(child: _emptyExpenses()),
-                  )
-                else
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
-                    sliver: SliverToBoxAdapter(child: _expensesLink()),
-                  ),
-                // Clear of the floating nav bar and the Add expense button.
-                SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + 84)),
-              ],
-            ),
+              // Clear of the floating nav bar.
+              SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom + 24)),
+            ],
           ),
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addExpense,
-        isExtended: _fabExtended,
-        backgroundColor: ink,
-        foregroundColor: paper,
-        elevation: 3,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Add Expense', style: TextStyle(fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -798,9 +773,21 @@ class TripHeroCard extends StatelessWidget {
 }
 
 class ExpenseSheet extends StatefulWidget {
-  const ExpenseSheet({super.key, required this.tripId, this.existing, this.startWithScan = false});
+  const ExpenseSheet({
+    super.key,
+    required this.tripId,
+    this.existing,
+    this.startWithScan = false,
+    this.asPage = false,
+    this.onSaved,
+  });
   final String tripId;
   final TripExpense? existing;
+
+  /// A full page (the bar's ＋ tab) rather than a bottom sheet: once saved it
+  /// shows "Expense Added", then calls [onSaved].
+  final bool asPage;
+  final VoidCallback? onSaved;
 
   /// Opens the camera straight away ("Scan receipt").
   final bool startWithScan;
@@ -1176,19 +1163,27 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final bottom = MediaQuery.viewInsetsOf(context).bottom;
+    final page = widget.asPage;
+    // As a page, it clears the status bar and the floating bar; as a sheet,
+    // the keyboard.
+    final bottom = page ? MediaQuery.paddingOf(context).bottom : MediaQuery.viewInsetsOf(context).bottom;
     return Container(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 24 + bottom),
-      decoration: BoxDecoration(color: paper, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+      padding: EdgeInsets.fromLTRB(20, page ? 0 : 12, 20, page ? 0 : 24 + bottom),
+      decoration: BoxDecoration(
+        color: paper,
+        borderRadius: page ? null : const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       child: SafeArea(
-        top: false,
+        top: page,
+        bottom: !page,
         child: SingleChildScrollView(
+          padding: EdgeInsets.only(top: page ? 12 : 0, bottom: page ? bottom + 24 : 0),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const SheetHandle(),
-              const SizedBox(height: 18),
+              if (!page) ...[const SheetHandle(), const SizedBox(height: 18)],
               Row(
                 children: [
                   Expanded(
@@ -1385,11 +1380,67 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
         );
       }
       TripStore.instance.refresh();
-      if (mounted) Navigator.pop(context, true);
+      if (!mounted) return;
+      if (widget.asPage) {
+        FocusScope.of(context).unfocus();
+        await showExpenseAdded(context, _tripForSheet?.name);
+        widget.onSaved?.call();
+      } else {
+        Navigator.pop(context, true);
+      }
     } on ApiException catch (e) {
       setState(() => _error = e.message);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+}
+
+/// "Expense Added": the tick animation (as on the UPI quick-add card) in a
+/// card over the screen, gone by itself after a moment.
+Future<void> showExpenseAdded(BuildContext context, String? tripName) {
+  final navigator = Navigator.of(context);
+  Timer(const Duration(milliseconds: 1700), () {
+    if (navigator.mounted && navigator.canPop()) navigator.pop();
+  });
+  return showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: Colors.black.withValues(alpha: .35),
+    transitionDuration: const Duration(milliseconds: 260),
+    transitionBuilder: (context, animation, _, child) => FadeTransition(
+      opacity: animation,
+      child: ScaleTransition(
+        scale: Tween(begin: .88, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutBack)),
+        child: child,
+      ),
+    ),
+    pageBuilder: (context, _, _) => Center(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: 230,
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(26),
+            boxShadow: softShadow(Colors.black, .2),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Lottie.asset('assets/success_check.json', width: 130, height: 130, repeat: false),
+              Text('Expense Added', style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(
+                'Added To ${tripName ?? 'Your Trip'}',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: muted, fontSize: 12.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }

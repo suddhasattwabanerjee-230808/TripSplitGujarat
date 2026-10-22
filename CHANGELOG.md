@@ -4,6 +4,28 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.0] - 2026-10-22 (build 37)
+
+### Added
+- Part settlements: Settle Up has an amount field, filled with the full
+  amount. Pay less and the rest stays owed; UPI apps, Scan QR, cash and the
+  bank-SMS check all use the amount you entered.
+- The ＋ button opens an Add Expense page. Saving shows "Expense Added",
+  then goes back to the trip.
+- App Settings, a page of its own from the profile: notifications, app
+  font, bold text, a text size slider, and updates.
+
+### Changed
+- The bottom bar works like ShotDrop's: the open tab becomes a filled pill
+  with its name, the others are icons, and ＋ stays the same. It hides
+  while the keyboard is open.
+- The Trip page no longer has its own Add Expense button.
+
+### Fixed
+- Smoother scrolling: the bottom bar no longer blurs what's behind it,
+  the trip page's sections and the city photo aren't repainted on every
+  frame, and a tripmate's change no longer redraws every page.
+
 ## [1.13.0] - 2026-10-22 (build 36)
 
 ### Added

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:package_info_plus/package_info_plus.dart';
 
 import '../api_client.dart';
 import '../city_photo.dart';
@@ -13,17 +12,13 @@ import '../ledger.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../trip_store.dart';
-import '../app_fonts.dart';
 import '../update_service.dart';
-import '../upi_alerts.dart';
 import '../widgets.dart';
-import 'font_screen.dart';
+import 'app_settings_screen.dart';
 import 'login_screen.dart';
 import 'trips_ui.dart';
-import 'update_dialog.dart';
 
 final _owe = negative;
-final _hairline = line;
 
 /// The signed-in user's Google photo, or their initials on a member colour.
 /// Wrapped in a [Hero] so it flies between the home header and the profile.
@@ -139,15 +134,10 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  static const _upiSettings = MethodChannel('tripsplit/upi_settings');
-
-  bool _notificationsOn = true;
   final _updates = Updates.instance;
-  final _upi = UpiAlerts.instance;
   bool _deleting = false;
   bool _savingPhoto = false;
   AppUser? _user = ApiClient.instance.currentUser;
-  PackageInfo? _packageInfo;
   bool _linking = false;
 
   int? get _tripCount => TripStore.instance.trips?.length;
@@ -166,8 +156,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     TripStore.instance.removeListener(_onStore);
     _updates.removeListener(_onStore);
-    _upi.removeListener(_onStore);
-    AppFonts.instance.removeListener(_onStore);
     CityPhoto.instance.removeListener(_onStore);
     super.dispose();
   }
@@ -177,16 +165,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.initState();
     TripStore.instance.addListener(_onStore);
     _updates.addListener(_onStore);
-    _upi.addListener(_onStore);
-    AppFonts.instance.addListener(_onStore);
     CityPhoto.instance.addListener(_onStore);
-    _upi.refresh();
-    ExpenseNotifier.enabled().then((on) {
-      if (mounted) setState(() => _notificationsOn = on);
-    });
-    PackageInfo.fromPlatform().then((info) {
-      if (mounted) setState(() => _packageInfo = info);
-    });
     _refresh();
   }
 
@@ -323,19 +302,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  /// The master switch: off silences expense alerts, settle-up reminders
-  /// and UPI payment alerts alike.
-  Future<void> _setNotifications(bool on) async {
-    setState(() => _notificationsOn = on);
-    await ExpenseNotifier.setEnabled(on);
-    try {
-      await _upiSettings.invokeMethod<void>('setAllEnabled', on);
-    } on Exception {
-      // The UPI receiver keeps its own switch.
-    }
-    await _upi.refresh();
-  }
-
   Future<void> _signOut() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -428,7 +394,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
                   slivers: [
-                    SliverToBoxAdapter(child: _header(user)),
+                    SliverToBoxAdapter(child: RepaintBoundary(child: _header(user))),
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
                       sliver: SliverList.list(
@@ -439,87 +405,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           _sectionLabel('YOUR TRIPS'),
                           ..._trips(),
                           const SizedBox(height: 22),
-                          _sectionLabel('APP'),
-                          _card([
-                            _row(
-                              icon: _notificationsOn ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
-                              label: 'All Notifications',
-                              value: _notificationsOn ? 'Expenses, Reminders And UPI Alerts' : 'Off: TripSplit Stays Quiet',
-                              trailing: Switch(
-                                value: _notificationsOn,
-                                onChanged: _setNotifications,
-                                activeThumbColor: Colors.white,
-                                activeTrackColor: accent,
-                              ),
-                            ),
-                            _row(
-                              icon: _upi.on ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
-                              label: 'UPI Payment Alerts',
-                              value: !_upi.smsGranted
-                                  ? 'Needs SMS Access — Switch On'
-                                  : _upi.enabled
-                                  ? 'On For Every UPI Payment'
-                                  : 'Off',
-                              trailing: Switch(
-                                value: _notificationsOn && _upi.on,
-                                onChanged: _notificationsOn ? (v) => _upi.set(context, v) : null,
-                                activeThumbColor: Colors.white,
-                                activeTrackColor: accent,
-                              ),
-                            ),
-                            _row(
-                              icon: Icons.text_fields_rounded,
-                              label: 'App Font',
-                              value: AppFonts.instance.family,
-                              trailing: Icon(Icons.chevron_right_rounded, color: muted),
-                              onTap: () {
-                                AppFonts.instance.registerAll();
-                                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const FontScreen()));
-                              },
-                            ),
-                            _row(
-                              icon: Icons.format_bold_rounded,
-                              label: 'Bold Text',
-                              value: AppFonts.instance.bold ? 'Every Word In Bold' : 'Off',
-                              trailing: Switch(
-                                value: AppFonts.instance.bold,
-                                onChanged: AppFonts.instance.setBold,
-                                activeThumbColor: Colors.white,
-                                activeTrackColor: accent,
-                              ),
-                            ),
-                            _row(
-                              icon: Icons.update_rounded,
-                              label: 'Check For Updates At Launch',
-                              value: _updates.atLaunch ? 'Tells You When A New Version Is Out' : 'Off',
-                              trailing: Switch(
-                                value: _updates.atLaunch,
-                                onChanged: _updates.setAtLaunch,
-                                activeThumbColor: Colors.white,
-                                activeTrackColor: accent,
-                              ),
-                            ),
-                            _row(
-                              icon: Icons.system_update_outlined,
-                              label: _updates.available ? 'Update To ${_updates.latest!.versionName}' : 'Check For Updates',
-                              value: _packageInfo == null
-                                  ? '…'
-                                  : 'This Phone Has v${_packageInfo!.version} · Build ${_packageInfo!.buildNumber}',
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (_updates.available)
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
-                                    ),
-                                  Icon(Icons.chevron_right_rounded, color: muted),
-                                ],
-                              ),
-                              onTap: () => showUpdateSheet(context),
-                            ),
-                          ]),
+                          _settingsButton(),
                           const SizedBox(height: 26),
                           SizedBox(
                             height: 52,
@@ -899,6 +785,49 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ];
   }
 
+  /// App Settings (notifications, font, text size, updates), on its own page.
+  Widget _settingsButton() => Material(
+    color: surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(cardRadius),
+      side: BorderSide(color: line.withValues(alpha: .7)),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AppSettingsScreen())),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 12, 14),
+        child: Row(
+          children: [
+            const IconCircle(icon: Icons.tune_rounded, size: 40),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('App Settings', style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Notifications, Font, Text Size, Updates',
+                    style: TextStyle(color: muted, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            if (_updates.available)
+              Container(
+                width: 8,
+                height: 8,
+                margin: const EdgeInsets.only(right: 6),
+                decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+              ),
+            Icon(Icons.chevron_right_rounded, color: muted),
+          ],
+        ),
+      ),
+    ),
+  );
+
   Widget _sectionLabel(String text) => Padding(
     padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
     child: Text(
@@ -907,55 +836,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ),
   );
 
-  Widget _card(List<Widget> rows) => Container(
-    clipBehavior: Clip.antiAlias,
-    decoration: cardDecoration(),
-    child: Column(
-      children: [
-        for (var i = 0; i < rows.length; i++) ...[
-          if (i > 0) Divider(height: 1, indent: 58, color: _hairline),
-          rows[i],
-        ],
-      ],
-    ),
-  );
 
-  Widget _row({
-    required IconData icon,
-    required String label,
-    required String value,
-    Widget? trailing,
-    VoidCallback? onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: muted),
-            const SizedBox(width: 22),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label, style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 2),
-                  Text(
-                    value,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
-            if (trailing != null) ...[const SizedBox(width: 8), trailing],
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 /// A one-field profile edit (name, UPI ID).
