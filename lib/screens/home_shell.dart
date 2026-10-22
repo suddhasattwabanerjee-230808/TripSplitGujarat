@@ -298,6 +298,9 @@ class _NavBar extends StatelessWidget {
   final bool compact;
   final ValueChanged<int> onSelect;
 
+  /// Room between the three buttons, so the bar breathes.
+  static const _gap = 18.0;
+
   @override
   Widget build(BuildContext context) {
     if (MediaQuery.viewInsetsOf(context).bottom > 0) return const SizedBox.shrink();
@@ -310,7 +313,7 @@ class _NavBar extends StatelessWidget {
         child: Center(
           heightFactor: 1,
           child: Container(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               // Solid, not a live blur: blurring what scrolls behind it on
               // every frame made scrolling stutter.
@@ -336,9 +339,9 @@ class _NavBar extends StatelessWidget {
                   showLabel: current == 0 && !compact,
                   onTap: () => onSelect(0),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: _gap),
                 _AddButton(onTap: () => onSelect(1)),
-                const SizedBox(width: 6),
+                const SizedBox(width: _gap),
                 _NavItem(
                   icon: Icons.receipt_long_outlined,
                   activeIcon: Icons.receipt_long_rounded,
@@ -416,7 +419,7 @@ class _NavItem extends StatelessWidget {
         duration: _motion,
         curve: Curves.easeOutCubic,
         height: 52,
-        padding: EdgeInsets.symmetric(horizontal: showLabel ? 18 : 16),
+        padding: EdgeInsets.symmetric(horizontal: showLabel ? 20 : 18),
         decoration: BoxDecoration(
           color: selected ? accent : Colors.transparent,
           borderRadius: BorderRadius.circular(28),

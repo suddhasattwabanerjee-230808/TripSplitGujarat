@@ -25,10 +25,6 @@ class SettleWatch with WidgetsBindingObserver {
   /// Where the results are told (the app's messenger).
   ScaffoldMessengerState? Function()? messenger;
 
-  /// Set while a UPI app has a filled-in payment open: its own answer comes
-  /// back first, so the SMS check waits.
-  bool paying = false;
-
   Timer? _poll;
   bool _busy = false;
 
@@ -80,7 +76,7 @@ class SettleWatch with WidgetsBindingObserver {
   /// (every few seconds while on screen) if it may still come, else offers
   /// "Mark Paid".
   Future<void> check({bool firstLook = true}) async {
-    if (paying || _busy) return;
+    if (_busy) return;
     _busy = true;
     try {
       final raw = await SharedPreferencesAsync().getString(_key);

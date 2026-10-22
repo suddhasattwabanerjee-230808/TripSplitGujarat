@@ -4,6 +4,23 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.1] - 2026-10-22 (build 38)
+
+### Fixed
+- Paying a tripmate in a UPI app: their UPI ID is now copied and the app
+  opens for you to paste it (Google Pay straight on "Pay phone number /
+  UPI ID"), instead of a filled-in payment link, which UPI apps often
+  decline for personal UPI IDs. Your bank's SMS still confirms the payment
+  and updates the balances.
+
+### Changed
+- Add Expense fits on one screen: what and amount side by side, when and
+  location side by side, and six categories as tiles (Food, Stay,
+  Transport, Fuel, Shopping, Activities) plus Other. Groceries, Rent,
+  Utilities and custom categories are gone from the form; older expenses
+  keep theirs.
+- More room between the bottom bar's buttons.
+
 ## [1.14.0] - 2026-10-22 (build 37)
 
 ### Added

@@ -443,7 +443,7 @@ Future<bool> payDebt(BuildContext context, Debt debt) async {
     title: 'Pay ${debt.otherName}',
     subtitle: debt.other?.upiId == null
         ? '${debt.otherName} hasn’t added a UPI ID: pick your UPI app and scan their QR.'
-        : 'Pick your UPI app: it opens with ${debt.otherName}’s UPI ID and the amount filled in.',
+        : 'Pick your UPI app: ${debt.otherName}’s UPI ID is copied for you to paste there.',
     children: (ctx) => [
       _payAmountCard(debt),
       const SizedBox(height: 16),
@@ -506,10 +506,9 @@ class _SettleOptionsState extends State<SettleOptions> {
     if (v != null) widget.onChoose(choice, v);
   }
 
-  /// With their UPI ID an app opens on the payment, filled in; without it (or
-  /// for an app whose payment links are off) it opens on its scanner.
-  String _choiceFor(UpiApp app) =>
-      debt.other?.upiId != null && app.canPay ? 'app:${app.package}' : 'scan:${app.package}';
+  /// With their UPI ID, it's copied and the app opens to paste it; without
+  /// it, the app opens on its scanner.
+  String _choiceFor(UpiApp app) => debt.other?.upiId != null ? 'app:${app.package}' : 'scan:${app.package}';
 
   Future<void> _scan(BuildContext context) async {
     final amount = _valid();
@@ -693,8 +692,8 @@ class _UpiAppButton extends StatelessWidget {
 }
 
 /// Carries out a [SettleOptions] choice for [debt]. True once a payment was
-/// recorded (a reminder isn't one). A payment made in a UPI app that doesn't
-/// report back is confirmed from the bank's SMS by [SettleWatch], not asked.
+/// recorded (a reminder isn't one). A payment made in a UPI app is confirmed
+/// from the bank's SMS by [SettleWatch], not asked.
 Future<bool> settleDebt(BuildContext context, Debt debt, String choice, {double? amount}) async {
   final messenger = ScaffoldMessenger.of(context);
   final watch = SettleWatch.instance;
@@ -708,40 +707,27 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice, {double?
   // Nothing to fill a payment in with: scan their QR in that app instead.
   if (choice.startsWith('app:') && debt.other?.upiId == null) choice = 'scan:${choice.substring(4)}';
   if (choice.startsWith('app:')) {
+    // Their UPI ID, copied for pasting into the app's "Pay UPI ID": a
+    // filled-in UPI payment link from another app is often declined for a
+    // personal UPI ID, a payment the user starts in the app isn't. The
+    // bank's SMS then confirms it.
     final package = choice.substring(4);
     final upiId = debt.other!.upiId!;
-    // Their UPI ID is known: the app opens on the payment, filled in.
+    await Clipboard.setData(ClipboardData(text: upiId));
     await watch.start(debt, paying);
-    watch.paying = true;
-    final UpiPayStatus status;
-    try {
-      status = await UpiPay.pay(
-        upiId: upiId,
-        name: debt.otherName,
-        amount: paying,
-        note: 'TripSplit · ${debt.trip.name}',
-        package: package,
-      );
-    } finally {
-      watch.paying = false;
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 6),
+        content: Text('$upiId copied — in the app, choose Pay UPI ID, paste it and pay ${money(paying)}.'),
+      ),
+    );
+    // A moment to read that before the app opens.
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (!await UpiPay.payTo(package)) {
+      await watch.cancel();
+      messenger.showSnackBar(SnackBar(content: Text('Couldn’t open that app. $upiId is copied — pay from any app.')));
     }
-    switch (status) {
-      case UpiPayStatus.noApp:
-        await watch.cancel();
-        await Clipboard.setData(ClipboardData(text: upiId));
-        messenger.showSnackBar(SnackBar(content: Text('Couldn’t open that app. $upiId copied — pay from any app.')));
-        return false;
-      case UpiPayStatus.failed:
-        await watch.cancel();
-        messenger.showSnackBar(const SnackBar(content: Text('The payment didn’t go through.')));
-        return false;
-      case UpiPayStatus.unknown:
-        // The app didn't say: the bank's SMS will.
-        await watch.check();
-        return false;
-      case UpiPayStatus.success:
-        await watch.cancel();
-    }
+    return false;
   } else if (choice.startsWith('scan:')) {
     // Their QR: the app opens on its scanner; the bank's SMS confirms it.
     await watch.start(debt, paying);

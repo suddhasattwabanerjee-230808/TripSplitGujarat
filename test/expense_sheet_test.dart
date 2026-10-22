@@ -20,8 +20,10 @@ const _trip = Trip(
   ],
 );
 
-bool _selected(WidgetTester tester, String label) =>
-    tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, label)).selected;
+bool _selected(WidgetTester tester, String label) => tester
+    .widget<Semantics>(find.ancestor(of: find.text(label), matching: find.byType(Semantics)).first)
+    .properties
+    .selected!;
 
 void main() {
   setUp(() {
@@ -68,12 +70,12 @@ void main() {
     expect(find.textContaining('Only Priya owes this'), findsOneWidget);
 
     // A manual pick sticks until the description clearly says otherwise.
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Shopping'));
+    await tester.tap(find.text('Shopping'));
     await tester.pump();
     await tester.enterText(fields.at(0), 'Dinner at Manek Chowk with mom');
     await tester.pump();
     expect(_selected(tester, 'Food'), isTrue); // "dinner" is still clear
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Shopping'));
+    await tester.tap(find.text('Shopping'));
     await tester.enterText(fields.at(0), 'Gift for mom');
     await tester.pump();
     expect(_selected(tester, 'Shopping'), isTrue);

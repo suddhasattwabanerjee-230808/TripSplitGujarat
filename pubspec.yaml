@@ -1,7 +1,7 @@
 name: trip_split_gujarat
 description: Multi-user, multi-trip expense splitter with Google sign-in and Google Maps location picking.
 publish_to: 'none'
-version: 1.14.0+37
+version: 1.14.1+38
 
 environment:
   sdk: '>=3.11.0 <4.0.0'

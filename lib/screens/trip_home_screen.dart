@@ -1,10 +1,10 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:lottie/lottie.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
 import '../category_guess.dart';
@@ -799,8 +799,6 @@ class ExpenseSheet extends StatefulWidget {
 }
 
 class _ExpenseSheetState extends State<ExpenseSheet> {
-  static const _customKey = 'trip_split.custom_categories.v1';
-
   late final _title = TextEditingController(text: widget.existing?.description ?? '');
   late final _amount = TextEditingController(
     text: widget.existing != null ? widget.existing!.amount.toStringAsFixed(0) : '',
@@ -814,7 +812,6 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
   // whoever the expense was already split between (edit).
   Set<String>? _splitWith;
   late DateTime _dateTime = widget.existing?.dateTime ?? DateTime.now();
-  List<String> _custom = [];
   String? _location;
   bool _locatingNow = false;
   bool _scanning = false;
@@ -827,7 +824,6 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     super.initState();
     _title.addListener(_onTitleChanged);
     _location = widget.existing?.location;
-    _loadCustomCategories();
     if (widget.isEditing) {
       _refreshLocation();
     } else if (widget.startWithScan) {
@@ -842,9 +838,10 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     if (_title.text == _lastTitle) return;
     _lastTitle = _title.text;
     final next = followDescription(current: _category, auto: _categoryAuto, description: _title.text);
-    if (next.category == _category && next.auto == _categoryAuto) return;
+    final category = next.auto ? formCategoryFor(next.category) : next.category;
+    if (category == _category && next.auto == _categoryAuto) return;
     setState(() {
-      _category = next.category;
+      _category = category;
       _categoryAuto = next.auto;
     });
   }
@@ -863,74 +860,6 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     if (!chosen.remove(member.id)) chosen.add(member.id);
     if (chosen.isEmpty) return; // someone has to owe it
     setState(() => _splitWith = chosen);
-  }
-
-  Future<void> _loadCustomCategories() async {
-    final saved = (await SharedPreferences.getInstance()).getStringList(_customKey) ?? [];
-    final current = widget.existing?.category;
-    if (!mounted) return;
-    setState(() {
-      _custom = [
-        ...saved,
-        if (current != null && !isBuiltInCategory(current) && !saved.contains(current)) current,
-      ];
-    });
-  }
-
-  Future<void> _addCustomCategory() async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: surface,
-        title: const Text('New Category', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 24,
-          textCapitalization: TextCapitalization.words,
-          decoration: appInputDecoration('e.g. Gifts, Tickets, Medicine', Icons.sell_outlined),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            style: primaryButton(radius: 12),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (name == null || name.isEmpty || !mounted) return;
-    final existing = [...categoryOrder, ..._custom].firstWhere(
-      (c) => c.toLowerCase() == name.toLowerCase(),
-      orElse: () => '',
-    );
-    if (existing.isNotEmpty) {
-      setState(() {
-        _category = existing;
-        _categoryAuto = false;
-      });
-      return;
-    }
-    setState(() {
-      _custom = [..._custom, name];
-      _category = name;
-      _categoryAuto = false;
-    });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_customKey, [...(prefs.getStringList(_customKey) ?? []), name]);
-  }
-
-  Future<void> _removeCustomCategory(String name) async {
-    setState(() {
-      _custom = _custom.where((c) => c != name).toList();
-      if (_category == name) _category = 'Other';
-    });
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_customKey, (prefs.getStringList(_customKey) ?? []).where((c) => c != name).toList());
   }
 
   Future<void> _scan({required bool fromCamera}) async {
@@ -955,8 +884,8 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
         if (result.title != null && _title.text.trim().isEmpty) _title.text = result.title!;
         if (result.amount != null) _amount.text = _plainAmount(result.amount!);
         if (result.date != null) _dateTime = result.date!;
-        if (result.category != null && result.category != 'Other') {
-          _category = result.category!;
+        if (result.category != null && formCategoryFor(result.category!) != 'Other') {
+          _category = formCategoryFor(result.category!);
           _categoryAuto = true;
         }
         _scanNote = result.amount == null
@@ -1093,46 +1022,64 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     });
   }
 
-  Widget _categoryChip(String c, {bool custom = false}) {
-    final selected = _category == c;
-    final color = colorForCategory(c);
-    return GestureDetector(
-      onLongPress: custom ? () => _confirmRemove(c) : null,
-      child: ChoiceChip(
-        label: Text(c),
-        avatar: Icon(iconForCategory(c), size: 16, color: selected ? color : muted),
-        selected: selected,
-        onSelected: (_) => setState(() {
-          _category = c;
-          _categoryAuto = false;
-        }),
-        showCheckmark: false,
-        selectedColor: color.withValues(alpha: .12),
-        backgroundColor: surface,
-        side: BorderSide(color: selected ? color.withValues(alpha: .45) : line),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: selected ? ink : muted),
-      ),
+  /// The categories, three to a row, with Other (or an older expense's own
+  /// category, which the form no longer offers) closing the second row.
+  /// Tiles with the icon over the name, so every name fits.
+  Widget _categoryGrid() {
+    final last = formCategories.contains(_category) ? 'Other' : _category;
+    Widget row(List<String> cats) => Row(
+      children: [
+        for (final (i, c) in cats.indexed) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(child: _categoryTile(c)),
+        ],
+      ],
+    );
+    return Column(
+      children: [
+        row(formCategories.sublist(0, 3)),
+        const SizedBox(height: 8),
+        row([...formCategories.sublist(3), last]),
+      ],
     );
   }
 
-  Future<void> _confirmRemove(String c) async {
-    final remove = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: surface,
-        title: Text('Remove “$c”?', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-        content: const Text('It disappears from this list. Expenses already saved with it keep it.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('Remove', style: TextStyle(color: negative)),
+  Widget _categoryTile(String c) {
+    final selected = _category == c;
+    final color = colorForCategory(c);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: c,
+      child: GestureDetector(
+        onTap: () => setState(() {
+          _category = c;
+          _categoryAuto = false;
+        }),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 4),
+          decoration: BoxDecoration(
+            color: selected ? color.withValues(alpha: .13) : surface,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: selected ? color.withValues(alpha: .55) : line, width: selected ? 1.4 : 1),
           ),
-        ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(iconForCategory(c), size: 20, color: selected ? color : muted),
+              const SizedBox(height: 4),
+              Text(
+                c,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, fontWeight: selected ? FontWeight.w700 : FontWeight.w600, color: selected ? ink : muted),
+              ),
+            ],
+          ),
+        ),
       ),
     );
-    if (remove == true) _removeCustomCategory(c);
   }
 
   Widget _pickerRow({required IconData icon, required Color iconColor, required String text, required VoidCallback onTap, Widget? trailing}) =>
@@ -1167,178 +1114,214 @@ class _ExpenseSheetState extends State<ExpenseSheet> {
     // As a page, it clears the status bar and the floating bar; as a sheet,
     // the keyboard.
     final bottom = page ? MediaQuery.paddingOf(context).bottom : MediaQuery.viewInsetsOf(context).bottom;
-    return Container(
-      padding: EdgeInsets.fromLTRB(20, page ? 0 : 12, 20, page ? 0 : 24 + bottom),
-      decoration: BoxDecoration(
-        color: paper,
-        borderRadius: page ? null : const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: SafeArea(
-        top: page,
-        bottom: !page,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(top: page ? 12 : 0, bottom: page ? bottom + 24 : 0),
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!page) ...[const SheetHandle(), const SizedBox(height: 18)],
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.isEditing ? 'Edit Expense' : 'Add An Expense',
-                          style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
-                        ),
-                        const SizedBox(height: 3),
-                        Text('Split equally between the people you pick.', style: TextStyle(color: muted, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  if (!widget.isEditing)
-                    PopupMenuButton<bool>(
-                      tooltip: 'Scan Receipt',
-                      enabled: !_scanning,
-                      color: surface,
-                      onSelected: (fromCamera) => _scan(fromCamera: fromCamera),
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: true, child: Text('Take A Photo Of The Bill')),
-                        PopupMenuItem(value: false, child: Text('Choose From Gallery')),
-                      ],
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(color: accentSoft, borderRadius: BorderRadius.circular(20)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _scanning
-                                ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: accent))
-                                : Icon(Icons.document_scanner_outlined, size: 17, color: accent),
-                            const SizedBox(width: 6),
-                            Text(
-                              _scanning ? 'Reading…' : 'Scan',
-                              style: TextStyle(color: accent, fontSize: 12.5, fontWeight: FontWeight.w700),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              AnimatedSize(
-                duration: const Duration(milliseconds: 200),
-                child: _scanNote == null
-                    ? const SizedBox(width: double.infinity)
-                    : Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(top: 14),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(color: accentSoft, borderRadius: BorderRadius.circular(12)),
-                        child: Row(
-                          children: [
-                            Icon(Icons.auto_awesome_outlined, size: 16, color: accent),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(_scanNote!, style: TextStyle(color: ink, fontSize: 12.5))),
-                          ],
-                        ),
-                      ),
-              ),
-              const SizedBox(height: 20),
-              fieldLabel('WHAT WAS IT?'),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _title,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: appInputDecoration('e.g. Dinner at Manek Chowk', Icons.edit_outlined),
-              ),
-              const SizedBox(height: 16),
-              fieldLabel('AMOUNT'),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _amount,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (_) => setState(() {}), // keeps "₹… each" current
-                decoration: appInputDecoration('₹  0', Icons.currency_rupee_rounded),
-              ),
-              _splitSection(),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  fieldLabel('CATEGORY'),
-                  if (_categoryAuto) ...[
-                    const SizedBox(width: 6),
-                    Icon(Icons.auto_awesome_outlined, size: 11, color: accent),
-                    const SizedBox(width: 3),
-                    Text('auto', style: TextStyle(color: accent, fontSize: 9, fontWeight: FontWeight.w800)),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 9),
-              Wrap(
-                spacing: 7,
-                runSpacing: 7,
-                children: [
-                  for (final c in categoryOrder) _categoryChip(c),
-                  for (final c in _custom) _categoryChip(c, custom: true),
-                  ActionChip(
-                    label: const Text('New'),
-                    avatar: Icon(Icons.add_rounded, size: 16, color: accent),
-                    onPressed: _addCustomCategory,
-                    backgroundColor: surface,
-                    side: BorderSide(color: accent.withValues(alpha: .35)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    labelStyle: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: accent),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              fieldLabel('WHEN'),
-              const SizedBox(height: 9),
-              _pickerRow(
-                icon: Icons.schedule_outlined,
-                iconColor: muted,
-                text: formatDateAndTime(_dateTime),
-                onTap: _pickDateTime,
-              ),
-              const SizedBox(height: 16),
-              fieldLabel('LOCATION'),
-              const SizedBox(height: 9),
-              _pickerRow(
-                icon: Icons.location_on_outlined,
-                iconColor: accent,
-                text: _locatingNow ? 'Finding Your Location…' : (_location ?? 'Tap To Choose On Map'),
-                onTap: _openLocationPicker,
-                trailing: _locatingNow
-                    ? SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: accent))
-                    : null,
-              ),
-              const SizedBox(height: 18),
-              if (_error != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Text(_error!, style: TextStyle(color: negative, fontSize: 12)),
+    final fields = <Widget>[
+      if (!page) ...[const SheetHandle(), const SizedBox(height: 18)],
+      Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.isEditing ? 'Edit Expense' : 'Add An Expense',
+                  style: TextStyle(color: ink, fontSize: 21, fontWeight: FontWeight.w700, letterSpacing: -.4),
                 ),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: FilledButton(
-                  onPressed: _busy || _scanning ? null : _save,
-                  style: primaryButton(radius: 16),
-                  child: _busy
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: onAccent),
-                        )
-                      : Text(widget.isEditing ? 'Save Changes' : 'Save Expense'),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
+          if (!widget.isEditing)
+            PopupMenuButton<bool>(
+              tooltip: 'Scan Receipt',
+              enabled: !_scanning,
+              color: surface,
+              onSelected: (fromCamera) => _scan(fromCamera: fromCamera),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: true, child: Text('Take A Photo Of The Bill')),
+                PopupMenuItem(value: false, child: Text('Choose From Gallery')),
+              ],
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(color: accentSoft, borderRadius: BorderRadius.circular(20)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _scanning
+                        ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: accent))
+                        : Icon(Icons.document_scanner_outlined, size: 17, color: accent),
+                    const SizedBox(width: 6),
+                    Text(
+                      _scanning ? 'Reading…' : 'Scan',
+                      style: TextStyle(color: accent, fontSize: 12.5, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+      AnimatedSize(
+        duration: const Duration(milliseconds: 200),
+        child: _scanNote == null
+            ? const SizedBox(width: double.infinity)
+            : Container(
+                width: double.infinity,
+                margin: const EdgeInsets.only(top: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(color: accentSoft, borderRadius: BorderRadius.circular(12)),
+                child: Row(
+                  children: [
+                    Icon(Icons.auto_awesome_outlined, size: 16, color: accent),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(_scanNote!, style: TextStyle(color: ink, fontSize: 12.5))),
+                  ],
+                ),
+              ),
+      ),
+      const SizedBox(height: 16),
+      // What it was and how much, side by side.
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                fieldLabel('WHAT WAS IT?'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _title,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: appInputDecoration('e.g. Dinner', Icons.edit_outlined),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                fieldLabel('AMOUNT'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _amount,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  onChanged: (_) => setState(() {}), // keeps "₹… each" current
+                  decoration: appInputDecoration('0', Icons.currency_rupee_rounded),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      _splitSection(),
+      const SizedBox(height: 14),
+      Row(
+        children: [
+          fieldLabel('CATEGORY'),
+          if (_categoryAuto) ...[
+            const SizedBox(width: 6),
+            Icon(Icons.auto_awesome_outlined, size: 11, color: accent),
+            const SizedBox(width: 3),
+            Text('Auto', style: TextStyle(color: accent, fontSize: 9, fontWeight: FontWeight.w800)),
+          ],
+        ],
+      ),
+      const SizedBox(height: 9),
+      _categoryGrid(),
+      const SizedBox(height: 14),
+      // When and where, side by side.
+      Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                fieldLabel('WHEN'),
+                const SizedBox(height: 8),
+                _pickerRow(
+                  icon: Icons.schedule_outlined,
+                  iconColor: muted,
+                  text: formatDateTime(_dateTime),
+                  onTap: _pickDateTime,
+                  trailing: const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                fieldLabel('LOCATION'),
+                const SizedBox(height: 8),
+                _pickerRow(
+                  icon: Icons.location_on_outlined,
+                  iconColor: accent,
+                  text: _locatingNow ? 'Finding…' : (_location ?? 'Pick On Map'),
+                  onTap: _openLocationPicker,
+                  trailing: _locatingNow
+                      ? SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: accent))
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 18),
+      // As a page, the button sits at the bottom of the screen.
+      if (page) const Spacer(),
+      if (_error != null)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(_error!, style: TextStyle(color: negative, fontSize: 12)),
+        ),
+      SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: FilledButton(
+          onPressed: _busy || _scanning ? null : _save,
+          style: primaryButton(radius: 16),
+          child: _busy
+              ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: onAccent))
+              : Text(widget.isEditing ? 'Save Changes' : 'Save Expense'),
+        ),
+      ),
+    ];
+    if (page) {
+      // One screen, no scrolling: the form fills it, the button at the foot.
+      // It only scrolls if it can't fit (keyboard up, very large text).
+      return ColoredBox(
+        color: paper,
+        child: SafeArea(
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(20, 10, 20, bottom + 16),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: math.max(0, box.maxHeight - bottom - 26)),
+                child: IntrinsicHeight(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: fields),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return Container(
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 24 + bottom),
+      decoration: BoxDecoration(color: paper, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+      child: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: fields),
         ),
       ),
     );

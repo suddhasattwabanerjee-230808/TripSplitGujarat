@@ -193,6 +193,18 @@ const categoryOrder = [
   'Other',
 ];
 
+/// The categories the expense form offers (Other besides): two rows of
+/// three. The rest of [categoryOrder] still shows on older expenses.
+const formCategories = ['Food', 'Stay', 'Transport', 'Fuel', 'Shopping', 'Activities'];
+
+/// [category] (a guess, or a scanned bill's) as one the form offers.
+String formCategoryFor(String category) => switch (category) {
+  _ when formCategories.contains(category) => category,
+  'Groceries' => 'Food',
+  'Rent' => 'Stay',
+  _ => 'Other',
+};
+
 /// Settle-up payments are stored as expenses in this category (one payer, one
 /// share), so they move balances but stay out of spending totals and charts.
 const settlementCategory = 'Settlement';

@@ -52,6 +52,16 @@ class UpiPay {
     }
   }
 
+  /// Opens [package] where a copied UPI ID can be pasted to pay (Google
+  /// Pay's "Pay phone number / UPI ID"), or on its home screen.
+  static Future<bool> payTo(String package) async {
+    try {
+      return await _channel.invokeMethod<bool>('payTo', {'package': package}) ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   /// Opens [package] on its QR scanner (Google Pay, PhonePe), or on its
   /// home screen for apps we can't take straight there.
   static Future<bool> scan(String package) async {

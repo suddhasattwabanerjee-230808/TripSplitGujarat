@@ -79,6 +79,34 @@ object UpiApps {
     }
 
     /**
+     * Opens [pkg] where a UPI ID can be pasted to pay it: Google Pay's own
+     * "Pay phone number / UPI ID" launcher shortcut (see [scan]), else the
+     * app's home screen. False if it can't be opened at all.
+     */
+    fun payTo(context: Context, pkg: String): Boolean {
+        val launch = context.packageManager.getLaunchIntentForPackage(pkg)
+        val direct: Intent? = if (pkg == GPAY) {
+            launch?.let {
+                Intent(it)
+                    .setAction(Intent.ACTION_RUN)
+                    .putExtra("some unique action key", "PAY_TO_PHONE")
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+        } else {
+            null
+        }
+        for (intent in listOfNotNull(direct, launch)) {
+            try {
+                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return true
+            } catch (_: Exception) {
+                // Try the next way in.
+            }
+        }
+        return false
+    }
+
+    /**
      * Opens [pkg] straight on its QR scanner where we know how (Google Pay,
      * PhonePe), else on its home screen. False if it can't be opened at all.
      */

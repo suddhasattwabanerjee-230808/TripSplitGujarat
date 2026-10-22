@@ -88,6 +88,8 @@ class MainActivity : FlutterActivity() {
                 "apps" -> result.success(UpiApps.list(this))
                 // Opens one on its home screen.
                 "open" -> result.success(UpiApps.open(this, call.argument<String>("package") ?: ""))
+                // Opens one where a copied UPI ID can be pasted to pay.
+                "payTo" -> result.success(UpiApps.payTo(this, call.argument<String>("package") ?: ""))
                 // Opens one on its QR scanner (or its home screen if we can't).
                 "scan" -> result.success(UpiApps.scan(this, call.argument<String>("package") ?: ""))
                 // A settle-up payment to confirm from the bank's debit SMS.
