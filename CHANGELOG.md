@@ -4,6 +4,12 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.10] - 2026-10-22 (build 47)
+
+### Changed
+- The "Save Expense" button on the UPI payment popup now looks just like
+  the one on the Add Expense page.
+
 ## [1.14.9] - 2026-10-22 (build 46)
 
 ### Fixed
