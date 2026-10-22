@@ -138,3 +138,65 @@ String newInviteCode([Random? random]) {
 }
 
 final upiIdPattern = RegExp(r'^[A-Za-z0-9._-]{2,64}@[A-Za-z][A-Za-z0-9.-]{1,32}$');
+
+/// One settle-up payment between two people.
+class PairPayment {
+  const PairPayment({required this.fromMe, required this.amount, required this.date});
+
+  /// True when the user paid the other person; false when they paid the user.
+  final bool fromMe;
+  final double amount;
+  final DateTime date;
+}
+
+/// The balance between the user ([me]) and one other person ([other]) on a
+/// trip, from the expenses alone: what each paid towards the other's share,
+/// and the settle-up payments (part ones included) between just the two.
+class PairBalance {
+  const PairBalance({
+    required this.paidForThem,
+    required this.paidForMe,
+    required this.payments,
+  });
+
+  /// The other person's shares of expenses the user paid.
+  final double paidForThem;
+
+  /// The user's shares of expenses the other person paid.
+  final double paidForMe;
+
+  /// Settle-ups between the two, oldest first.
+  final List<PairPayment> payments;
+
+  double get paidByMe => round2(payments.where((p) => p.fromMe).fold(0.0, (s, p) => s + p.amount));
+  double get paidByThem => round2(payments.where((p) => !p.fromMe).fold(0.0, (s, p) => s + p.amount));
+
+  /// Before any settle-ups: positive when they owe the user.
+  double get fromExpenses => round2(paidForThem - paidForMe);
+
+  /// Now, after the settle-ups: positive when they owe the user, negative
+  /// when the user owes them.
+  double get net => round2(fromExpenses + paidByMe - paidByThem);
+}
+
+PairBalance pairBalance(List<TripExpense> expenses, String me, String other) {
+  var paidForThem = 0.0, paidForMe = 0.0;
+  final payments = <PairPayment>[];
+  for (final e in expenses) {
+    if (e.isSettlement) {
+      // A settle-up is stored as the payer paying the whole amount for the
+      // one person paid.
+      if (e.paidBy == me && e.shareOf(other) > 0) {
+        payments.add(PairPayment(fromMe: true, amount: e.shareOf(other), date: e.dateTime));
+      } else if (e.paidBy == other && e.shareOf(me) > 0) {
+        payments.add(PairPayment(fromMe: false, amount: e.shareOf(me), date: e.dateTime));
+      }
+    } else if (e.paidBy == me) {
+      paidForThem += e.shareOf(other);
+    } else if (e.paidBy == other) {
+      paidForMe += e.shareOf(me);
+    }
+  }
+  payments.sort((a, b) => a.date.compareTo(b.date));
+  return PairBalance(paidForThem: round2(paidForThem), paidForMe: round2(paidForMe), payments: payments);
+}

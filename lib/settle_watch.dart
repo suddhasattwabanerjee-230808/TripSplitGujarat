@@ -93,7 +93,7 @@ class SettleWatch with WidgetsBindingObserver {
       if (status['paid'] != null) {
         await cancel();
         await _record(pending);
-        _tell('Paid ${money(amount)} to $name — confirmed from your bank’s SMS. Balances updated.');
+        _tell(settledText(amount, name));
       } else if (pending['sms'] == true && status['waiting'] == true) {
         if (firstLook) _tell('Waiting for your bank’s SMS to confirm ${money(amount)} to $name…');
         _poll?.cancel();
@@ -115,7 +115,7 @@ class SettleWatch with WidgetsBindingObserver {
 
   Future<void> _markPaid(Map<String, dynamic> pending) async {
     await _record(pending);
-    _tell('Paid ${money((pending['amount'] as num).toDouble())} to ${pending['name']} — balances updated.');
+    _tell(settledText((pending['amount'] as num).toDouble(), pending['name'] as String));
   }
 
   Future<void> _record(Map<String, dynamic> pending) async {
@@ -132,6 +132,9 @@ class SettleWatch with WidgetsBindingObserver {
       _tell(e.message);
     }
   }
+
+  /// The one line a settle-up ends with: "₹500 Settled With Aarav".
+  static String settledText(double amount, String name) => '${money(amount)} Settled With $name';
 
   void _tell(String text, {SnackBarAction? action}) {
     final m = messenger?.call();

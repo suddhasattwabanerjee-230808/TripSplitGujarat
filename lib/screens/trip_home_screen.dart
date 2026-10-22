@@ -564,7 +564,97 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       fieldLabel('EVERYONE'),
       const SizedBox(height: 8),
       _sheetCard([for (final m in trip.members) _balanceRow(m)]),
+      if (_me != null && trip.members.length > 1) ...[
+        const SizedBox(height: 18),
+        fieldLabel('YOU AND EACH PERSON'),
+        const SizedBox(height: 8),
+        for (final m in trip.members.where((m) => m.id != _me!.id)) ...[
+          _pairCard(m, pairBalance(_expenses, _me!.id, m.id)),
+          const SizedBox(height: 8),
+        ],
+        Text(
+          'Just between the two of you, part payments included. The Settle Up plan above may route money through someone else so fewer payments are needed.',
+          style: TextStyle(color: muted, fontSize: 12),
+        ),
+      ],
     ]);
+  }
+
+  /// The balance with one person, worked out: what each paid for the other,
+  /// every settle-up between the two (part payments too), and where it
+  /// stands now. Tap to open the working.
+  Widget _pairCard(TripMember member, PairBalance p) {
+    final first = member.name.trim().split(RegExp(r'\s+')).first;
+    final net = p.net;
+    final square = net.abs() < 0.5;
+    final status = square ? 'All Square' : (net > 0 ? '$first Owes You' : 'You Owe $first');
+    final color = square ? muted : (net > 0 ? positive : negative);
+    String signed(double v) => v.abs() < 0.5 ? money(0) : (v > 0 ? '$first Owes ${money(v)}' : 'You Owe ${money(-v)}');
+    Widget entry(String label, String value, {bool strong = false, Color? valueColor}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: strong ? ink : muted, fontSize: 13, fontWeight: strong ? FontWeight.w700 : FontWeight.w500),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: valueColor ?? ink,
+              fontSize: 13,
+              fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: cardDecoration(),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+          childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+          leading: MemberAvatar.of(member, size: 34),
+          title: Text(member.name, style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
+          subtitle: Text(
+            p.payments.isEmpty ? status : '$status · ${p.payments.length} Settle-Up${p.payments.length == 1 ? '' : 's'}',
+            style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          trailing: Text(
+            square ? '—' : money(net.abs()),
+            style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w800),
+          ),
+          children: [
+            Divider(height: 1, color: line),
+            const SizedBox(height: 6),
+            entry('You Paid For $first', money(p.paidForThem)),
+            entry('$first Paid For You', money(p.paidForMe)),
+            entry('From Expenses', signed(p.fromExpenses), strong: true),
+            if (p.payments.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Align(alignment: Alignment.centerLeft, child: fieldLabel('SETTLE-UPS')),
+              const SizedBox(height: 2),
+              for (final pay in p.payments)
+                entry(
+                  '${pay.fromMe ? 'You Paid $first' : '$first Paid You'} · ${formatDateTime(pay.date)}',
+                  '${pay.fromMe ? '−' : '+'}${money(pay.amount)}',
+                  valueColor: positive,
+                ),
+            ],
+            const SizedBox(height: 4),
+            Divider(height: 1, color: line),
+            const SizedBox(height: 4),
+            entry('Balance Now', square ? 'All Square' : signed(net), strong: true, valueColor: color),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _balanceRow(TripMember member) {

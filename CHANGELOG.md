@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.3] - 2026-10-22 (build 40)
+
+### Added
+- Balance (in the trip's Quick Actions) has a "You And Each Person"
+  section: your balance with each tripmate, worked out. Tap a person to see
+  what you paid for them, what they paid for you, every settle-up between
+  you (part payments included, with dates) and the balance now.
+
+### Changed
+- A settle-up now ends with one short line: "₹500 Settled With Aarav".
+
 ## [1.14.2] - 2026-10-22 (build 39)
 
 ### Fixed

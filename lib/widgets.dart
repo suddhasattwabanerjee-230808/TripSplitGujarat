@@ -755,7 +755,7 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice, {double?
       amount: paying,
       method: method,
     );
-    messenger.showSnackBar(SnackBar(content: Text('Paid ${money(paying)} to ${debt.otherName} — balances updated.')));
+    messenger.showSnackBar(SnackBar(content: Text(SettleWatch.settledText(paying, debt.otherName))));
     await TripStore.instance.refresh();
     return true;
   } on ApiException catch (e) {

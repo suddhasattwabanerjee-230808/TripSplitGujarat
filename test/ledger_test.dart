@@ -144,4 +144,22 @@ void main() {
     expect(unsettledAmount(300, 150), 150); // owed to them
     expect(unsettledAmount(100, 340), -240); // they owe
   });
+
+  test('the balance between two people, with a part settle-up', () {
+    final expenses = [
+      expense('dinner', 'b', 3600, {'a': 1200, 'b': 1200, 'c': 1200}), // b paid a's 1200
+      expense('cab', 'a', 900, {'a': 300, 'b': 300, 'c': 300}), // a paid b's 300
+      expense('taxi', 'c', 600, {'a': 300, 'c': 300}), // nothing between a and b
+      expense('part', 'a', 500, {'b': 500}, category: 'Settlement'), // a paid b back 500
+    ];
+    final p = pairBalance(expenses, 'a', 'b');
+    expect(p.paidForThem, 300);
+    expect(p.paidForMe, 1200);
+    expect(p.fromExpenses, -900); // a owed b 900
+    expect(p.paidByMe, 500);
+    expect(p.payments.single.fromMe, isTrue);
+    expect(p.net, -400); // a still owes b 400
+    // And the same pair seen from b's side.
+    expect(pairBalance(expenses, 'b', 'a').net, 400);
+  });
 }
