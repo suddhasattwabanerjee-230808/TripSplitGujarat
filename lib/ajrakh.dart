@@ -11,9 +11,10 @@ const ajrakhBlack = Color(0xFF0F0809);
 const ajrakhIvory = Color(0xFFF1E4CC);
 const ajrakhSaffron = Color(0xFFFFB45C);
 
-/// A full-bleed ajrakh print: a lattice of eight-point star medallions with
-/// dotted resist outlines, sawtooth borders top and bottom, dimmed towards
-/// the middle so whatever sits on it (the logo) stands out. Static, so it's
+/// A full-bleed ajrakh print, faint and dark: a lattice of eight-point star
+/// medallions with dotted resist outlines and sawtooth borders, laid sheer
+/// over black and dimmed towards the middle so whatever sits on it (the
+/// logo) stands out. Static, so it's
 /// painted once and cached.
 class AjrakhBackground extends StatelessWidget {
   const AjrakhBackground({super.key, this.tile = 92});
@@ -33,7 +34,11 @@ class _AjrakhPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.drawRect(Offset.zero & size, Paint()..color = ajrakhMadder);
+    final rect = Offset.zero & size;
+    // The print is laid faintly over black, like a dark, sheer ajrakh.
+    canvas.drawRect(rect, Paint()..color = ajrakhBlack);
+    canvas.saveLayer(rect, Paint()..color = Colors.white.withValues(alpha: .42));
+    canvas.drawRect(rect, Paint()..color = ajrakhMadder);
 
     // Centre the lattice so a medallion sits right behind the middle.
     final c = size.center(Offset.zero);
@@ -52,23 +57,23 @@ class _AjrakhPainter extends CustomPainter {
 
     _border(canvas, size, top: true);
     _border(canvas, size, top: false);
+    canvas.restore();
 
-    // Dim the print, most in the middle, so it reads as a rich ground rather
-    // than a busy pattern, and the logo glows out of it.
-    final rect = Offset.zero & size;
-    canvas.drawRect(rect, Paint()..color = ajrakhBlack.withValues(alpha: .46));
+    // Darker still, most in the middle, so the print is a quiet ground the
+    // logo glows out of.
+    canvas.drawRect(rect, Paint()..color = ajrakhBlack.withValues(alpha: .3));
     canvas.drawRect(
       rect,
       Paint()
         ..shader = RadialGradient(
           center: const Alignment(0, -.1),
-          radius: 1.05,
+          radius: 1.1,
           colors: [
-            ajrakhBlack.withValues(alpha: .9),
-            ajrakhBlack.withValues(alpha: .72),
-            ajrakhBlack.withValues(alpha: 0),
+            ajrakhBlack.withValues(alpha: .92),
+            ajrakhBlack.withValues(alpha: .7),
+            ajrakhBlack.withValues(alpha: .15),
           ],
-          stops: const [0, .42, 1],
+          stops: const [0, .45, 1],
         ).createShader(rect),
     );
   }

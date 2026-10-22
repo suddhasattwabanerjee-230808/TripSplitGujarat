@@ -12,6 +12,7 @@ import 'trip_store.dart';
 import 'screens/trip_people.dart';
 import 'settle_watch.dart';
 import 'upi_pay.dart';
+import 'upi_qr.dart';
 
 /// Google serves profile photos at any size; ask for one sharp at [size].
 String? sizedPhoto(String? url, double size) {
@@ -443,7 +444,7 @@ Future<bool> payDebt(BuildContext context, Debt debt) async {
     title: 'Pay ${debt.otherName}',
     subtitle: debt.other?.upiId == null
         ? '${debt.otherName} hasn’t added a UPI ID: pick your UPI app and scan their QR.'
-        : 'Pick your UPI app: ${debt.otherName}’s UPI ID is copied for you to paste there.',
+        : 'Pick your UPI app: it opens on the payment to ${debt.otherName}, amount filled in.',
     children: (ctx) => [
       _payAmountCard(debt),
       const SizedBox(height: 16),
@@ -506,8 +507,8 @@ class _SettleOptionsState extends State<SettleOptions> {
     if (v != null) widget.onChoose(choice, v);
   }
 
-  /// With their UPI ID, it's copied and the app opens to paste it; without
-  /// it, the app opens on its scanner.
+  /// With their UPI ID the app opens on the payment, filled in; without it,
+  /// on its scanner.
   String _choiceFor(UpiApp app) => debt.other?.upiId != null ? 'app:${app.package}' : 'scan:${app.package}';
 
   Future<void> _scan(BuildContext context) async {
@@ -707,21 +708,29 @@ Future<bool> settleDebt(BuildContext context, Debt debt, String choice, {double?
   // Nothing to fill a payment in with: scan their QR in that app instead.
   if (choice.startsWith('app:') && debt.other?.upiId == null) choice = 'scan:${choice.substring(4)}';
   if (choice.startsWith('app:')) {
-    // Their UPI ID, copied for pasting into the app's "Pay UPI ID": a
-    // filled-in UPI payment link from another app is often declined for a
-    // personal UPI ID, a payment the user starts in the app isn't. The
-    // bank's SMS then confirms it.
+    // Their UPI ID and the amount, as a QR the app reads like a scanned one:
+    // it opens on the payment, filled in. (A filled-in payment link from
+    // another app to a personal UPI ID is often declined; a scanned QR
+    // isn't.) The bank's SMS then confirms it.
     final package = choice.substring(4);
     final upiId = debt.other!.upiId!;
-    await Clipboard.setData(ClipboardData(text: upiId));
+    final link = UpiPay.link(
+      upiId: upiId,
+      name: debt.otherName,
+      amount: paying,
+      // Plain ASCII: some UPI apps refuse anything else in the note.
+      note: 'TripSplit ${debt.trip.name}'.replaceAll(RegExp(r'[^A-Za-z0-9 ]'), '').trim(),
+    );
     await watch.start(debt, paying);
+    if (await UpiPay.shareQr(package, await upiQrPng(link))) return false;
+    // The app didn't take the QR: copy the UPI ID to paste there instead.
+    await Clipboard.setData(ClipboardData(text: upiId));
     messenger.showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 6),
         content: Text('$upiId copied — in the app, choose Pay UPI ID, paste it and pay ${money(paying)}.'),
       ),
     );
-    // A moment to read that before the app opens.
     await Future<void>.delayed(const Duration(milliseconds: 1200));
     if (!await UpiPay.payTo(package)) {
       await watch.cancel();

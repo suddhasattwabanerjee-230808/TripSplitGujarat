@@ -50,7 +50,7 @@ object UpiSettings {
  */
 object UpiSettle {
     private const val PREFS = "upi_settle"
-    private const val WINDOW = 30 * 60 * 1000L
+    private const val WINDOW = 2 * 60 * 1000L // two minutes, then it stops looking
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

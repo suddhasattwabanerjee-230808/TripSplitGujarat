@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.2] - 2026-10-22 (build 39)
+
+### Fixed
+- Paying a tripmate in Google Pay or PhonePe opens the payment with their
+  UPI ID and the amount you entered already filled in: TripSplit hands the
+  app a payment QR, which it reads like a scanned code. If an app doesn't
+  take it, the UPI ID is copied to paste as before.
+
+### Changed
+- TripSplit stops watching for the bank's SMS two minutes after you start
+  a settle-up payment, then offers "Mark Paid".
+- The intro's ajrakh print is darker and more sheer.
+
 ## [1.14.1] - 2026-10-22 (build 38)
 
 ### Fixed

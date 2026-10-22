@@ -20,18 +20,17 @@ class UpiApp {
 class UpiPay {
   static const _channel = MethodChannel('tripsplit/upi_pay');
 
+  /// The standard UPI payment link: the UPI ID as it is (a plain "@"), the
+  /// rest percent-encoded with "%20" for spaces, as UPI apps expect.
   static String link({required String upiId, required String name, required double amount, String? note}) {
-    return Uri(
-      scheme: 'upi',
-      host: 'pay',
-      queryParameters: {
-        'pa': upiId,
-        'pn': name,
-        'am': amount.toStringAsFixed(2),
-        'cu': 'INR',
-        if (note != null) 'tn': note,
-      },
-    ).toString();
+    final params = {
+      'pa': upiId.trim(),
+      'pn': Uri.encodeComponent(name),
+      'am': amount.toStringAsFixed(2),
+      'cu': 'INR',
+      if (note != null && note.isNotEmpty) 'tn': Uri.encodeComponent(note),
+    };
+    return 'upi://pay?${params.entries.map((e) => '${e.key}=${e.value}').join('&')}';
   }
 
   /// The installed UPI apps, Google Pay and PhonePe first.
@@ -49,6 +48,15 @@ class UpiPay {
       ];
     } on PlatformException {
       return const [];
+    }
+  }
+
+  /// Shares [png] (a payment QR) with [package]; false if it doesn't take it.
+  static Future<bool> shareQr(String package, Uint8List png) async {
+    try {
+      return await _channel.invokeMethod<bool>('shareQr', {'package': package, 'png': png}) ?? false;
+    } on PlatformException {
+      return false;
     }
   }
 

@@ -88,6 +88,10 @@ class MainActivity : FlutterActivity() {
                 "apps" -> result.success(UpiApps.list(this))
                 // Opens one on its home screen.
                 "open" -> result.success(UpiApps.open(this, call.argument<String>("package") ?: ""))
+                // Shares a payment QR (PNG bytes) with one, to pay it filled in.
+                "shareQr" -> result.success(
+                    UpiApps.shareQr(this, call.argument<String>("package") ?: "", call.argument<ByteArray>("png") ?: ByteArray(0)),
+                )
                 // Opens one where a copied UPI ID can be pasted to pay.
                 "payTo" -> result.success(UpiApps.payTo(this, call.argument<String>("package") ?: ""))
                 // Opens one on its QR scanner (or its home screen if we can't).
