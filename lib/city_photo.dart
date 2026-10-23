@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,88 +11,126 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'theme.dart';
 
-/// A photo of the city the phone is in (a landmark from its Wikivoyage or
-/// Wikipedia article), behind the profile header and the trip card. Kept on
-/// the phone and looked up again only when the city changes.
+/// Photos of the city the phone is in (landmarks from its Wikivoyage and
+/// Wikipedia articles), behind the profile header and the trip card. A new
+/// photo of the same city every half hour; a new city when the phone moves.
 class CityPhoto extends ChangeNotifier {
   CityPhoto._();
   static final instance = CityPhoto._();
 
   static const _cityKey = 'trip_split.city_photo.city.v1';
-  static const _checkedKey = 'trip_split.city_photo.checked.v1';
-  static const _recheck = Duration(minutes: 20);
+  static const _urlsKey = 'trip_split.city_photo.urls.v1';
+  static const _indexKey = 'trip_split.city_photo.index.v1';
+  static const _shownKey = 'trip_split.city_photo.shown.v1';
+  static const _every = Duration(minutes: 30);
   static const _agent = 'TripSplit/1.12 (Android app; city header photo)';
 
   String? city;
   ImageProvider? image;
   bool _started = false;
   bool _busy = false;
+  bool _askedLocation = false;
+  DateTime? _lastTry;
 
-  /// Shows the saved photo at once, then checks where the phone is now.
+  /// Shows the saved photo at once, then checks where the phone is now, and
+  /// every minute after that while TripSplit is on screen.
   Future<void> start() async {
     if (_started) return;
     _started = true;
     try {
-      city = await SharedPreferencesAsync().getString(_cityKey);
-      final file = await _file(city);
+      final prefs = SharedPreferencesAsync();
+      city = await prefs.getString(_cityKey);
+      final file = await _file(city, await prefs.getInt(_indexKey) ?? 0);
       if (city != null && await file.exists()) {
         image = ResizeImage(FileImage(file), width: 1400);
         notifyListeners();
       }
     } catch (_) {}
+    Timer.periodic(const Duration(minutes: 1), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) check();
+    });
     await check();
   }
 
-  /// Looks again (back in the app, say) if it's been a while, or if there's
-  /// no photo yet.
+  /// The next photo, if the current one has been up half an hour (or there
+  /// is none yet). Cheap when nothing's due.
   Future<void> check() async {
     if (!_started || _busy) return;
+    // Offline or no location: don't retry more than every few minutes.
+    final last = _lastTry;
+    if (last != null && DateTime.now().difference(last) < const Duration(minutes: 5)) return;
     _busy = true;
     try {
-      final checked = await SharedPreferencesAsync().getInt(_checkedKey) ?? 0;
-      if (image == null || DateTime.now().millisecondsSinceEpoch - checked > _recheck.inMilliseconds) {
+      final shown = await SharedPreferencesAsync().getInt(_shownKey) ?? 0;
+      if (image == null || DateTime.now().millisecondsSinceEpoch - shown >= _every.inMilliseconds) {
+        _lastTry = DateTime.now();
         await _refresh();
       }
     } catch (_) {
-      // Offline, no location: the saved photo (or the brand gradient) stays.
+      // The saved photo (or the brand gradient) stays.
     } finally {
       _busy = false;
     }
   }
 
-  /// One file per city: a new path is a new image, never the old city's
+  /// One file per city and photo: a new path is a new image, never the old
   /// pixels still held by the image cache.
-  static Future<File> _file(String? city) async {
+  static Future<File> _file(String? city, int index) async {
     final slug = (city ?? '').toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
-    return File('${(await getApplicationSupportDirectory()).path}/city_photo_$slug.jpg');
+    return File('${(await getApplicationSupportDirectory()).path}/city_photo_${slug}_$index.jpg');
   }
 
   Future<void> _refresh() async {
-    final names = await _currentPlaceNames();
-    if (names.isEmpty) return;
-    final prefs = SharedPreferencesAsync();
-    await prefs.setInt(_checkedKey, DateTime.now().millisecondsSinceEpoch);
-    if (names.contains(city) && image != null) return;
-    // The town, else its district, else its state: whichever has a photo.
-    for (final here in names) {
-      final url = await _photoUrl(here);
-      if (url == null) continue;
-      final response = await http
-          .get(Uri.parse(url), headers: {'User-Agent': _agent})
-          .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200 || response.bodyBytes.length < 10000) continue;
-      final file = await _file(here);
-      await file.writeAsBytes(response.bodyBytes, flush: true);
-      await prefs.setString(_cityKey, here);
-      city = here;
-      image = ResizeImage(FileImage(file), width: 1400);
-      notifyListeners();
-      await _deleteOthers(file);
+    final names = await _currentPlaceNames().catchError((Object _) => <String>[]);
+    final current = city;
+    // Same city (or location unknown): its next photo.
+    if (current != null && (names.isEmpty || names.contains(current))) {
+      final prefs = SharedPreferencesAsync();
+      final saved = jsonDecode(await prefs.getString(_urlsKey) ?? '{}') as Map;
+      var urls = saved['city'] == current ? (saved['urls'] as List).cast<String>() : <String>[];
+      if (urls.isEmpty) urls = await _photoUrls(current);
+      if (urls.isEmpty) return;
+      final index = await prefs.getInt(_indexKey) ?? 0;
+      await _show(current, urls, image == null ? index : index + 1);
       return;
+    }
+    // A new city: the town, else its district, else its state.
+    for (final here in names) {
+      final urls = await _photoUrls(here);
+      if (urls.isNotEmpty && await _show(here, urls, 0)) return;
     }
   }
 
-  /// Earlier cities' photos (and the old single city_photo.jpg).
+  /// Downloads photo [from] of [urls] (or the next one that works) and puts
+  /// it up.
+  Future<bool> _show(String here, List<String> urls, int from) async {
+    for (var i = 0; i < urls.length; i++) {
+      final index = (from + i) % urls.length;
+      try {
+        final response = await http
+            .get(Uri.parse(urls[index]), headers: {'User-Agent': _agent})
+            .timeout(const Duration(seconds: 30));
+        if (response.statusCode != 200 || response.bodyBytes.length < 10000) continue;
+        final file = await _file(here, index);
+        await file.writeAsBytes(response.bodyBytes, flush: true);
+        final prefs = SharedPreferencesAsync();
+        await prefs.setString(_cityKey, here);
+        await prefs.setString(_urlsKey, jsonEncode({'city': here, 'urls': urls}));
+        await prefs.setInt(_indexKey, index);
+        await prefs.setInt(_shownKey, DateTime.now().millisecondsSinceEpoch);
+        city = here;
+        image = ResizeImage(FileImage(file), width: 1400);
+        notifyListeners();
+        await _deleteOthers(file);
+        return true;
+      } catch (_) {
+        // Try the next photo.
+      }
+    }
+    return false;
+  }
+
+  /// Earlier photos (and the old single city_photo.jpg).
   static Future<void> _deleteOthers(File keep) async {
     try {
       await for (final entry in keep.parent.list()) {
@@ -103,11 +142,14 @@ class CityPhoto extends ChangeNotifier {
 
   /// Where the phone is: town, district, state (no repeats). A fresh coarse
   /// fix (network, quick), else the last known position. Asks for location
-  /// once if it never has.
-  static Future<List<String>> _currentPlaceNames() async {
+  /// once per launch at most.
+  Future<List<String>> _currentPlaceNames() async {
     if (!await Geolocator.isLocationServiceEnabled()) return const [];
     var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.denied && !_askedLocation) {
+      _askedLocation = true;
+      permission = await Geolocator.requestPermission();
+    }
     if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return const [];
     Position? position;
     try {
@@ -131,9 +173,12 @@ class CityPhoto extends ChangeNotifier {
 
   static final _notAPhoto = RegExp(r'montage|collage|collection|map|flag|seal|emblem|logo|locator|\.svg|\.png$');
 
-  /// The lead photo of [city]'s travel guide (Wikivoyage), else of its
-  /// encyclopedia article: wide, sharp enough for a header, not a collage.
-  static Future<String?> _photoUrl(String city) async {
+  /// [city]'s photos: the lead photos of its travel guide (Wikivoyage) and
+  /// encyclopedia article first, then the other photos in them. Only wide,
+  /// sharp JPEGs that aren't maps or collages; at most 12.
+  static Future<List<String>> _photoUrls(String city) async {
+    final lead = <String, String>{};
+    final rest = <String, String>{};
     for (final host in ['en.wikivoyage.org', 'en.wikipedia.org']) {
       try {
         final uri = Uri.https(host, '/w/api.php', {
@@ -151,18 +196,49 @@ class CityPhoto extends ChangeNotifier {
         for (final page in pages.cast<Map<String, dynamic>>()) {
           final original = page['original'] as Map?;
           final thumb = page['thumbnail']?['source'] as String?;
-          final name = (page['pageimage'] as String? ?? '').toLowerCase();
+          final name = (page['pageimage'] as String? ?? '').toLowerCase().replaceAll(' ', '_');
           final w = (original?['width'] as num?)?.toDouble() ?? 0;
           final h = (original?['height'] as num?)?.toDouble() ?? 1;
           if (thumb == null || w < 1000 || w / h < 1.15) continue;
           if (_notAPhoto.hasMatch(name)) continue;
-          return thumb;
+          lead.putIfAbsent(name, () => thumb);
+        }
+      } catch (_) {
+        // Try the next source.
+      }
+      try {
+        final uri = Uri.https(host, '/w/api.php', {
+          'action': 'query',
+          'format': 'json',
+          'redirects': '1',
+          'generator': 'images',
+          'gimlimit': '50',
+          'prop': 'imageinfo',
+          'iiprop': 'url|size|mime',
+          'iiurlwidth': '1600',
+          'titles': city,
+        });
+        final response = await http.get(uri, headers: {'User-Agent': _agent}).timeout(const Duration(seconds: 15));
+        if (response.statusCode != 200) continue;
+        final pages = (jsonDecode(response.body)['query']?['pages'] as Map?)?.values ?? const [];
+        for (final page in pages.cast<Map<String, dynamic>>()) {
+          final info = (page['imageinfo'] as List?)?.firstOrNull as Map?;
+          final name = (page['title'] as String? ?? '').replaceFirst('File:', '').toLowerCase().replaceAll(' ', '_');
+          final url = (info?['thumburl'] ?? info?['url']) as String?;
+          final w = (info?['width'] as num?)?.toDouble() ?? 0;
+          final h = (info?['height'] as num?)?.toDouble() ?? 1;
+          if (url == null || info?['mime'] != 'image/jpeg' || w < 1000 || w / h < 1.15) continue;
+          if (_notAPhoto.hasMatch(name)) continue;
+          rest.putIfAbsent(name, () => url);
         }
       } catch (_) {
         // Try the next source.
       }
     }
-    return null;
+    for (final name in lead.keys) {
+      rest.remove(name);
+    }
+    return [...lead.values, ...rest.values].take(12).toList();
   }
 }
 

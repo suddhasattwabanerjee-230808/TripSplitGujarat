@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.12] - 2026-10-23 (build 49)
+
+### Changed
+- The city photo behind your profile and the trip card now changes to a
+  different photo of the same city every half hour (Gandhinagar has eight,
+  for example). It also checks where you are at the same time, so a new
+  city gets its own photos.
+
 ## [1.14.11] - 2026-10-23 (build 48)
 
 ### Fixed
