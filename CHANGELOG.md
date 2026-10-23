@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.11] - 2026-10-23 (build 48)
+
+### Fixed
+- The city photo behind your profile and the trip card now changes when
+  you travel. Before, the place name updated but the old city's photo
+  stayed on screen.
+- TripSplit checks where you are again each time you come back to the app
+  (at most every 20 minutes), using a fresh location instead of an old one.
+- If your town has no good photo, it shows one of your district or state
+  instead of keeping the last city's.
+
 ## [1.14.10] - 2026-10-22 (build 47)
 
 ### Changed

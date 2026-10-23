@@ -102,6 +102,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _store.refresh();
       _acceptInvites();
+      CityPhoto.instance.check();
     }
   }
 

@@ -19,77 +19,114 @@ class CityPhoto extends ChangeNotifier {
 
   static const _cityKey = 'trip_split.city_photo.city.v1';
   static const _checkedKey = 'trip_split.city_photo.checked.v1';
-  static const _recheck = Duration(hours: 3);
+  static const _recheck = Duration(minutes: 20);
   static const _agent = 'TripSplit/1.12 (Android app; city header photo)';
 
   String? city;
   ImageProvider? image;
   bool _started = false;
+  bool _busy = false;
 
   /// Shows the saved photo at once, then checks where the phone is now.
   Future<void> start() async {
     if (_started) return;
     _started = true;
-    final prefs = SharedPreferencesAsync();
     try {
-      city = await prefs.getString(_cityKey);
-      final file = await _file();
+      city = await SharedPreferencesAsync().getString(_cityKey);
+      final file = await _file(city);
       if (city != null && await file.exists()) {
         image = ResizeImage(FileImage(file), width: 1400);
         notifyListeners();
       }
-      final checked = await prefs.getInt(_checkedKey) ?? 0;
+    } catch (_) {}
+    await check();
+  }
+
+  /// Looks again (back in the app, say) if it's been a while, or if there's
+  /// no photo yet.
+  Future<void> check() async {
+    if (!_started || _busy) return;
+    _busy = true;
+    try {
+      final checked = await SharedPreferencesAsync().getInt(_checkedKey) ?? 0;
       if (image == null || DateTime.now().millisecondsSinceEpoch - checked > _recheck.inMilliseconds) {
         await _refresh();
       }
     } catch (_) {
-      // Offline, no location: the brand gradient shows instead.
+      // Offline, no location: the saved photo (or the brand gradient) stays.
+    } finally {
+      _busy = false;
     }
   }
 
-  Future<File> _file() async => File('${(await getApplicationSupportDirectory()).path}/city_photo.jpg');
+  /// One file per city: a new path is a new image, never the old city's
+  /// pixels still held by the image cache.
+  static Future<File> _file(String? city) async {
+    final slug = (city ?? '').toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    return File('${(await getApplicationSupportDirectory()).path}/city_photo_$slug.jpg');
+  }
 
   Future<void> _refresh() async {
-    final here = await _currentCity();
-    if (here == null) return;
+    final names = await _currentPlaceNames();
+    if (names.isEmpty) return;
     final prefs = SharedPreferencesAsync();
     await prefs.setInt(_checkedKey, DateTime.now().millisecondsSinceEpoch);
-    if (here == city && image != null) return;
-    final url = await _photoUrl(here);
-    if (url == null) return;
-    final response = await http
-        .get(Uri.parse(url), headers: {'User-Agent': _agent})
-        .timeout(const Duration(seconds: 30));
-    if (response.statusCode != 200 || response.bodyBytes.length < 10000) return;
-    final file = await _file();
-    await file.writeAsBytes(response.bodyBytes, flush: true);
-    await prefs.setString(_cityKey, here);
-    // A fresh provider: the old one's cached pixels are the old city.
-    PaintingBinding.instance.imageCache.clear();
-    city = here;
-    image = ResizeImage(FileImage(file), width: 1400);
-    notifyListeners();
+    if (names.contains(city) && image != null) return;
+    // The town, else its district, else its state: whichever has a photo.
+    for (final here in names) {
+      final url = await _photoUrl(here);
+      if (url == null) continue;
+      final response = await http
+          .get(Uri.parse(url), headers: {'User-Agent': _agent})
+          .timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200 || response.bodyBytes.length < 10000) continue;
+      final file = await _file(here);
+      await file.writeAsBytes(response.bodyBytes, flush: true);
+      await prefs.setString(_cityKey, here);
+      city = here;
+      image = ResizeImage(FileImage(file), width: 1400);
+      notifyListeners();
+      await _deleteOthers(file);
+      return;
+    }
   }
 
-  /// The phone's city, from its last known position if there is one (fast,
-  /// no GPS), else a coarse fix. Asks for location once if it never has.
-  static Future<String?> _currentCity() async {
-    if (!await Geolocator.isLocationServiceEnabled()) return null;
+  /// Earlier cities' photos (and the old single city_photo.jpg).
+  static Future<void> _deleteOthers(File keep) async {
+    try {
+      await for (final entry in keep.parent.list()) {
+        final name = entry.uri.pathSegments.last;
+        if (entry is File && name.startsWith('city_photo') && entry.path != keep.path) await entry.delete();
+      }
+    } catch (_) {}
+  }
+
+  /// Where the phone is: town, district, state (no repeats). A fresh coarse
+  /// fix (network, quick), else the last known position. Asks for location
+  /// once if it never has.
+  static Future<List<String>> _currentPlaceNames() async {
+    if (!await Geolocator.isLocationServiceEnabled()) return const [];
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return null;
-    final position =
-        await Geolocator.getLastKnownPosition() ??
-        await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.low, timeLimit: Duration(seconds: 15)),
-        );
-    final places = await Geocoding().placemarkFromCoordinates(position.latitude, position.longitude);
-    if (places.isEmpty) return null;
-    final p = places.first;
-    for (final name in [p.locality, p.subAdministrativeArea, p.administrativeArea]) {
-      if (name != null && name.trim().isNotEmpty) return name.trim();
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return const [];
+    Position? position;
+    try {
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low, timeLimit: Duration(seconds: 15)),
+      );
+    } catch (_) {
+      position = await Geolocator.getLastKnownPosition();
     }
-    return null;
+    if (position == null) return const [];
+    final places = await Geocoding().placemarkFromCoordinates(position.latitude, position.longitude);
+    if (places.isEmpty) return const [];
+    final p = places.first;
+    final names = <String>[];
+    for (final name in [p.locality, p.subAdministrativeArea, p.administrativeArea]) {
+      final n = name?.trim() ?? '';
+      if (n.isNotEmpty && !names.contains(n)) names.add(n);
+    }
+    return names;
   }
 
   static final _notAPhoto = RegExp(r'montage|collage|collection|map|flag|seal|emblem|logo|locator|\.svg|\.png$');
