@@ -63,29 +63,33 @@ android {
         }
         create("release") {
             // Dedicated release certificate (PKCS12). Unlike the shared Android
-            // debug cert — which every developer's machine uses and which Play
-            // Protect blocks as an unsafe sideload — this is a unique cert, so
-            // fresh installs from the GitHub asset are no longer blocked.
-            // Committed alongside its password like debug.keystore above: same
-            // informal model for this personal app; the key only governs who
-            // can ship updates to it. Regenerating it would change the SHA-1
-            // and require re-registering (below) and reinstalling every device.
+            // debug cert, which Play Protect blocks as an unsafe sideload, this
+            // is a unique cert. It is NOT in the repo (the repo is public): CI
+            // writes it from the RELEASE_KEYSTORE_BASE64 secret and passes its
+            // password as RELEASE_KEYSTORE_PASSWORD; a local release build needs
+            // app/release.keystore and release.storePassword in local.properties.
+            // Regenerating it would change the SHA-1 and require re-registering
+            // (below) and reinstalling every device.
             //
             // The Google Maps API key is SHA-1-restricted. Both certs' SHA-1s
             // must be on the key's Android restriction in Google Cloud Console:
             //   release: CC:F1:7A:DD:B4:5D:EA:72:5C:20:49:FF:53:01:0A:4C:4E:19:C9:6F
             //   debug:   used by `flutter run` / CI debug builds (already registered)
+            val password = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                ?: localProperties.getProperty("release.storePassword", "")
             storeFile = file("release.keystore")
             storeType = "PKCS12"
-            storePassword = "<release-password>"
+            storePassword = password
             keyAlias = "tripsplit"
-            keyPassword = "<release-password>"
+            keyPassword = password
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            // Without the release key (a local build), fall back to the debug
+            // key; CI refuses to build a release without it.
+            signingConfig = signingConfigs.getByName(if (file("release.keystore").exists()) "release" else "debug")
             // Release builds ship the Flutter engine for arm64 only (see
             // release.yml), so drop the other ABIs' copies of plugin libraries
             // too: they can never load, and cost ~18 MB of download.
