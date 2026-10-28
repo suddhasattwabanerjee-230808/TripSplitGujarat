@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -28,7 +30,11 @@ class ReceiptScanner {
       imageQuality: 90,
     );
     if (photo == null) return null;
-    final text = await _channel.invokeMethod<String>('recognize', {'path': photo.path}) ?? '';
+    // On-device OCR is Android-only (no 'tripsplit/ocr' native side on iOS yet);
+    // fall through to an empty scan so the user just fills the bill in by hand.
+    final text = Platform.isAndroid
+        ? await _channel.invokeMethod<String>('recognize', {'path': photo.path}) ?? ''
+        : '';
     return parse(text);
   }
 

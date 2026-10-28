@@ -232,7 +232,13 @@ class Updates extends ChangeNotifier {
   bool get available => latest != null;
 
   /// Reads the setting, then checks if it's on.
+  ///
+  /// APK sideload updates only make sense on Android; on other platforms
+  /// `check()` would still report a "newer" build (latest.json is
+  /// platform-agnostic) but `downloadAndInstall` would then fail, since it
+  /// calls the Android-only `MethodChannel('tripsplit/updater')`.
   Future<void> launchCheck() async {
+    if (!Platform.isAndroid) return;
     atLaunch = await SharedPreferencesAsync().getBool(_atLaunchKey).catchError((Object _) => null) ?? true;
     notifyListeners();
     if (atLaunch) await check();

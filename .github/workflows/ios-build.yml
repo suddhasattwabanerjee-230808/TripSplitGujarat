@@ -1,0 +1,47 @@
+name: iOS build (unsigned)
+
+# Manual only, for now: this produces an unsigned .ipa meant to be re-signed
+# and installed locally (see the free-Apple-ID sideload path), not published.
+# A paid Developer Program account would let this mirror release.yml's
+# tag-triggered flow with real code signing instead.
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-ipa:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Write the Google Maps iOS API key into Info.plist
+        run: |
+          test -n "${{ secrets.GOOGLE_MAPS_API_KEY }}" || { echo "::error::GOOGLE_MAPS_API_KEY secret is missing"; exit 1; }
+          /usr/libexec/PlistBuddy -c "Set :GMSApiKey ${{ secrets.GOOGLE_MAPS_API_KEY }}" ios/Runner/Info.plist
+
+      - run: flutter pub get
+
+      # --no-codesign: no Apple Developer Program account yet, so there's
+      # nothing to sign with in CI. The free-tier sideload tool re-signs this
+      # .app locally with a short-lived personal-team certificate instead.
+      - run: flutter build ios --release --no-codesign --dart-define=GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
+
+      - name: Package the unsigned .app as an .ipa
+        run: |
+          cd build/ios/iphoneos
+          mkdir Payload
+          cp -r Runner.app Payload/
+          zip -qr TripSplit-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TripSplit-unsigned-ipa
+          path: build/ios/iphoneos/TripSplit-unsigned.ipa
+          retention-days: 14
