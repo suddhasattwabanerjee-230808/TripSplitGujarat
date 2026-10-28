@@ -22,6 +22,8 @@ class CityPhoto extends ChangeNotifier {
   static const _urlsKey = 'trip_split.city_photo.urls.v1';
   static const _indexKey = 'trip_split.city_photo.index.v1';
   static const _shownKey = 'trip_split.city_photo.shown.v1';
+  static const _anchorKey = 'trip_split.city_photo.anchor.v1';
+  static const _movedMetres = 1500.0;
   static const _every = Duration(minutes: 30);
   static const _agent = 'TripSplit/1.12 (Android app; city header photo)';
 
@@ -31,6 +33,8 @@ class CityPhoto extends ChangeNotifier {
   bool _busy = false;
   bool _askedLocation = false;
   DateTime? _lastTry;
+  DateTime? _lastMoveCheck;
+  Position? _anchor;
 
   /// Shows the saved photo at once, then checks where the phone is now, and
   /// every minute after that while TripSplit is on screen.
@@ -40,6 +44,11 @@ class CityPhoto extends ChangeNotifier {
     try {
       final prefs = SharedPreferencesAsync();
       city = await prefs.getString(_cityKey);
+      final anchor = (await prefs.getString(_anchorKey))?.split(',');
+      if (anchor != null && anchor.length == 2) {
+        final lat = double.tryParse(anchor[0]), lng = double.tryParse(anchor[1]);
+        if (lat != null && lng != null) _anchor = _at(lat, lng);
+      }
       final file = await _file(city, await prefs.getInt(_indexKey) ?? 0);
       if (city != null && await file.exists()) {
         image = ResizeImage(FileImage(file), width: 1400);
@@ -52,25 +61,60 @@ class CityPhoto extends ChangeNotifier {
     await check();
   }
 
-  /// The next photo, if the current one has been up half an hour (or there
-  /// is none yet). Cheap when nothing's due.
-  Future<void> check() async {
+  /// A new photo straight away when the phone has moved to another place,
+  /// else the next photo of this city once the current one has been up half
+  /// an hour. Cheap when nothing's due. [force] (on app resume) skips the
+  /// throttles.
+  Future<void> check({bool force = false}) async {
     if (!_started || _busy) return;
-    // Offline or no location: don't retry more than every few minutes.
+    final now = DateTime.now();
     final last = _lastTry;
-    if (last != null && DateTime.now().difference(last) < const Duration(minutes: 5)) return;
+    if (!force && last != null && now.difference(last) < const Duration(minutes: 2)) return;
     _busy = true;
     try {
       final shown = await SharedPreferencesAsync().getInt(_shownKey) ?? 0;
-      if (image == null || DateTime.now().millisecondsSinceEpoch - shown >= _every.inMilliseconds) {
-        _lastTry = DateTime.now();
+      if (image == null || now.millisecondsSinceEpoch - shown >= _every.inMilliseconds) {
+        _lastTry = now;
         await _refresh();
+      } else {
+        final lastMove = _lastMoveCheck;
+        if (force || lastMove == null || now.difference(lastMove) >= const Duration(seconds: 50)) {
+          _lastMoveCheck = now;
+          await _checkMoved();
+        }
       }
     } catch (_) {
       // The saved photo (or the brand gradient) stays.
     } finally {
       _busy = false;
     }
+  }
+
+  static Position _at(double lat, double lng) => Position(
+    latitude: lat,
+    longitude: lng,
+    timestamp: DateTime.now(),
+    accuracy: 0,
+    altitude: 0,
+    altitudeAccuracy: 0,
+    heading: 0,
+    headingAccuracy: 0,
+    speed: 0,
+    speedAccuracy: 0,
+  );
+
+  /// Looks up the city only if the phone is well away from where the current
+  /// photo's city was last confirmed.
+  Future<void> _checkMoved() async {
+    final position = await _position();
+    if (position == null) return;
+    final anchor = _anchor;
+    if (anchor != null &&
+        Geolocator.distanceBetween(anchor.latitude, anchor.longitude, position.latitude, position.longitude) <
+            _movedMetres) {
+      return;
+    }
+    await _refresh(position: position, keepSameCity: false);
   }
 
   /// One file per city and photo: a new path is a new image, never the old
@@ -80,11 +124,18 @@ class CityPhoto extends ChangeNotifier {
     return File('${(await getApplicationSupportDirectory()).path}/city_photo_${slug}_$index.jpg');
   }
 
-  Future<void> _refresh() async {
-    final names = await _currentPlaceNames().catchError((Object _) => <String>[]);
+  /// With [keepSameCity] false (a movement check), staying in the same city
+  /// only re-anchors; it doesn't change the photo.
+  Future<void> _refresh({Position? position, bool keepSameCity = true}) async {
+    position ??= await _position().catchError((Object _) => null);
+    final names = position == null
+        ? <String>[]
+        : await _placeNames(position).catchError((Object _) => <String>[]);
     final current = city;
     // Same city (or location unknown): its next photo.
     if (current != null && (names.isEmpty || names.contains(current))) {
+      if (position != null && names.isNotEmpty) await _saveAnchor(position);
+      if (!keepSameCity) return;
       final prefs = SharedPreferencesAsync();
       final saved = jsonDecode(await prefs.getString(_urlsKey) ?? '{}') as Map;
       var urls = saved['city'] == current ? (saved['urls'] as List).cast<String>() : <String>[];
@@ -97,8 +148,16 @@ class CityPhoto extends ChangeNotifier {
     // A new city: the town, else its district, else its state.
     for (final here in names) {
       final urls = await _photoUrls(here);
-      if (urls.isNotEmpty && await _show(here, urls, 0)) return;
+      if (urls.isNotEmpty && await _show(here, urls, 0)) {
+        if (position != null) await _saveAnchor(position);
+        return;
+      }
     }
+  }
+
+  Future<void> _saveAnchor(Position position) async {
+    _anchor = position;
+    await SharedPreferencesAsync().setString(_anchorKey, '${position.latitude},${position.longitude}');
   }
 
   /// Downloads photo [from] of [urls] (or the next one that works) and puts
@@ -140,26 +199,27 @@ class CityPhoto extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// Where the phone is: town, district, state (no repeats). A fresh coarse
-  /// fix (network, quick), else the last known position. Asks for location
-  /// once per launch at most.
-  Future<List<String>> _currentPlaceNames() async {
-    if (!await Geolocator.isLocationServiceEnabled()) return const [];
+  /// A fresh coarse fix (network, quick), else the last known position. Asks
+  /// for location once per launch at most.
+  Future<Position?> _position() async {
+    if (!await Geolocator.isLocationServiceEnabled()) return null;
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied && !_askedLocation) {
       _askedLocation = true;
       permission = await Geolocator.requestPermission();
     }
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return const [];
-    Position? position;
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return null;
     try {
-      position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low, timeLimit: Duration(seconds: 15)),
+      return await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low, timeLimit: Duration(seconds: 10)),
       );
     } catch (_) {
-      position = await Geolocator.getLastKnownPosition();
+      return Geolocator.getLastKnownPosition();
     }
-    if (position == null) return const [];
+  }
+
+  /// Where the phone is: town, district, state (no repeats).
+  Future<List<String>> _placeNames(Position position) async {
     final places = await Geocoding().placemarkFromCoordinates(position.latitude, position.longitude);
     if (places.isEmpty) return const [];
     final p = places.first;

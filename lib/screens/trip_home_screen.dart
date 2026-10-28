@@ -150,8 +150,17 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
 
   Future<void> _refreshEverything() => _loadAll();
 
-  /// Money spent on the trip, not counting settle-up payments.
-  double get total => _expenses.where((e) => !e.isSettlement).fold(0, (acc, item) => acc + item.amount);
+  /// Money spent on the trip, split between two or more people (no settle-up
+  /// payments, no expenses added for just one person).
+  Iterable<TripExpense> get _sharedExpenses => _expenses.where((e) => !e.isSettlement && e.shares.length >= 2);
+
+  /// Expenses this phone's user added (paid), shared or not.
+  Iterable<TripExpense> get _myExpenses {
+    final me = _me?.id;
+    return _expenses.where((e) => !e.isSettlement && e.paidBy == me);
+  }
+
+  static double _sum(Iterable<TripExpense> list) => list.fold(0, (acc, item) => acc + item.amount);
 
   Future<void> _addExpense({bool scan = false}) async {
     if (_trip == null) return;
@@ -376,8 +385,10 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
       children: [
         TripHeroCard(
           trip: trip,
-          total: total,
-          expenseCount: _expenses.where((e) => !e.isSettlement).length,
+          total: _sum(_sharedExpenses),
+          expenseCount: _sharedExpenses.length,
+          myTotal: _sum(_myExpenses),
+          myExpenseCount: _myExpenses.length,
           share: mine?.totalOwed ?? 0,
           paid: mine?.totalPaid ?? 0,
           net: mine?.netBalance ?? 0,
@@ -715,12 +726,14 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
 /// The trip's hero card (the city photo on the brand gradient): the trip
 /// total with everyone's faces beside it, your share and what you paid, and
 /// where you stand.
-class TripHeroCard extends StatelessWidget {
+class TripHeroCard extends StatefulWidget {
   const TripHeroCard({
     super.key,
     required this.trip,
     required this.total,
     required this.expenseCount,
+    required this.myTotal,
+    required this.myExpenseCount,
     required this.share,
     required this.paid,
     required this.net,
@@ -728,14 +741,98 @@ class TripHeroCard extends StatelessWidget {
     this.onMembers,
   });
   final Trip trip;
-  final double total, share, paid, net;
-  final int expenseCount;
+  final double total, myTotal, share, paid, net;
+  final int expenseCount, myExpenseCount;
   final VoidCallback? onSettle, onMembers;
+
+  @override
+  State<TripHeroCard> createState() => _TripHeroCardState();
+}
+
+class _TripHeroCardState extends State<TripHeroCard> {
+  int _page = 0;
+
+  Trip get trip => widget.trip;
+  double get share => widget.share;
+  double get paid => widget.paid;
+  double get net => widget.net;
+  VoidCallback? get onSettle => widget.onSettle;
+  VoidCallback? get onMembers => widget.onMembers;
+
+  /// One swipeable page of the top of the card: a label, the amount, the faces.
+  Widget _totalPage(String label, String chip, double amount) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: Colors.white.withValues(alpha: .75), fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const Spacer(),
+          _heroChip(chip),
+        ],
+      ),
+      const SizedBox(height: 6),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                money(amount),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 44,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1.5,
+                  height: 1.1,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          // Everyone on the trip: tap for the trip details page.
+          GestureDetector(
+            onTap: onMembers,
+            child: AvatarStack(
+              members: trip.members,
+              size: 32,
+              max: 4,
+              ringColor: Colors.white.withValues(alpha: .9),
+              extraColor: wineDeep,
+              extraTextColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+
+  Widget _dots() => Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      for (var i = 0; i < 2; i++)
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          width: _page == i ? 16 : 6,
+          height: 6,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: _page == i ? .95 : .4),
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
     final settled = net.abs() < 0.5;
-    final count = expenseCount;
+    final count = widget.expenseCount;
+    final myCount = widget.myExpenseCount;
     // The city the phone is in, blended into the brand gradient.
     return CityBackdrop(
       borderRadius: BorderRadius.circular(26),
@@ -749,51 +846,26 @@ class TripHeroCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      'Trip Total',
-                      style: TextStyle(color: Colors.white.withValues(alpha: .75), fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    _heroChip('${trip.memberCount} People · $count Expense${count == 1 ? '' : 's'}'),
-                  ],
+                SizedBox(
+                  height: 88,
+                  child: PageView(
+                    onPageChanged: (i) => setState(() => _page = i),
+                    children: [
+                      _totalPage(
+                        'Trip Total · Shared',
+                        '${trip.memberCount} People · $count Shared Expense${count == 1 ? '' : 's'}',
+                        widget.total,
+                      ),
+                      _totalPage(
+                        'Your Expenses',
+                        '$myCount Expense${myCount == 1 ? '' : 's'} By You',
+                        widget.myTotal,
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 6),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          money(total),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 44,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -1.5,
-                            height: 1.1,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Everyone on the trip: tap for the trip details page.
-                    GestureDetector(
-                      onTap: onMembers,
-                      child: AvatarStack(
-                        members: trip.members,
-                        size: 32,
-                        max: 4,
-                        ringColor: Colors.white.withValues(alpha: .9),
-                        extraColor: wineDeep,
-                        extraTextColor: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+                _dots(),
                 const SizedBox(height: 16),
                 Row(
                   children: [

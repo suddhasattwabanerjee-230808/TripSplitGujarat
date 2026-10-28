@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.13] - 2026-10-28 (build 50)
+
+### Changed
+- The trip total card now swipes. The first page shows the trip total for
+  expenses shared between two or more people (expenses added for just one
+  person are left out); the second page shows the expenses you added.
+- The city photo on the trip card and your profile now follows you much
+  faster: it checks where you are about once a minute and as soon as you open
+  the app, and changes the moment you move to a different city instead of
+  waiting up to half an hour.
+
 ## [1.14.12] - 2026-10-23 (build 49)
 
 ### Changed
