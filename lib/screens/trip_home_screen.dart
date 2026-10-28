@@ -218,6 +218,252 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     ];
   }
 
+  // --- Trip card breakups -----------------------------------------------------
+
+  List<MapEntry<String, double>> _grouped(
+    Iterable<TripExpense> list,
+    String Function(TripExpense) key,
+    double Function(TripExpense) value,
+  ) {
+    final map = <String, double>{};
+    for (final e in list) {
+      final v = value(e);
+      if (v > 0) map.update(key(e), (x) => x + v, ifAbsent: () => v);
+    }
+    return map.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+  }
+
+  static String _cat(TripExpense e) => e.category ?? 'Other';
+
+  Widget _catIcon(String cat) => Container(
+    width: 34,
+    height: 34,
+    decoration: BoxDecoration(color: colorForCategory(cat).withValues(alpha: .14), shape: BoxShape.circle),
+    child: Icon(iconForCategory(cat), size: 18, color: colorForCategory(cat)),
+  );
+
+  Widget _line(String label, String value, {bool strong = false, Color? color}) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(color: strong ? ink : muted, fontSize: 13.5, fontWeight: strong ? FontWeight.w800 : FontWeight.w500),
+          ),
+        ),
+        Text(value, style: TextStyle(color: color ?? ink, fontSize: strong ? 17 : 14, fontWeight: FontWeight.w800)),
+      ],
+    ),
+  );
+
+  Widget _shareRow({
+    required Widget leading,
+    required String title,
+    String? sub,
+    required double value,
+    required double total,
+    required Color color,
+  }) {
+    final pct = total <= 0 ? 0.0 : (value / total).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Row(
+        children: [
+          leading,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700)),
+                if (sub != null) Text(sub, style: TextStyle(color: muted, fontSize: 11.5)),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(value: pct, minHeight: 5, color: color, backgroundColor: color.withValues(alpha: .15)),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(money(value), style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800)),
+              Text('${(pct * 100).round()}%', style: TextStyle(color: muted, fontSize: 11.5)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _categoryRows(Iterable<TripExpense> list, double Function(TripExpense) value) {
+    final cats = _grouped(list, _cat, value);
+    final total = cats.fold<double>(0, (a, c) => a + c.value);
+    return [
+      for (final c in cats)
+        _shareRow(
+          leading: _catIcon(c.key),
+          title: c.key,
+          sub: () {
+            final n = list.where((e) => _cat(e) == c.key && value(e) > 0).length;
+            return '$n Expense${n == 1 ? '' : 's'}';
+          }(),
+          value: c.value,
+          total: total,
+          color: colorForCategory(c.key),
+        ),
+    ];
+  }
+
+  List<Widget> _personRows(List<MapEntry<String, double>> entries) {
+    final total = entries.fold<double>(0, (a, c) => a + c.value);
+    return [
+      for (final c in entries)
+        _shareRow(
+          leading: _avatarFor(c.key, size: 34),
+          title: _memberName(c.key),
+          value: c.value,
+          total: total,
+          color: accent,
+        ),
+    ];
+  }
+
+  List<Widget> _expenseLines(Iterable<TripExpense> list, double Function(TripExpense) value, String Function(TripExpense) sub) {
+    final sorted = list.toList()..sort((a, b) => b.dateTime.compareTo(a.dateTime));
+    return [
+      for (final e in sorted)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              _catIcon(_cat(e)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      e.description.isEmpty ? _cat(e) : e.description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w700),
+                    ),
+                    Text(sub(e), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 11.5)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(money(value(e)), style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800)),
+            ],
+          ),
+        ),
+    ];
+  }
+
+  List<Widget> _section(String label, List<Widget> rows) =>
+      rows.isEmpty ? const [] : [const SizedBox(height: 18), fieldLabel(label), const SizedBox(height: 8), groupedCard(rows)];
+
+  String _paidBy(TripExpense e) => 'Paid By ${e.paidBy == _me?.id ? 'You' : e.payerName(_trip)} · ${formatDate(e.dateTime)}';
+
+  /// Page 1: what the shared total is made of.
+  void _showSharedBreakup() {
+    final shared = _sharedExpenses.toList();
+    final solo = _expenses.where((e) => !e.isSettlement && e.shares.length < 2).toList();
+    final people = <String, double>{};
+    for (final e in shared) {
+      for (final sh in e.shares) {
+        people.update(sh.userId, (x) => x + sh.shareAmount, ifAbsent: () => sh.shareAmount);
+      }
+    }
+    _sheet('Trip Total · Shared', [
+      groupedCard([
+        _line('Shared Expenses (${shared.length})', money(_sum(shared)), strong: true),
+        _line('Left Out: Just For One Person (${solo.length})', money(_sum(solo))),
+        _line('All Spending On The Trip', money(_sum(shared) + _sum(solo))),
+      ]),
+      ..._section('BY CATEGORY', _categoryRows(shared, (e) => e.amount)),
+      ..._section('WHO PAID', _personRows(_grouped(shared, (e) => e.paidBy, (e) => e.amount))),
+      ..._section('EACH PERSON’S SHARE', _personRows(people.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))),
+      ..._section('ALL SHARED EXPENSES', _expenseLines(shared, (e) => e.amount, (e) => '${_paidBy(e)} · ${e.shares.length} People')),
+    ]);
+  }
+
+  /// Page 2: the expenses this phone's user paid.
+  void _showMyBreakup() {
+    final me = _me?.id ?? '';
+    final mine = _myExpenses.toList();
+    final total = _sum(mine);
+    final own = mine.fold<double>(0, (a, e) => a + e.shareOf(me));
+    final sharedPart = _sum(mine.where((e) => e.shares.length >= 2));
+    final onePart = _sum(mine.where((e) => e.shares.length < 2));
+    final forWhom = <String, double>{};
+    for (final e in mine) {
+      for (final sh in e.shares) {
+        forWhom.update(sh.userId, (x) => x + sh.shareAmount, ifAbsent: () => sh.shareAmount);
+      }
+    }
+    _sheet('Your Expenses', [
+      groupedCard([
+        _line('Total You Paid (${mine.length})', money(total), strong: true),
+        _line('Your Own Share Of It', money(own)),
+        _line('Paid For Others', money(math.max(0.0, total - own))),
+        _line('Split With Others', money(sharedPart)),
+        _line('Added For Just One Person', money(onePart)),
+      ]),
+      ..._section('BY CATEGORY', _categoryRows(mine, (e) => e.amount)),
+      ..._section('WHO IT WAS FOR', _personRows(forWhom.entries.toList()..sort((a, b) => b.value.compareTo(a.value)))),
+      ..._section(
+        'EXPENSES YOU PAID',
+        _expenseLines(mine, (e) => e.amount, (e) => '${formatDate(e.dateTime)} · ${e.shares.length == 1 ? 'Just One Person' : 'Split ${e.shares.length} Ways'}'),
+      ),
+    ]);
+  }
+
+  /// Page 3: what the trip costs this phone's user after all balances are settled.
+  void _showCostBreakup() {
+    final me = _me?.id ?? '';
+    final mine = _expenses.where((e) => !e.isSettlement && e.shareOf(me) > 0).toList();
+    final cost = _myCost;
+    final paidExpenses = _sum(_myExpenses);
+    final net = _myBalance?.netBalance ?? 0;
+    final settledSoFar = net - (paidExpenses - cost);
+    final withOthers = mine.where((e) => e.shares.length >= 2).fold<double>(0, (a, e) => a + e.shareOf(me));
+    final justMe = mine.where((e) => e.shares.length < 2).fold<double>(0, (a, e) => a + e.shareOf(me));
+    _sheet('Your Trip Cost', [
+      groupedCard([
+        _line('Your Share Of All Expenses', money(cost), strong: true),
+        _line('Shared With Others', money(withOthers)),
+        _line('Just For You', money(justMe)),
+      ]),
+      const SizedBox(height: 18),
+      fieldLabel('HOW IT SETTLES'),
+      const SizedBox(height: 8),
+      groupedCard([
+        _line('Expenses You Paid', money(paidExpenses)),
+        _line('Your Share Of Everything', '- ${money(cost)}'),
+        if (settledSoFar.abs() >= 0.5)
+          _line('Settle-Ups Already Made', settledSoFar > 0 ? '+ ${money(settledSoFar)}' : '- ${money(-settledSoFar)}'),
+        _line(
+          net.abs() < 0.5 ? 'All Settled Up' : (net > 0 ? 'You Get Back' : 'You Still Owe'),
+          net.abs() < 0.5 ? money(0) : money(net.abs()),
+          strong: true,
+          color: net.abs() < 0.5 ? positive : (net > 0 ? positive : negative),
+        ),
+        _line('Your Cost After Settling', money(cost), strong: true),
+      ]),
+      ..._section('BY CATEGORY', _categoryRows(mine, (e) => e.shareOf(me))),
+      ..._section('WHO PAID YOUR SHARE', _personRows(_grouped(mine, (e) => e.paidBy, (e) => e.shareOf(me)))),
+      ..._section(
+        'YOUR SHARE, EXPENSE BY EXPENSE',
+        _expenseLines(mine, (e) => e.shareOf(me), (e) => '${_paidBy(e)} · Total ${money(e.amount)}'),
+      ),
+    ]);
+  }
+
   Future<void> _sheet(String title, List<Widget> children) =>
       showAppSheet<void>(context, title: title, children: (_) => children);
 
@@ -403,6 +649,11 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
           net: mine?.netBalance ?? 0,
           onSettle: () => _showBalances(trip),
           onMembers: () => _openDetails(trip),
+          onBreakup: (i) => switch (i) {
+            0 => _showSharedBreakup(),
+            1 => _showMyBreakup(),
+            _ => _showCostBreakup(),
+          },
         ),
         if (debts.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -749,11 +1000,15 @@ class TripHeroCard extends StatefulWidget {
     required this.net,
     this.onSettle,
     this.onMembers,
+    this.onBreakup,
   });
   final Trip trip;
   final double total, myTotal, myCost, share, paid, net;
   final int expenseCount, myExpenseCount;
   final VoidCallback? onSettle, onMembers;
+
+  /// Tapping the amount on page [i] (0 shared total, 1 your expenses, 2 your cost).
+  final void Function(int i)? onBreakup;
 
   @override
   State<TripHeroCard> createState() => _TripHeroCardState();
@@ -770,7 +1025,7 @@ class _TripHeroCardState extends State<TripHeroCard> {
   VoidCallback? get onMembers => widget.onMembers;
 
   /// One swipeable page of the top of the card: a label, the amount, the faces.
-  Widget _totalPage(String label, String chip, double amount) => Column(
+  Widget _totalPage(int index, String label, String chip, double amount) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Row(
@@ -788,17 +1043,28 @@ class _TripHeroCardState extends State<TripHeroCard> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                money(amount),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 44,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1.5,
-                  height: 1.1,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onBreakup == null ? null : () => widget.onBreakup!(index),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      money(amount),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -1.5,
+                        height: 1.1,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(Icons.info_outline_rounded, size: 20, color: Colors.white.withValues(alpha: .7)),
+                  ],
                 ),
               ),
             ),
@@ -862,16 +1128,19 @@ class _TripHeroCardState extends State<TripHeroCard> {
                     onPageChanged: (i) => setState(() => _page = i),
                     children: [
                       _totalPage(
+                        0,
                         'Trip Total · Shared',
                         '${trip.memberCount} People · $count Shared Expense${count == 1 ? '' : 's'}',
                         widget.total,
                       ),
                       _totalPage(
+                        1,
                         'Your Expenses',
                         '$myCount Expense${myCount == 1 ? '' : 's'} By You',
                         widget.myTotal,
                       ),
                       _totalPage(
+                        2,
                         'Your Trip Cost',
                         settled ? 'Nothing Left To Settle' : (net > 0 ? 'After Getting ${money(net)} Back' : 'After Paying ${money(-net)}'),
                         widget.myCost,

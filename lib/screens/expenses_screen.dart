@@ -37,13 +37,15 @@ class ExpenseFilter {
     Set<String>? categories,
     Set<String>? places,
     Set<String>? payers,
+    Set<String>? paidFor,
     this.minAmount,
     this.maxAmount,
     this.settlements = true,
   }) : dayParts = dayParts ?? {},
        categories = categories ?? {},
        places = places ?? {},
-       payers = payers ?? {};
+       payers = payers ?? {},
+       paidFor = paidFor ?? {};
 
   DateTimeRange? dates;
   TimeOfDay? timeFrom, timeTo;
@@ -55,6 +57,9 @@ class ExpenseFilter {
   /// Cities (the last part of a location), or [noPlace].
   final Set<String> places;
   final Set<String> payers;
+
+  /// Who the expense was for: anyone with a share in it.
+  final Set<String> paidFor;
   double? minAmount, maxAmount;
 
   /// Settle-up payments are listed too unless this is off.
@@ -70,6 +75,7 @@ class ExpenseFilter {
     categories: {...categories},
     places: {...places},
     payers: {...payers},
+    paidFor: {...paidFor},
     minAmount: minAmount,
     maxAmount: maxAmount,
     settlements: settlements,
@@ -83,6 +89,7 @@ class ExpenseFilter {
     categories.isNotEmpty,
     places.isNotEmpty,
     payers.isNotEmpty,
+    paidFor.isNotEmpty,
     minAmount != null || maxAmount != null,
     !settlements,
   ].where((on) => on).length;
@@ -112,6 +119,7 @@ class ExpenseFilter {
     if (categories.isNotEmpty && !categories.contains(e.category ?? 'Other')) return false;
     if (places.isNotEmpty && !places.contains(cityFromLocation(e.location) ?? noPlace)) return false;
     if (payers.isNotEmpty && !payers.contains(e.paidBy)) return false;
+    if (paidFor.isNotEmpty && !e.shares.any((s) => s.shareAmount > 0 && paidFor.contains(s.userId))) return false;
     if (minAmount != null && e.amount < minAmount!) return false;
     if (maxAmount != null && e.amount > maxAmount!) return false;
     return true;
@@ -723,6 +731,7 @@ class _ExpensesViewState extends State<ExpensesView> {
       for (final c in f.categories) (c, () => f.categories.remove(c)),
       for (final p in f.places) (p, () => f.places.remove(p)),
       for (final id in f.payers) ('Paid By ${_name(id)}', () => f.payers.remove(id)),
+      for (final id in f.paidFor) ('Paid For ${_name(id)}', () => f.paidFor.remove(id)),
       if (f.minAmount != null || f.maxAmount != null)
         (
           f.minAmount != null && f.maxAmount != null
@@ -1459,6 +1468,20 @@ class _FilterSheetState extends State<_FilterSheet> {
                           m.id == ApiClient.instance.currentUser?.id ? 'You' : m.name,
                           _f.payers.contains(m.id),
                           () => _flip(_f.payers, m.id),
+                          leading: MemberAvatar.of(m, size: 20),
+                        ),
+                    ],
+                  ),
+                  _section('PAID FOR'),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final m in widget.trip.members)
+                        _toggle(
+                          m.id == ApiClient.instance.currentUser?.id ? 'You' : m.name,
+                          _f.paidFor.contains(m.id),
+                          () => _flip(_f.paidFor, m.id),
                           leading: MemberAvatar.of(m, size: 20),
                         ),
                     ],

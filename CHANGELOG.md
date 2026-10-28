@@ -4,6 +4,17 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.15] - 2026-10-28 (build 52)
+
+### Added
+- Tap the amount on any page of the trip card to see exactly what it is made
+  of: by category, who paid, each person's share and every expense. Your
+  Trip Cost also shows how it settles (what you paid, your share, what you
+  get back or still owe).
+- A new "Paid For" filter in the Expenses tab: pick yourself or anyone else
+  to see only the expenses made for them. Use it with "Paid By" to see what
+  you paid for yourself or for someone else.
+
 ## [1.14.14] - 2026-10-28 (build 51)
 
 ### Added
