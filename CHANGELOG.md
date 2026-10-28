@@ -4,6 +4,14 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.16] - 2026-10-28 (build 53)
+
+### Fixed
+- The "Paid For" filter in the Expenses tab now shows only expenses made for
+  just the people you pick: only for you, only for one person, or for a
+  group of them. Combine it with "Paid By" to see what you paid for yourself
+  or for someone else.
+
 ## [1.14.15] - 2026-10-28 (build 52)
 
 ### Added

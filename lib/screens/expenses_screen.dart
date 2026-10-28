@@ -58,7 +58,7 @@ class ExpenseFilter {
   final Set<String> places;
   final Set<String> payers;
 
-  /// Who the expense was for: anyone with a share in it.
+  /// Expenses made only for these people: everyone with a share is in the set.
   final Set<String> paidFor;
   double? minAmount, maxAmount;
 
@@ -119,7 +119,10 @@ class ExpenseFilter {
     if (categories.isNotEmpty && !categories.contains(e.category ?? 'Other')) return false;
     if (places.isNotEmpty && !places.contains(cityFromLocation(e.location) ?? noPlace)) return false;
     if (payers.isNotEmpty && !payers.contains(e.paidBy)) return false;
-    if (paidFor.isNotEmpty && !e.shares.any((s) => s.shareAmount > 0 && paidFor.contains(s.userId))) return false;
+    if (paidFor.isNotEmpty) {
+      final owers = e.shares.where((s) => s.shareAmount > 0).map((s) => s.userId);
+      if (owers.isEmpty || !owers.every(paidFor.contains)) return false;
+    }
     if (minAmount != null && e.amount < minAmount!) return false;
     if (maxAmount != null && e.amount > maxAmount!) return false;
     return true;
@@ -1473,6 +1476,13 @@ class _FilterSheetState extends State<_FilterSheet> {
                     ],
                   ),
                   _section('PAID FOR'),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Only expenses made for just the people you pick.',
+                      style: TextStyle(color: muted, fontSize: 12),
+                    ),
+                  ),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,

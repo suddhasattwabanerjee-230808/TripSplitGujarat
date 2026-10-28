@@ -58,7 +58,7 @@ void main() {
     expect(_match(ExpenseFilter(settlements: false)), isNot(contains('Settle up')));
   });
 
-  test('paid for matches anyone with a share, and combines with paid by', () {
+  test('paid for keeps expenses made only for the picked people, and combines with paid by', () {
     const forB = [ExpenseShare(userId: 'b', shareAmount: 300)];
     const onlyB = TripExpense(
       id: 'gift', tripId: 't1', description: 'Gift for B', amount: 300, paidBy: 'a', paidByName: 'a',
@@ -70,9 +70,13 @@ void main() {
       shares: [ExpenseShare(userId: 'a', shareAmount: 20)],
     );
     List<String> run(ExpenseFilter f) => [for (final e in [...all, onlyB, onlyA]) if (f.matches(e)) e.description];
-    expect(run(ExpenseFilter(paidFor: {'a'})), ['Dinner', 'Late-night chai', 'Cab', 'Settle up', 'My tea']);
-    expect(run(ExpenseFilter(paidFor: {'b'}, payers: {'a'})), ['Dinner', 'Cab', 'Gift for B']);
-    expect(run(ExpenseFilter(paidFor: {'a'}, payers: {'a'}, settlements: false)), ['Dinner', 'Cab', 'My tea']);
+    // Only for me / only for B / for either (never for someone outside the pick).
+    expect(run(ExpenseFilter(paidFor: {'a'})), ['My tea']);
+    expect(run(ExpenseFilter(paidFor: {'b'})), ['Gift for B']);
+    expect(run(ExpenseFilter(paidFor: {'a', 'b'})), ['Dinner', 'Late-night chai', 'Cab', 'Settle up', 'Gift for B', 'My tea']);
+    expect(run(ExpenseFilter(paidFor: {'c'})), isEmpty);
+    expect(run(ExpenseFilter(paidFor: {'b'}, payers: {'a'})), ['Gift for B']);
+    expect(run(ExpenseFilter(paidFor: {'a'}, payers: {'a'})), ['My tea']);
     expect(ExpenseFilter(paidFor: {'a'}).active, 1);
   });
 
