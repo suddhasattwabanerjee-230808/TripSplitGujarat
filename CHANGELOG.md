@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Versions follow
 [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`); the build
 number after `+` in `pubspec.yaml` increments on every release.
 
+## [1.14.14] - 2026-10-28 (build 51)
+
+### Added
+- A third page on the trip card, "Your Trip Cost": your share of every
+  expense, whoever paid it, which is what the trip really costs you once all
+  balances are settled. It also shows what you will get back or pay.
+
+### Fixed
+- The city photo now switches to the town you are in (for example Dwarka)
+  instead of staying on a wider place like Gujarat.
+- If the photo can't follow you (location off or not allowed), the profile
+  card now says why.
+
 ## [1.14.13] - 2026-10-28 (build 50)
 
 ### Changed

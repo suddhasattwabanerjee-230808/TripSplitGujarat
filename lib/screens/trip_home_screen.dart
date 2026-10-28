@@ -160,6 +160,14 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
     return _expenses.where((e) => !e.isSettlement && e.paidBy == me);
   }
 
+  /// What the trip really costs this phone's user once every balance is
+  /// settled: their share of each expense, whoever paid it.
+  double get _myCost {
+    final me = _me?.id;
+    if (me == null) return 0;
+    return _expenses.where((e) => !e.isSettlement).fold(0, (acc, e) => acc + e.shareOf(me));
+  }
+
   static double _sum(Iterable<TripExpense> list) => list.fold(0, (acc, item) => acc + item.amount);
 
   Future<void> _addExpense({bool scan = false}) async {
@@ -389,6 +397,7 @@ class _TripHomeScreenState extends State<TripHomeScreen> {
           expenseCount: _sharedExpenses.length,
           myTotal: _sum(_myExpenses),
           myExpenseCount: _myExpenses.length,
+          myCost: _myCost,
           share: mine?.totalOwed ?? 0,
           paid: mine?.totalPaid ?? 0,
           net: mine?.netBalance ?? 0,
@@ -734,6 +743,7 @@ class TripHeroCard extends StatefulWidget {
     required this.expenseCount,
     required this.myTotal,
     required this.myExpenseCount,
+    required this.myCost,
     required this.share,
     required this.paid,
     required this.net,
@@ -741,7 +751,7 @@ class TripHeroCard extends StatefulWidget {
     this.onMembers,
   });
   final Trip trip;
-  final double total, myTotal, share, paid, net;
+  final double total, myTotal, myCost, share, paid, net;
   final int expenseCount, myExpenseCount;
   final VoidCallback? onSettle, onMembers;
 
@@ -814,7 +824,7 @@ class _TripHeroCardState extends State<TripHeroCard> {
   Widget _dots() => Row(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
-      for (var i = 0; i < 2; i++)
+      for (var i = 0; i < 3; i++)
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -860,6 +870,11 @@ class _TripHeroCardState extends State<TripHeroCard> {
                         'Your Expenses',
                         '$myCount Expense${myCount == 1 ? '' : 's'} By You',
                         widget.myTotal,
+                      ),
+                      _totalPage(
+                        'Your Trip Cost',
+                        settled ? 'Nothing Left To Settle' : (net > 0 ? 'After Getting ${money(net)} Back' : 'After Paying ${money(-net)}'),
+                        widget.myCost,
                       ),
                     ],
                   ),

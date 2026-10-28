@@ -607,7 +607,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ),
-              if (CityPhoto.instance.city != null && CityPhoto.instance.image != null) ...[
+              if (CityPhoto.instance.note != null ||
+                  (CityPhoto.instance.city != null && CityPhoto.instance.image != null)) ...[
                 const SizedBox(height: 12),
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -615,7 +616,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Icon(Icons.place_outlined, size: 12, color: Colors.white.withValues(alpha: .6)),
                     const SizedBox(width: 3),
                     Text(
-                      '${CityPhoto.instance.city} · Photo Wikimedia Commons',
+                      CityPhoto.instance.note ?? '${CityPhoto.instance.city} · Photo Wikimedia Commons',
                       style: TextStyle(color: Colors.white.withValues(alpha: .6), fontSize: 10.5),
                     ),
                   ],

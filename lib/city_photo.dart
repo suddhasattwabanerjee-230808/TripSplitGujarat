@@ -29,6 +29,11 @@ class CityPhoto extends ChangeNotifier {
 
   String? city;
   ImageProvider? image;
+
+  /// Why the photo isn't following the phone, if it isn't (location off, no
+  /// permission); shown on the profile card.
+  String? note;
+  final _noPhoto = <String>{};
   bool _started = false;
   bool _busy = false;
   bool _askedLocation = false;
@@ -71,6 +76,7 @@ class CityPhoto extends ChangeNotifier {
     final last = _lastTry;
     if (!force && last != null && now.difference(last) < const Duration(minutes: 2)) return;
     _busy = true;
+    if (force) _noPhoto.clear();
     try {
       final shown = await SharedPreferencesAsync().getInt(_shownKey) ?? 0;
       if (image == null || now.millisecondsSinceEpoch - shown >= _every.inMilliseconds) {
@@ -131,9 +137,12 @@ class CityPhoto extends ChangeNotifier {
     final names = position == null
         ? <String>[]
         : await _placeNames(position).catchError((Object _) => <String>[]);
+    // The most specific place that has photos: the town, else its district,
+    // else its state. Being in "Gujarat" doesn't count as being in Dwarka.
+    final candidates = names.where((n) => !_noPhoto.contains(n)).toList();
     final current = city;
-    // Same city (or location unknown): its next photo.
-    if (current != null && (names.isEmpty || names.contains(current))) {
+    // Same place (or location unknown): its next photo.
+    if (current != null && (candidates.isEmpty || candidates.first == current)) {
       if (position != null && names.isNotEmpty) await _saveAnchor(position);
       if (!keepSameCity) return;
       final prefs = SharedPreferencesAsync();
@@ -145,10 +154,13 @@ class CityPhoto extends ChangeNotifier {
       await _show(current, urls, image == null ? index : index + 1);
       return;
     }
-    // A new city: the town, else its district, else its state.
-    for (final here in names) {
+    for (final here in candidates) {
       final urls = await _photoUrls(here);
-      if (urls.isNotEmpty && await _show(here, urls, 0)) {
+      if (urls.isEmpty) {
+        _noPhoto.add(here);
+        continue;
+      }
+      if (await _show(here, urls, 0)) {
         if (position != null) await _saveAnchor(position);
         return;
       }
@@ -202,20 +214,37 @@ class CityPhoto extends ChangeNotifier {
   /// A fresh coarse fix (network, quick), else the last known position. Asks
   /// for location once per launch at most.
   Future<Position?> _position() async {
-    if (!await Geolocator.isLocationServiceEnabled()) return null;
+    if (!await Geolocator.isLocationServiceEnabled()) return _noLocation('Location Is Off');
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied && !_askedLocation) {
       _askedLocation = true;
       permission = await Geolocator.requestPermission();
     }
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return null;
+    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+      return _noLocation('Allow Location For TripSplit To Get Your City Photo');
+    }
+    Position? position;
     try {
-      return await Geolocator.getCurrentPosition(
+      position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.low, timeLimit: Duration(seconds: 10)),
       );
     } catch (_) {
-      return Geolocator.getLastKnownPosition();
+      position = await Geolocator.getLastKnownPosition();
     }
+    if (position == null) return _noLocation('Couldn’t Find Your Location');
+    if (note != null) {
+      note = null;
+      notifyListeners();
+    }
+    return position;
+  }
+
+  Position? _noLocation(String why) {
+    if (note != why) {
+      note = why;
+      notifyListeners();
+    }
+    return null;
   }
 
   /// Where the phone is: town, district, state (no repeats).
