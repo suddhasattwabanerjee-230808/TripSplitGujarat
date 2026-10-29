@@ -28,6 +28,21 @@ jobs:
 
       - run: flutter pub get
 
+      # firebase-ios-sdk 13 needs gtm-session-fetcher >= 4, but google_sign_in_ios
+      # 6.3.x still caps GoogleSignIn-iOS below 10 (which pins gtm-session-fetcher
+      # 3.x), so SwiftPM can't resolve. Widen the cap the same way upstream PR
+      # flutter/packages#13306 does (version range + iOS 15 minimum, no code
+      # changes). iOS CI only; drop this step once google_sign_in_ios ships 6.4.0.
+      - name: Allow GoogleSignIn-iOS 10 in google_sign_in_ios
+        run: |
+          dir=$(python3 -c 'import json,urllib.parse as u;print(next(u.unquote(p["rootUri"][7:]) for p in json.load(open(".dart_tool/package_config.json"))["packages"] if p["name"]=="google_sign_in_ios"))')
+          pkg="$dir/darwin/google_sign_in_ios/Package.swift"
+          pod="$dir/darwin/google_sign_in_ios.podspec"
+          grep -q 'from: "9.0.0")' "$pkg" || { echo "::error::google_sign_in_ios Package.swift changed; revisit this patch"; exit 1; }
+          sed -i '' -e 's/from: "9.0.0")/"9.0.0"..<"11.0.0")/' -e 's/\.iOS("13.0")/.iOS("15.0")/' -e 's/\.macOS("10.15")/.macOS("12.0")/' "$pkg"
+          sed -i '' -e "s/'GoogleSignIn', '~> 9.0'/'GoogleSignIn', '>= 9.0', '< 11.0'/" -e "s/ios.deployment_target = '13.0'/ios.deployment_target = '15.0'/" -e "s/osx.deployment_target = '10.15'/osx.deployment_target = '12.0'/" "$pod"
+          grep -n 'GoogleSignIn-iOS' -A1 "$pkg"; grep -n "dependency 'GoogleSignIn'" "$pod"
+
       # --no-codesign: no Apple Developer Program account yet, so there's
       # nothing to sign with in CI. The free-tier sideload tool re-signs this
       # .app locally with a short-lived personal-team certificate instead.
