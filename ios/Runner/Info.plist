@@ -32,6 +32,19 @@
 	<string>TripSplit uses the camera to photograph bills so the amount and date can be read automatically.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>TripSplit needs access to your photos to attach a bill photo or set a profile picture.</string>
+	<key>GIDClientID</key>
+	<string>442536622738-0eqpsc348drsnnddka0b8pscld525ut9.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.442536622738-0eqpsc348drsnnddka0b8pscld525ut9</string>
+			</array>
+		</dict>
+	</array>
 	<key>GMSApiKey</key>
 	<string></string>
 	<key>UIApplicationSceneManifest</key>
