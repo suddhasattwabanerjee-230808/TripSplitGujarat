@@ -655,7 +655,7 @@ Future<String?> pickUpiAppToScan(BuildContext context, Debt debt, double amount)
                   children: [
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
-                      child: Image.memory(app.icon, width: 38, height: 38, gaplessPlayback: true),
+                      child: _upiIcon(app, 38),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
@@ -672,6 +672,21 @@ Future<String?> pickUpiAppToScan(BuildContext context, Debt debt, double amount)
   ],
 );
 
+/// [app]'s launcher icon. iOS doesn't share other apps' icons, so there its
+/// initial on an accent tile stands in.
+Widget _upiIcon(UpiApp app, double size) => app.icon.isNotEmpty
+    ? Image.memory(app.icon, width: size, height: size, gaplessPlayback: true)
+    : Container(
+        width: size,
+        height: size,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: accentSoft, borderRadius: BorderRadius.circular(size * .28)),
+        child: Text(
+          app.label.characters.first,
+          style: TextStyle(color: accent, fontSize: size * .45, fontWeight: FontWeight.w700),
+        ),
+      );
+
 class _UpiAppButton extends StatelessWidget {
   const _UpiAppButton({required this.app, required this.onTap});
   final UpiApp app;
@@ -687,7 +702,7 @@ class _UpiAppButton extends StatelessWidget {
       decoration: cardDecoration(radius: 16),
       child: Column(
         children: [
-          Image.memory(app.icon, width: 36, height: 36, gaplessPlayback: true),
+          _upiIcon(app, 36),
           const SizedBox(height: 6),
           Text(
             app.label,

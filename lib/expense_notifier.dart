@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:http/http.dart' as http;
@@ -94,7 +95,15 @@ abstract final class ExpenseNotifier {
 
   static Future<void> _init() async {
     await _plugin.initialize(
-      settings: const InitializationSettings(android: AndroidInitializationSettings('ic_stat_logo')),
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('ic_stat_logo'),
+        // Asked for in [start], not on every init (the background check runs one too).
+        iOS: DarwinInitializationSettings(
+          requestAlertPermission: false,
+          requestSoundPermission: false,
+          requestBadgePermission: false,
+        ),
+      ),
       onDidReceiveNotificationResponse: (response) {
         final target = parseTarget(response.payload);
         if (target == null) return;
@@ -180,13 +189,16 @@ abstract final class ExpenseNotifier {
     );
   }
 
-  /// Asks for permission (Android 13+), registers this phone for instant
+  /// Asks for permission (Android 13+, iOS), registers this phone for instant
   /// pushes, and starts the background check.
   static Future<void> start() async {
     await init();
     await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+    await _plugin
+        .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
+        ?.requestPermissions(alert: true, badge: true, sound: true);
     await _startWatermark();
     await _registerForPush().catchError((Object _) {});
     await Workmanager().initialize(expenseCheckDispatcher);
@@ -225,6 +237,9 @@ abstract final class ExpenseNotifier {
   static Future<void> _registerForPush() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
+    // No APNs token, no FCM token on iOS (a free-Apple-ID sideload can't get
+    // one): the live listeners and the background check cover it.
+    if (defaultTargetPlatform == TargetPlatform.iOS && await FirebaseMessaging.instance.getAPNSToken() == null) return;
     Future<void> save(String token) => FirebaseFirestore.instance.collection('users').doc(uid).set({
       'fcmTokens': FieldValue.arrayUnion([token]),
     }, SetOptions(merge: true));
@@ -423,6 +438,7 @@ abstract final class ExpenseNotifier {
           showWhen: true,
           category: AndroidNotificationCategory.social,
         ),
+        iOS: DarwinNotificationDetails(threadIdentifier: 'trip_${trip.id}'),
       ),
     );
   }

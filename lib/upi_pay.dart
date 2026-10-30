@@ -14,7 +14,7 @@ class UpiApp {
   /// link handler is off (not set up yet): it can still be opened to scan.
   final bool canPay;
 
-  /// PNG bytes of its launcher icon.
+  /// PNG bytes of its launcher icon; empty on iOS, which doesn't share them.
   final Uint8List icon;
 }
 
